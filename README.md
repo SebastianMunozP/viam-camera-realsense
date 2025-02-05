@@ -3,10 +3,10 @@
 This [module](https://docs.viam.com/registry/#modular-resources) implements the [`rdk:component:camera` API](https://docs.viam.com/components/camera/) in a `viam:camera:realsense` model.
 Configure this model on your machine to stream image and depth data from the [Intel RealSense](https://github.com/IntelRealSense/librealsense) family of cameras to Viam.
 
-## Configure your `realsense` camera
-
 Navigate to the [**CONFIGURE** tab](https://docs.viam.com/build/configure/) of your [machine](https://docs.viam.com/fleet/machines/) in [the Viam app](https://app.viam.com/).
 [Add `camera / realsense` to your machine](https://docs.viam.com/build/configure/#components).
+
+## Configure your `realsense` camera
 
 On the new component panel, copy and paste the following attribute template into your camera’s attributes field:
 
