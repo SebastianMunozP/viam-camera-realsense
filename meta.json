@@ -6,7 +6,9 @@
   "models": [
     {
       "api": "rdk:component:camera",
-      "model": "viam:camera:realsense"
+      "model": "viam:camera:realsense",
+      "markdown_link" : "README.md#configure-your-realsense-camera",
+      "short_description" : "A module for the RealSense camera"
     }
   ],
   "entrypoint": "viam-camera-realsense.AppImage"
