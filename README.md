@@ -6,6 +6,9 @@ Configure this model on your machine to stream image and depth data from the [In
 Navigate to the [**CONFIGURE** tab](https://docs.viam.com/build/configure/) of your [machine](https://docs.viam.com/fleet/machines/) in [the Viam app](https://app.viam.com/).
 [Add `camera / realsense` to your machine](https://docs.viam.com/build/configure/#components).
 
+> [!NOTE]  
+> For more information, see [Configure a Machine](https://docs.viam.com/manage/configuration/).
+
 ## Configure your `realsense` camera
 
 On the new component panel, copy and paste the following attribute template into your camera’s attributes field:
@@ -20,9 +23,6 @@ On the new component panel, copy and paste the following attribute template into
 ```
 
 Edit the attributes as applicable.
-
-> [!NOTE]  
-> For more information, see [Configure a Machine](https://docs.viam.com/manage/configuration/).
 
 ## Attributes
 
