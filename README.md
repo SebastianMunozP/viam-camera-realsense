@@ -11,7 +11,7 @@ Navigate to the [**CONFIGURE** tab](https://docs.viam.com/build/configure/) of y
 
 ## Configure your `realsense` camera
 
-On the new component panel, copy and paste the following attribute template into your camera’s attributes field:
+Copy and paste the following attributes into your arm’s JSON configuration:
 
 ```json
 {
