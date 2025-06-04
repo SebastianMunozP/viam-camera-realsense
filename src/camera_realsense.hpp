@@ -10,7 +10,6 @@
 #include <thread>
 #include <tuple>
 #include <vector>
-
 #include <viam/sdk/components/camera.hpp>
 #include <viam/sdk/components/component.hpp>
 #include <viam/sdk/module/service.hpp>
@@ -42,15 +41,14 @@ struct DeviceProperties {
     const uint depthHeight;
     const bool disableDepth;
     std::string serial_number_to_use;
-    AtomicFrameSet& atomic_frame_set;
+    AtomicFrameSet &atomic_frame_set;
     bool shouldRun;
     bool isRunning;
     std::condition_variable cv;
     std::mutex mutex;
     // DeviceProperties constructor
     DeviceProperties(int colorWidth_, int colorHeight_, bool disableColor_, int depthWidth_,
-                     int depthHeight_, bool disableDepth_,
-                     AtomicFrameSet& frames_ref)
+                     int depthHeight_, bool disableDepth_, AtomicFrameSet &frames_ref)
         : colorWidth(colorWidth_),
           colorHeight(colorHeight_),
           disableColor(disableColor_),
@@ -90,19 +88,19 @@ struct PipelineWithProperties {
 
 // The underlying realsense loop functions
 float getDepthScale(rs2::device dev);
-void frameLoop(rs2::pipeline pipeline, std::promise<void>& ready,
+void frameLoop(rs2::pipeline pipeline, std::promise<void> &ready,
                std::shared_ptr<DeviceProperties> deviceProps, float depthScaleMm,
-               AtomicFrameSet& instance_latest_frames);
-void on_device_reconnect(rs2::event_information& info, rs2::pipeline pipeline,
+               AtomicFrameSet &instance_latest_frames);
+void on_device_reconnect(rs2::event_information &info, rs2::pipeline pipeline,
                          std::shared_ptr<DeviceProperties> device);
 std::tuple<rs2::pipeline, RealSenseProperties> startPipeline(bool disableDepth, int depthWidth,
                                                              int depthHeight, bool disableColor,
                                                              int colorWidth, int colorHeight,
-                                                             const std::string& serial_number);
+                                                             const std::string &serial_number);
 
 // Module functions
 std::vector<std::string> validate(sdk::ResourceConfig cfg);
-int serve(int argc, char** argv);
+int serve(int argc, char **argv);
 
 // The camera module class and its methods
 class CameraRealSense : public sdk::Camera, public sdk::Reconfigurable {
@@ -117,15 +115,14 @@ class CameraRealSense : public sdk::Camera, public sdk::Reconfigurable {
    public:
     explicit CameraRealSense(sdk::Dependencies deps, sdk::ResourceConfig cfg);
     ~CameraRealSense();
-    void reconfigure(const sdk::Dependencies& deps, const sdk::ResourceConfig& cfg) override;
-    sdk::Camera::raw_image get_image(std::string mime_type,
-                                     const sdk::ProtoStruct& extra) override;
+    void reconfigure(const sdk::Dependencies &deps, const sdk::ResourceConfig &cfg) override;
+    sdk::Camera::raw_image get_image(std::string mime_type, const sdk::ProtoStruct &extra) override;
     sdk::Camera::properties get_properties() override;
     sdk::Camera::image_collection get_images() override;
-    sdk::ProtoStruct do_command(const sdk::ProtoStruct& command) override;
+    sdk::ProtoStruct do_command(const sdk::ProtoStruct &command) override;
     sdk::Camera::point_cloud get_point_cloud(std::string mime_type,
-                                             const sdk::ProtoStruct& extra) override;
-    std::vector<sdk::GeometryConfig> get_geometries(const sdk::ProtoStruct& extra) override;
+                                             const sdk::ProtoStruct &extra) override;
+    std::vector<sdk::GeometryConfig> get_geometries(const sdk::ProtoStruct &extra) override;
 };
 
 }  // namespace realsense
