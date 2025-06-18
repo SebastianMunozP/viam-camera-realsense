@@ -5,6 +5,7 @@
 #include <future>
 #include <iostream>
 #include <librealsense2/rs.hpp>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -92,8 +93,9 @@ struct PipelineWithProperties {
 // The underlying realsense loop functions
 float getDepthScale(rs2::device dev);
 void frameLoop(std::promise<void> &ready, std::shared_ptr<DeviceProperties> deviceProps,
-               float depthScaleMm, AtomicFrameSet &instance_latest_frames);
+               float depthScaleMm, AtomicFrameSet &instance_latest_frames, bool debug_enabled);
 void on_device_reconnect(rs2::event_information &info, std::shared_ptr<DeviceProperties> device);
+
 std::tuple<rs2::pipeline, RealSenseProperties> startPipeline(
     std::shared_ptr<DeviceProperties> device_props, std::string target_serial_number);
 

@@ -9,13 +9,14 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Define an option for enabling build with AddressSanitizer
 option(ENABLE_SANITIZER "Enable AddressSanitizer" OFF)
+option(CMAKE_BUILD_TYPE RelWithDebInfo)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(realsense2 REQUIRED)
 find_package(viam-cpp-sdk REQUIRED)
 
-set(HELPER_SOURCES src/encoding.hpp)
+set(HELPER_SOURCES src/encoding.hpp src/version_helpers.hpp)
 set(THIRD_PARTY_SOURCES src/third_party/fpng.cpp src/third_party/lodepng.cpp) 
 # construct the library
 add_library(viamrealsense src/camera_realsense.cpp ${THIRD_PARTY_SOURCES} ${HELPER_SOURCES}) 

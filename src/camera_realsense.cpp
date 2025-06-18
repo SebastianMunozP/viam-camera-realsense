@@ -2,7 +2,7 @@
 
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -10,7 +10,6 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <tuple>
 #include <vector>
 #include <viam/sdk/log/logging.hpp>
 #include <viam/sdk/module/service.hpp>
@@ -18,10 +17,12 @@
 #include <viam/sdk/rpc/server.hpp>
 
 #include "encoding.hpp"
+#include "version_helpers.hpp"
 
 namespace viam {
 namespace realsense {
-
+// Build a stringstream and automatically convert to string, all in one line.
+//
 // Global lock to serialize access to module thread state. It protects:
 // 1. RealSense context
 // 2. all objects derived from the RealSense context e.g. rs2 device objects
@@ -42,16 +43,19 @@ static std::map<std::string, std::weak_ptr<DeviceProperties>> registered_devices
 
 // Global flag to signal that the module is shutting down to prevent callback
 // invocation during cleanup
-// NOTE: Nick S: This is an imcomplete solution. We don't confirm that we terminate all threads
-// before shutting down. We should add that.
+// NOTE: Nick S: This is an imcomplete solution. We don't confirm that we
+// terminate all threads before shutting down. We should add that.
 static std::atomic<bool> module_shutting_down{false};
+static std::atomic<bool> module_level_debug{false};
 
 // Helper function to deregister device from global map
 static void deregister_device(const std::string &serial_number) {
     if (serial_number.empty()) return;
 
     if (registered_devices_.erase(serial_number)) {
-        VIAM_SDK_LOG(debug) << "unregistered device " << serial_number << " from global map.";
+        if (module_level_debug.load()) {
+            VIAM_SDK_LOG(info) << "unregistered device " << serial_number << " from global map.";
+        }
     } else {
         VIAM_SDK_LOG(warn) << "device " << serial_number
                            << " not found in global map for unregistering.";
@@ -60,6 +64,9 @@ static void deregister_device(const std::string &serial_number) {
 
 // initialize will use the ResourceConfigs to begin the realsense pipeline.
 RealSenseProperties CameraRealSense::initialize(sdk::ResourceConfig cfg) {
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "initialize start";
+    }
     // TODO: protect device_ from concurrent reconfigures
     if (device_ != nullptr) {
         VIAM_SDK_LOG(info) << "reinitializing, restarting pipeline";
@@ -68,7 +75,9 @@ RealSenseProperties CameraRealSense::initialize(sdk::ResourceConfig cfg) {
             auto start = std::chrono::high_resolution_clock::now();
             device_->shouldRun.store(false);
             while (device_->isRunning.load()) {
-                VIAM_SDK_LOG(debug) << "waiting for frameLoop to stop in initialize";
+                if (debug_enabled) {
+                    VIAM_SDK_LOG(info) << "waiting for frameLoop to stop in initialize";
+                }
                 if (std::chrono::high_resolution_clock::now() - start > std::chrono::seconds(1)) {
                     throw std::runtime_error("timed out waiting for frameLoop to stop");
                 }
@@ -95,7 +104,9 @@ RealSenseProperties CameraRealSense::initialize(sdk::ResourceConfig cfg) {
     }
 
     if (width == 0 || height == 0) {
-        VIAM_SDK_LOG(debug) << "note: will pick any suitable width and height";
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << "note: will pick any suitable width and height";
+        }
     }
     std::string serial_number_from_config;
     if (attrs.count("serial_number")) {
@@ -105,7 +116,7 @@ RealSenseProperties CameraRealSense::initialize(sdk::ResourceConfig cfg) {
     }
     if (attrs.count("debug")) {
         if (const bool *debug_val = attrs["debug"].get<bool>()) {
-            debug_enabled = *debug_val;
+            debug_enabled = *debug_val || module_level_debug.load();
         }
     }
 
@@ -140,8 +151,10 @@ RealSenseProperties CameraRealSense::initialize(sdk::ResourceConfig cfg) {
         throw std::runtime_error("cannot disable both color and depth");
     }
 
-    VIAM_SDK_LOG(debug) << "disableDepth: " << disableDepth << " disableColor: " << disableColor
-                        << " sensors size " << sensors.size();
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "disableDepth: " << disableDepth << " disableColor: " << disableColor
+                           << " sensors size " << sensors.size();
+    }
 
     // DeviceProperties context also holds a bool that can stop the thread if
     // device gets disconnected
@@ -157,12 +170,16 @@ RealSenseProperties CameraRealSense::initialize(sdk::ResourceConfig cfg) {
         device_->pipeline = std::move(new_pipeline);
     }
     props = std::move(new_props);
-    VIAM_SDK_LOG(debug) << "startPipeline returned pipeline with pointer id: "
-                        << &device_->pipeline;
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "startPipeline returned pipeline with pointer id: "
+                           << &device_->pipeline;
+    }
 
     registered_devices_[this->device_->active_serial_number] = device_;
-    VIAM_SDK_LOG(debug) << "registered device " << this->device_->active_serial_number
-                        << " in global map.";
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "registered device " << this->device_->active_serial_number
+                           << " in global map.";
+    }
 
     // First start of camera thread
     props.sensors = sensors;
@@ -170,12 +187,14 @@ RealSenseProperties CameraRealSense::initialize(sdk::ResourceConfig cfg) {
     VIAM_SDK_LOG(info) << "main sensor will be " << sensors.front();
     props.littleEndianDepth = littleEndianDepth;
     if (props.mainSensor == "depth") {
-        VIAM_SDK_LOG(debug) << std::boolalpha
-                            << "depth little endian encoded: " << littleEndianDepth;
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << std::boolalpha
+                               << "depth little endian encoded: " << littleEndianDepth;
+        }
     }
     std::promise<void> ready;
     std::thread cameraThread(frameLoop, std::ref(ready), device_, props.depthScaleMm,
-                             std::ref(this->latest_frames_));
+                             std::ref(this->latest_frames_), debug_enabled);
     VIAM_SDK_LOG(info) << "waiting for camera frame loop thread to be ready...";
     ready.get_future().wait();
     VIAM_SDK_LOG(info) << "camera frame loop ready!";
@@ -186,7 +205,9 @@ RealSenseProperties CameraRealSense::initialize(sdk::ResourceConfig cfg) {
 
 CameraRealSense::CameraRealSense(sdk::Dependencies deps, sdk::ResourceConfig cfg)
     : Camera(cfg.name()) {
-    VIAM_SDK_LOG(debug) << "[constructor] start";
+    if (module_level_debug.load()) {
+        VIAM_SDK_LOG(info) << "[constructor] start";
+    }
     RealSenseProperties props;
     auto start = std::chrono::high_resolution_clock::now();
     try {
@@ -194,23 +215,42 @@ CameraRealSense::CameraRealSense(sdk::Dependencies deps, sdk::ResourceConfig cfg
         this->props_ = initialize(cfg);
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-        VIAM_SDK_LOG(debug) << "constructor initialize() took " << duration.count() << "ms";
+
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << "constructor initialize() took " << duration.count() << "ms";
+        }
     } catch (const std::exception &e) {
         throw std::runtime_error("failed to initialize realsense: " + std::string(e.what()));
     }
-    VIAM_SDK_LOG(debug) << "[constructor] end";
+    if (module_level_debug.load()) {
+        VIAM_SDK_LOG(info) << "[constructor] end";
+    }
 }
 
 CameraRealSense::~CameraRealSense() {
-    VIAM_SDK_LOG(debug) << "[destructor] start. destroying realsense camera resource";
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "[destructor] start. destroying realsense camera resource";
+    }
     // stop and wait for the frameLoop thread to exit
-    if (!this->device_) return;
+    if (!this->device_) {
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << "[destructor] no device, early return";
+        }
+        return;
+    }
+
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "[destructor] shouldRun: " << device_->shouldRun.load()
+                           << " isRunning: " << device_->isRunning.load();
+    }
     {
         // wait until frameLoop is stopped
         auto start = std::chrono::high_resolution_clock::now();
         device_->shouldRun.store(false);
         while (device_->isRunning.load()) {
-            VIAM_SDK_LOG(debug) << "waiting for frameLoop to stop in initialize";
+            if (debug_enabled) {
+                VIAM_SDK_LOG(info) << "waiting for frameLoop to stop in destructor";
+            }
             if (std::chrono::high_resolution_clock::now() - start > std::chrono::seconds(1)) {
                 VIAM_SDK_LOG(error) << "waiting for frameLoop to stop in destructor";
             }
@@ -220,11 +260,15 @@ CameraRealSense::~CameraRealSense() {
 
     std::lock_guard<std::mutex> lock(g_realsense_module_lock);
     deregister_device(this->device_->active_serial_number);
-    VIAM_SDK_LOG(debug) << "[destructor] end";
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "[destructor] end";
+    }
 }
 
 void CameraRealSense::reconfigure(const sdk::Dependencies &deps, const sdk::ResourceConfig &cfg) {
-    VIAM_SDK_LOG(debug) << "[reconfigure] start";
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "[reconfigure] start";
+    }
     try {
         // clean up old registry entry before reinitializing
         std::lock_guard<std::mutex> lock(g_realsense_module_lock);
@@ -236,17 +280,23 @@ void CameraRealSense::reconfigure(const sdk::Dependencies &deps, const sdk::Reso
         this->props_ = initialize(cfg);
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-        VIAM_SDK_LOG(debug) << "reconfigure initialize() took " << duration.count() << "ms";
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << "reconfigure initialize() took " << duration.count() << "ms";
+        }
     } catch (const std::exception &e) {
         VIAM_SDK_LOG(error) << "failed to reconfigure realsense: " << e.what();
         throw;
     }
-    VIAM_SDK_LOG(debug) << "[reconfigure] end";
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "[reconfigure] end";
+    }
 }
 
 sdk::Camera::raw_image CameraRealSense::get_image(std::string mime_type,
                                                   const sdk::ProtoStruct &extra) {
-    VIAM_SDK_LOG(debug) << "[get_image] start";
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "[get_image] start";
+    }
     try {
         std::chrono::time_point<std::chrono::high_resolution_clock> start;
         if (debug_enabled) {
@@ -296,10 +346,12 @@ sdk::Camera::raw_image CameraRealSense::get_image(std::string mime_type,
         if (debug_enabled) {
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-            VIAM_SDK_LOG(debug) << "[get_image]  total:           " << duration.count() << "ms\n";
+            VIAM_SDK_LOG(info) << "[get_image]  total:           " << duration.count() << "ms\n";
         }
 
-        VIAM_SDK_LOG(debug) << "[get_image] end";
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << "[get_image] end";
+        }
         return std::move(*response);
     } catch (const std::exception &e) {
         VIAM_SDK_LOG(error) << "[get_image] failed to get image: " << e.what();
@@ -308,7 +360,9 @@ sdk::Camera::raw_image CameraRealSense::get_image(std::string mime_type,
 }
 
 sdk::Camera::properties CameraRealSense::get_properties() {
-    VIAM_SDK_LOG(debug) << "[get_properties] start";
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "[get_properties] start";
+    }
     try {
         auto fillResp = [](sdk::Camera::properties *p, CameraProperties props) {
             p->supports_pcd = true;
@@ -330,7 +384,9 @@ sdk::Camera::properties CameraRealSense::get_properties() {
         } else if (this->props_.mainSensor.compare("depth") == 0) {
             fillResp(&response, this->props_.depth);
         }
-        VIAM_SDK_LOG(debug) << "[get_properties] end";
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << "[get_properties] end";
+        }
         return response;
     } catch (const std::exception &e) {
         VIAM_SDK_LOG(error) << "[get_properties] failed to get properties: " << e.what();
@@ -377,7 +433,7 @@ sdk::Camera::image_collection CameraRealSense::get_images() {
     if (debug_enabled) {
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-        VIAM_SDK_LOG(debug) << "[get_images]  total:           " << duration.count() << "ms\n";
+        VIAM_SDK_LOG(info) << "[get_images]  total:           " << duration.count() << "ms\n";
     }
 
     return response;
@@ -419,7 +475,7 @@ sdk::Camera::point_cloud CameraRealSense::get_point_cloud(std::string mime_type,
     if (debug_enabled) {
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-        VIAM_SDK_LOG(debug) << "[get_point_cloud]  total:           " << duration.count() << "ms\n";
+        VIAM_SDK_LOG(info) << "[get_point_cloud]  total:           " << duration.count() << "ms\n";
     }
     return sdk::Camera::point_cloud{mime_type, pcdBytes};
 }
@@ -431,30 +487,39 @@ std::vector<sdk::GeometryConfig> CameraRealSense::get_geometries(const sdk::Prot
 
 // Loop functions
 void frameLoop(std::promise<void> &ready, std::shared_ptr<DeviceProperties> deviceProps,
-               float depthScaleMm, AtomicFrameSet &latest_frames) {
+               float depthScaleMm, AtomicFrameSet &latest_frames, bool debug_enabled) {
     try {
-        VIAM_SDK_LOG(debug) << "[frameLoop] starting with thread ID: "
-                            << std::hash<std::thread::id>{}(std::this_thread::get_id())
-                            << " for device: " << deviceProps->active_serial_number;
+        deviceProps->isRunning.store(true);
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << "[frameLoop] starting with thread ID: "
+                               << std::hash<std::thread::id>{}(std::this_thread::get_id())
+                               << " for device: " << deviceProps->active_serial_number;
+        }
         bool readyOnce = false;
 
-        VIAM_SDK_LOG(debug) << "[frameLoop] frame loop is starting for device: "
-                            << deviceProps->active_serial_number;
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << "[frameLoop] frame loop is starting for device: "
+                               << deviceProps->active_serial_number;
+        }
         while (true) {
             {
                 if (!deviceProps->shouldRun.load()) {
                     try {
-                        VIAM_SDK_LOG(debug)
-                            << "pipeline stopping with pointer id: " << &deviceProps->pipeline;
+                        if (debug_enabled) {
+                            VIAM_SDK_LOG(info)
+                                << "pipeline stopping with pointer id: " << &deviceProps->pipeline;
+                        }
                         std::lock_guard<std::mutex> lock(deviceProps->pipeline_mu);
                         deviceProps->pipeline.stop();
                     } catch (const std::exception &e) {
                         VIAM_SDK_LOG(warn)
                             << "[frameLoop] Exception stopping pipeline: " << e.what();
                     }
-                    VIAM_SDK_LOG(debug)
-                        << "[frameLoop] pipeline stopped, exiting frame loop for device: "
-                        << deviceProps->active_serial_number;
+                    if (debug_enabled) {
+                        VIAM_SDK_LOG(info) << "[frameLoop] pipeline stopped, exiting frame "
+                                              "loop for device: "
+                                           << deviceProps->active_serial_number;
+                    }
                     break;
                 }
             }
@@ -473,8 +538,10 @@ void frameLoop(std::promise<void> &ready, std::shared_ptr<DeviceProperties> devi
             bool succ = false;
             {
                 std::lock_guard<std::mutex> lock(deviceProps->pipeline_mu);
-                VIAM_SDK_LOG(debug)
-                    << "pipeline waiting for frames with pointer id: " << &deviceProps->pipeline;
+                if (debug_enabled) {
+                    VIAM_SDK_LOG(info) << "pipeline waiting for frames with pointer id: "
+                                       << &deviceProps->pipeline;
+                }
                 succ = deviceProps->pipeline.try_wait_for_frames(&frames, timeoutMillis);
             }
             if (!succ) {
@@ -488,8 +555,7 @@ void frameLoop(std::promise<void> &ready, std::shared_ptr<DeviceProperties> devi
             if (debug_enabled) {
                 auto stop = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-                VIAM_SDK_LOG(debug)
-                    << "[frameLoop] wait for frames: " << duration.count() << "ms\n";
+                VIAM_SDK_LOG(info) << "[frameLoop] wait for frames: " << duration.count() << "ms\n";
             }
 
             if (!deviceProps->disableColor && !deviceProps->disableDepth) {
@@ -511,7 +577,7 @@ void frameLoop(std::promise<void> &ready, std::shared_ptr<DeviceProperties> devi
                     auto stop = std::chrono::high_resolution_clock::now();
                     auto duration =
                         std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-                    VIAM_SDK_LOG(debug)
+                    VIAM_SDK_LOG(info)
                         << "[frameLoop] frame alignment: " << duration.count() << "ms\n";
                 }
             }
@@ -544,14 +610,18 @@ void frameLoop(std::promise<void> &ready, std::shared_ptr<DeviceProperties> devi
             if (debug_enabled) {
                 auto stop = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-                VIAM_SDK_LOG(debug)
-                    << "[frameLoop] total:           " << duration.count() << "ms\n";
+                VIAM_SDK_LOG(info) << "[frameLoop] total:           " << duration.count() << "ms\n";
             }
 
             if (!readyOnce) {
                 readyOnce = true;
                 ready.set_value();
             }
+        }
+
+        if (debug_enabled) {
+            VIAM_SDK_LOG(info) << "[frameLoop] deviceProps->isRunning.store(false): "
+                               << deviceProps->active_serial_number;
         }
         deviceProps->isRunning.store(false);
     } catch (const std::exception &e) {
@@ -562,9 +632,11 @@ void frameLoop(std::promise<void> &ready, std::shared_ptr<DeviceProperties> devi
         throw;
     }
 
-    VIAM_SDK_LOG(debug) << "[frameLoop] exiting with thread ID: "
-                        << std::hash<std::thread::id>{}(std::this_thread::get_id())
-                        << " for device: " << deviceProps->active_serial_number;
+    if (debug_enabled) {
+        VIAM_SDK_LOG(info) << "[frameLoop] exiting with thread ID: "
+                           << std::hash<std::thread::id>{}(std::this_thread::get_id())
+                           << " for device: " << deviceProps->active_serial_number;
+    }
 };
 
 // gives the pixel to mm conversion for the depth sensor
@@ -577,6 +649,43 @@ float getDepthScale(rs2::device dev) {
         }
     }
     throw std::runtime_error("Device does not have a depth sensor");
+}
+
+std::string printDeviceInfo(rs2::device selected_device) {
+    VIAM_SDK_LOG(info) << "starting pipeline with selected device:";
+    std::string serial_from_rs2;
+    serial_from_rs2 = selected_device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+    auto usb_type = std::string(selected_device.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR));
+    auto firmware_version = selected_device.get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION);
+    auto recommended_firmware_version =
+        selected_device.get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION);
+
+    VIAM_SDK_LOG(info) << "name:      " << selected_device.get_info(RS2_CAMERA_INFO_NAME);
+    VIAM_SDK_LOG(info) << "serial:    " << serial_from_rs2;
+
+    VIAM_SDK_LOG(info) << "firmware:  " << firmware_version;
+    VIAM_SDK_LOG(info) << "recommended firmware:  " << recommended_firmware_version;
+
+    if (version(firmware_version) < version(recommended_firmware_version)) {
+        VIAM_SDK_LOG(warn) << "firmware version is lower than recommended "
+                           << "version. Please upgrade camera's firmware or you "
+                           << "may experience camera stability issues.";
+    };
+    VIAM_SDK_LOG(info) << "port:      " << selected_device.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT);
+
+    switch (usb_type.at(0)) {
+        case '3':
+            VIAM_SDK_LOG(info) << "usb type:  " << usb_type;
+            break;
+        default:
+            VIAM_SDK_LOG(warn) << "usb type:  " << usb_type
+                               << " please change the port and cable used with the camera to usb "
+                                  "3.x or you may experience freezing problems due "
+                                  "to usb bandwidth limitations: Look up intel realsense ticket "
+                                  "RSDSO-9074.";
+            break;
+    }
+    return serial_from_rs2;
 }
 
 std::tuple<rs2::pipeline, RealSenseProperties> startPipeline(
@@ -601,7 +710,8 @@ std::tuple<rs2::pipeline, RealSenseProperties> startPipeline(
         }
     }
     if (target_serial_number.empty()) {
-        VIAM_SDK_LOG(debug) << "no serial number specified in config, using first available device";
+        VIAM_SDK_LOG(debug) << "no serial number specified in config, using "
+                               "first available device";
         selected_device = devices.front();
     }
     if (!selected_device) {
@@ -609,16 +719,7 @@ std::tuple<rs2::pipeline, RealSenseProperties> startPipeline(
                                  target_serial_number);
     }
 
-    VIAM_SDK_LOG(info) << "starting pipeline with selected device:";
-    std::string serial_from_rs2;
-    serial_from_rs2 = selected_device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-    VIAM_SDK_LOG(info) << "name:      " << selected_device.get_info(RS2_CAMERA_INFO_NAME);
-    VIAM_SDK_LOG(info) << "serial:    " << serial_from_rs2;
-    VIAM_SDK_LOG(info) << "firmware:  "
-                       << selected_device.get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION);
-    VIAM_SDK_LOG(info) << "port:      " << selected_device.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT);
-    VIAM_SDK_LOG(info) << "usb type:  "
-                       << selected_device.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
+    auto serial_from_rs2 = printDeviceInfo(selected_device);
 
     float depthScaleMm = 0.0;
     bool disableDepth = device_props->disableDepth;
@@ -645,9 +746,8 @@ std::tuple<rs2::pipeline, RealSenseProperties> startPipeline(
                           RS2_FORMAT_Z16);
     }
 
-    rs2::pipeline pipeline = rs2::pipeline(rs2_ctx);
+    rs2::pipeline pipeline(rs2_ctx);
     pipeline.start(cfg);
-    VIAM_SDK_LOG(info) << "pipeline started";
 
     auto fillProps = [](auto intrinsics, std::string distortionModel) -> CameraProperties {
         CameraProperties camProps;
@@ -713,8 +813,10 @@ std::tuple<rs2::pipeline, RealSenseProperties> startPipeline(
 // This is the global callback registered with the RealSense context.
 // It dispatches events to the appropriate CameraRealSense instance.
 void global_device_changed_handler(rs2::event_information &info) {
-    VIAM_SDK_LOG(debug) << "[device_changed] thread ID: "
-                        << std::hash<std::thread::id>{}(std::this_thread::get_id());
+    if (module_level_debug.load()) {
+        VIAM_SDK_LOG(info) << "[device_changed] thread ID: "
+                           << std::hash<std::thread::id>{}(std::this_thread::get_id());
+    }
     if (module_shutting_down.load()) {
         VIAM_SDK_LOG(info) << "[device_changed] module shutting down, ignoring "
                               "device changed event.";
@@ -723,14 +825,15 @@ void global_device_changed_handler(rs2::event_information &info) {
 
     std::vector<std::shared_ptr<DeviceProperties>> devices_to_reconnect;
     {
+        VIAM_SDK_LOG(info) << "[device_changed] global device changed event received.";
         std::lock_guard<std::mutex> lock(g_realsense_module_lock);
-        VIAM_SDK_LOG(debug) << "[device_changed] global device changed event received.";
 
-        // TODO: please also handle (indicate that the background frameloop should
-        // terminate maybe set shouldrun to false?) unplugs not just replugs (the
-        // below logic)
+        // TODO: please also handle (indicate that the background frameloop
+        // should terminate maybe set shouldrun to false?) unplugs not just
+        // replugs (the below logic)
         for (auto &&dev_info : info.get_new_devices()) {
-            // assures we're checking a device that was part of the "added" event
+            // assures we're checking a device that was part of the "added"
+            // event
             if (!info.was_added(dev_info)) {
                 continue;
             }
@@ -739,16 +842,17 @@ void global_device_changed_handler(rs2::event_information &info) {
             try {
                 serial_number = dev_info.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
             } catch (const rs2::error &e) {
-                VIAM_SDK_LOG(error)
-                    << "[device_changed] failed to get serial number for new device: " << e.what();
+                VIAM_SDK_LOG(error) << "[device_changed] failed to get serial "
+                                       "number for new device: "
+                                    << e.what();
                 continue;
             }
 
-            VIAM_SDK_LOG(debug) << "[device_changed] device added event for S/N: " << serial_number;
+            VIAM_SDK_LOG(info) << "[device_changed] device added event for S/N: " << serial_number;
 
             auto it = registered_devices_.find(serial_number);
             if (it == registered_devices_.end()) {
-                VIAM_SDK_LOG(debug)
+                VIAM_SDK_LOG(info)
                     << "[device_changed] no active Viam resource matches S/N: " << serial_number
                     << ". Ignoring event for this device.";
                 continue;
@@ -762,8 +866,8 @@ void global_device_changed_handler(rs2::event_information &info) {
                 continue;
             }
 
-            VIAM_SDK_LOG(debug) << "[device_changed] matching active device found for S/N: "
-                                << serial_number << ". Scheduling reconnect.";
+            VIAM_SDK_LOG(info) << "[device_changed] matching active device found for S/N: "
+                               << serial_number << ". Scheduling reconnect.";
             devices_to_reconnect.push_back(device_props_sptr);
         }
     }  // g_realsense_module_lock releases
@@ -793,7 +897,7 @@ void on_device_reconnect(rs2::event_information &info, std::shared_ptr<DevicePro
         auto start = std::chrono::high_resolution_clock::now();
         device->shouldRun.store(false);
         while (device->isRunning.load()) {
-            VIAM_SDK_LOG(debug) << "waiting for frameLoop to stop in on_device_reconnect";
+            VIAM_SDK_LOG(info) << "waiting for frameLoop to stop in on_device_reconnect";
             if (std::chrono::high_resolution_clock::now() - start > std::chrono::seconds(1)) {
                 VIAM_SDK_LOG(error) << "waiting for frameLoop to stop in on_device_reconnect";
             }
@@ -804,13 +908,17 @@ void on_device_reconnect(rs2::event_information &info, std::shared_ptr<DevicePro
     RealSenseProperties props;
     try {
         rs2::pipeline new_pipeline;
-        std::tie(new_pipeline, props) = startPipeline(device, device->active_serial_number);
+        {
+            std::lock_guard<std::mutex> lock(g_realsense_module_lock);
+            std::tie(new_pipeline, props) = startPipeline(device, device->active_serial_number);
+        }
         std::lock_guard<std::mutex> device_lock(device->pipeline_mu);
-        VIAM_SDK_LOG(debug) << "pipeline restarted with pointer id: " << &new_pipeline
-                            << " old pointer id: " << &device->pipeline;
+        VIAM_SDK_LOG(info) << "pipeline restarted";
         device->pipeline = std::move(new_pipeline);
     } catch (const std::exception &e) {
         VIAM_SDK_LOG(error) << "[on_device_reconnect] Failed to restart pipeline: " << e.what();
+        VIAM_SDK_LOG(info) << "[on_device_reconnect] device->isRunning.store(false): "
+                           << device->active_serial_number;
         device->isRunning.store(false);
         device->shouldRun.store(false);
         return;
@@ -819,9 +927,26 @@ void on_device_reconnect(rs2::event_information &info, std::shared_ptr<DevicePro
     // Start the camera std::thread
     std::promise<void> ready;
     device->shouldRun.store(true);
+    VIAM_SDK_LOG(info) << "[on_device_reconnect] device->isRunning.store(true): "
+                       << device->active_serial_number;
     device->isRunning.store(true);
+
+    // NOTE: Nick S:
+    // Passing module_level_debug.load() is wrong here but we can't do better as
+    // we don't have access in this function to whether or not the resource that
+    // is using this device has debug logging enabled or not.
+    //
+    // The long term solution is to never stop the
+    // background thread until the distructor is called.
+    // That thread should also detect that the camera has been disconnected
+    // and change it's behavior appropriately
+    //
+    // we should also not be detaching the camea thread. We should be making it a
+    // member of the camera object and joining the thread in the destructor.
+    // Overall the threadding mnodel in this module is worng but we don't have
+    // time to fix it a this time... hance the hack.
     std::thread cameraThread(frameLoop, std::ref(ready), device, props.depthScaleMm,
-                             std::ref(device->atomic_frame_set));
+                             std::ref(device->atomic_frame_set), module_level_debug.load());
     VIAM_SDK_LOG(info) << "[on_device_reconnect] waiting for camera frame loop "
                           "thread to be ready...";
     ready.get_future().wait();
@@ -832,8 +957,6 @@ void on_device_reconnect(rs2::event_information &info, std::shared_ptr<DevicePro
 // validate will validate the ResourceConfig. If there is an error, it will
 // throw an exception.
 std::vector<std::string> validate(sdk::ResourceConfig cfg) {
-    VIAM_SDK_LOG(debug) << "[validate] start";
-
     try {
         auto attrs = cfg.attributes();
 
@@ -869,7 +992,8 @@ std::vector<std::string> validate(sdk::ResourceConfig cfg) {
                 for (const auto &sensor_element : *sensors_list) {
                     if (!sensor_element.get<std::string>()) {
                         throw std::invalid_argument(
-                            "elements in 'sensors' list must be strings (e.g., \"color\", "
+                            "elements in 'sensors' list must be "
+                            "strings (e.g., \"color\", "
                             "\"depth\")");
                     }
                 }
@@ -880,7 +1004,6 @@ std::vector<std::string> validate(sdk::ResourceConfig cfg) {
             throw std::invalid_argument(
                 "could not find required 'sensors' attribute in the config");
         }
-        VIAM_SDK_LOG(debug) << "[validate] end";
         return {};
     } catch (const std::exception &e) {
         VIAM_SDK_LOG(error) << "[validate] failed to validate config: " << e.what();
@@ -889,8 +1012,12 @@ std::vector<std::string> validate(sdk::ResourceConfig cfg) {
 }
 
 int serve(int argc, char **argv) {
-    VIAM_SDK_LOG(debug) << "serve start. thread ID: "
-                        << std::hash<std::thread::id>{}(std::this_thread::get_id());
+    for (size_t i = 0; i < argc; i++) {
+        if (std::string(argv[i]) == "--log-level=debug") {
+            module_level_debug.store(true);
+            rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
+        }
+    }
     std::shared_ptr<sdk::ModelRegistration> mr = std::make_shared<sdk::ModelRegistration>(
         sdk::API::get<sdk::Camera>(), sdk::Model{kAPINamespace, kAPIType, kAPISubtype},
         [](sdk::Dependencies deps, sdk::ResourceConfig cfg) -> std::shared_ptr<sdk::Resource> {
@@ -904,14 +1031,18 @@ int serve(int argc, char **argv) {
     {
         std::lock_guard<std::mutex> lock(g_realsense_module_lock);
         rs2_ctx.set_devices_changed_callback(global_device_changed_handler);
-        VIAM_SDK_LOG(debug) << "global device changed callback registered.";
+        if (module_level_debug.load()) {
+            VIAM_SDK_LOG(info) << "global device changed callback registered.";
+        }
     }
 
     module_service->serve();
     module_shutting_down.store(true);
 
-    VIAM_SDK_LOG(debug) << "serve end. thread ID: "
-                        << std::hash<std::thread::id>{}(std::this_thread::get_id());
+    if (module_level_debug.load()) {
+        VIAM_SDK_LOG(info) << "serve end. thread ID: "
+                           << std::hash<std::thread::id>{}(std::this_thread::get_id());
+    }
     return EXIT_SUCCESS;
 }
 

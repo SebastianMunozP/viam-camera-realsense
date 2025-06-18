@@ -82,9 +82,11 @@ RUN apt install -y libgtest-dev
 RUN mkdir -p /root/opt/src
 
 # install librealsense from source
+ENV REALSENSE_VERSION="v2.55.1"
 RUN cd /root/opt/src && \
     git clone https://github.com/IntelRealSense/librealsense.git && \
     cd librealsense && \
+    git checkout ${REALSENSE_VERSION} && \
     mkdir build && \
     cd build && \
     cmake .. -DBUILD_WITH_CUDA=true -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_EXAMPLES=false -DBUILD_GRAPHICAL_EXAMPLES=false && \
