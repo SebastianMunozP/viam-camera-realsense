@@ -15,6 +15,7 @@
 #include <viam/sdk/module/service.hpp>
 #include <viam/sdk/registry/registry.hpp>
 #include <viam/sdk/rpc/server.hpp>
+#include <viam/sdk/spatialmath/geometry.hpp>
 
 #include "encoding.hpp"
 #include "version_helpers.hpp"
@@ -481,8 +482,10 @@ sdk::Camera::point_cloud CameraRealSense::get_point_cloud(std::string mime_type,
 }
 
 std::vector<sdk::GeometryConfig> CameraRealSense::get_geometries(const sdk::ProtoStruct &extra) {
-    VIAM_SDK_LOG(error) << "get_geometries not implemented";
-    return std::vector<sdk::GeometryConfig>{};
+    // This is the geometry for the D435 and D435i, the only models that we currently support.
+    // See https://github.com/viam-modules/viam-camera-realsense/pull/75 for explanation of values.
+    // NOTE: If support for additional RealSense camera models is added, update method accordingly.
+    return {sdk::GeometryConfig(sdk::pose{-17.5, 0, -12.5}, sdk::box({90, 25, 25}), "box")};
 }
 
 // Loop functions
