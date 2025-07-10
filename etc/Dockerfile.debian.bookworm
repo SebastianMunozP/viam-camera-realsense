@@ -90,11 +90,11 @@ RUN cd /root/opt/src && \
     rm -rf /root/opt/src/librealsense
 
 # Install Viam C++ SDK from source frozen at a commit or tag
-ENV PINNED_COMMIT_HASH="7f03834ca3be1b6964da37c865d9bd7439a9590f"
+ENV VIAM_CPP_SDK_TAG="releases/v0.15.0"
 RUN cd /root/opt/src && \
     git clone https://github.com/viamrobotics/viam-cpp-sdk.git && \
     cd viam-cpp-sdk && \
-    git checkout ${PINNED_COMMIT_HASH} && \
+    git checkout ${VIAM_CPP_SDK_TAG} && \
     mkdir build && \
     cd build && \
     cmake  \
