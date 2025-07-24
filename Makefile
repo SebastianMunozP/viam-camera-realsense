@@ -77,3 +77,9 @@ appimage-amd64: export ARCH = x86_64
 appimage-amd64: viam-camera-realsense
 	$(call BUILD_APPIMAGE,$(OUTPUT_NAME),$(ARCH))
 	cp ./packaging/appimages/$(OUTPUT_NAME)-*-$(ARCH).AppImage ./packaging/appimages/deploy/
+
+appimage-amd64-cli: export OUTPUT_NAME = viam-camera-realsense-cli
+appimage-amd64-cli: export ARCH = x86_64
+appimage-amd64-cli: viam-camera-realsense
+	$(call BUILD_APPIMAGE,$(OUTPUT_NAME),$(ARCH))
+	cp ./packaging/appimages/$(OUTPUT_NAME)-*-$(ARCH).AppImage ./packaging/appimages/deploy/
