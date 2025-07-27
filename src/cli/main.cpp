@@ -119,8 +119,8 @@ struct my_device {
 std::mutex devices_by_serial_mu;
 std::unordered_map<std::string, std::unique_ptr<my_device>> devices_by_serial;
 
-// std::mutex frame_set_by_serial_mu;
-// std::unordered_map<std::string, std::shared_ptr<ob::FrameSet>> frame_set_by_serial;
+std::mutex frame_set_by_serial_mu;
+std::unordered_map<std::string, std::shared_ptr<rs2::frameset>> frame_set_by_serial;
 void printDeviceInfo(rs2::device const& dev) {
     std::cout << "DeviceInfo:\n"
               << "  Name:                           " << dev.get_info(RS2_CAMERA_INFO_NAME) << "\n"
@@ -158,29 +158,29 @@ void startStream(const std::string& serial_number, std::shared_ptr<rs2::device> 
         {
             
             // With callbacks, all synchronized stream will arrive in a single frameset
-            auto frameset = frame.as<rs2::frameset>();
-            if(frameset.size() != 2) {
-                std::cerr << "got non 2 frame count: " << frameset.size() << std::endl;
+            auto frameset = std::make_shared<rs2::frameset>(frame.as<rs2::frameset>());
+            if(frameset->size() != 2) {
+                std::cerr << "got non 2 frame count: " << frameset->size() << std::endl;
                 return;
             }
-            auto color_frame = frameset.first_or_default(RS2_STREAM_COLOR, RS2_FORMAT_RGB8);
+            auto color_frame = frameset->first_or_default(RS2_STREAM_COLOR, RS2_FORMAT_RGB8);
             if (not color_frame) {
                 std::cerr << "no color frame" << std::endl;
                 return;
             }
 
-            auto depth_frame = frameset.get_depth_frame();
+            auto depth_frame = frameset->get_depth_frame();
             if (not depth_frame) {
                 std::cerr << "no depth frame" << std::endl;
                 return;
             }
-            std::vector<std::uint8_t> data = RGBPointsToPCD(pointCloudFilter->process(align->process(frameset)));
+            std::vector<std::uint8_t> data = RGBPointsToPCD(pointCloudFilter->process(align->process(*frameset)));
             std::ofstream outfile("my.pcd", std::ios::out | std::ios::binary);
             outfile.write((const char*)&data[0], data.size());
             outfile.close();
 
-            // std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
-            // frame_set_by_serial[serialNumber] = frameSet;
+            std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
+            frame_set_by_serial[serial_number] = frameset;
         }
         else
         {
@@ -192,6 +192,16 @@ void startStream(const std::string& serial_number, std::shared_ptr<rs2::device> 
     });
     devices_by_serial[serial_number] = std::move(my_dev);
     }
+}
+
+
+void stopStreams() {
+    std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+    for (auto& [key, my_device] : devices_by_serial) {
+        std::cout << "stop stream " << key << "\n";
+        my_device->pipe->stop();
+    }
+    devices_by_serial.clear();
 }
 
 
@@ -230,4 +240,7 @@ int main() {
     std::cin.get();
     std::cout << "stopping orbbec program" << std::endl;
 
+    stopStreams();
+    std::cout << "stopped orbbec program" << std::endl;
+    return 0;
 }
