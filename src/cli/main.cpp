@@ -228,6 +228,8 @@ void startStream(const std::string &serial_number, std::shared_ptr<rs2::device> 
         std::cerr << "Failed to create matching color-depth config for device: " << serial_number << std::endl;
         return;
     }
+    // Enable the device with the config
+    cfg->enable_device(serial_number);
     {
         std::lock_guard<std::mutex> lock(devices_by_serial_mu);
         std::unique_ptr<my_device> my_dev = std::make_unique<my_device>();
@@ -238,11 +240,15 @@ void startStream(const std::string &serial_number, std::shared_ptr<rs2::device> 
         my_dev->pointCloudFilter = pointCloudFilter;
         my_dev->align = align;
 
-        try
-        {
+        std::string output_filename = serial_number + "_output.pcd";
 
-            pipe->start(*cfg, [serial_number, align, pointCloudFilter](rs2::frame const &frame)
-                        {
+        int retries = 5;
+        while (retries-- > 0)
+        {
+            try
+            {
+                pipe->start(*cfg, [serial_number, align, pointCloudFilter, output_filename](rs2::frame const &frame)
+                            {
                             if (frame.is<rs2::frameset>())
                             {
                                 // With callbacks, all synchronized stream will arrive in a single frameset
@@ -266,7 +272,7 @@ void startStream(const std::string &serial_number, std::shared_ptr<rs2::device> 
                                     return;
                                 }
                                 std::vector<std::uint8_t> data = RGBPointsToPCD(pointCloudFilter->process(align->process(*frameset)));
-                                std::ofstream outfile("my.pcd", std::ios::out | std::ios::binary);
+                                std::ofstream outfile(output_filename, std::ios::out | std::ios::binary);
                                 outfile.write((const char *)&data[0], data.size());
                                 outfile.close();
 
@@ -278,33 +284,31 @@ void startStream(const std::string &serial_number, std::shared_ptr<rs2::device> 
                                 // Stream that bypass synchronization (such as IMU) will produce single frames
                                 std::cerr << "got non 2 a frameset: " << frame.get_profile().stream_name() << std::endl;
                                 return;
-                            }
-                            // Process the color frame here
-                        });
-        }
-        catch (const rs2::camera_disconnected_error &e)
-        {
-            std::cerr << "Camera disconnected during pipe->start(): " << e.what()
-                      << " (serial: " << serial_number << ")" << std::endl;
-        }
-        catch (const rs2::error &e)
-        {
-            std::cerr << "RealSense error during pipe->start(): " << e.what()
-                      << " (serial: " << serial_number << ")" << std::endl;
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << "Standard exception during pipe->start(): " << e.what()
-                      << " (serial: " << serial_number << ")" << std::endl;
+                            } });
+                break; // Exit the retry loop if successful
+            }
+            catch (const rs2::error &e)
+            {
+                std::string msg = e.what();
+                if (msg.find("Device or resource busy") != std::string::npos && retries > 0)
+                {
+                    std::cerr << "Device busy, retrying in 1s (" << retries << " retries left)...\n";
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    continue;
+                }
+                std::cerr << "RealSense error during pipe->start(): " << msg << " (serial: " << serial_number << ")" << std::endl;
+                break;
+            }
         }
 
         devices_by_serial[serial_number] = std::move(my_dev);
     }
+    std::cout << "Started streaming from device with serial number: " << serial_number << std::endl;
 }
 
 void stopStream(std::unique_ptr<my_device> const &my_dev)
 {
-    if(!my_dev)
+    if (!my_dev)
     {
         std::cerr << "Device is null, cannot stop stream." << std::endl;
         return;
@@ -380,7 +384,7 @@ int main()
 {
     std::cout << "starting realsense program" << std::endl;
 
-    rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
+    rs2::log_to_console(RS2_LOG_SEVERITY_ERROR);
 
     auto ctx = std::make_shared<rs2::context>();
 
@@ -422,7 +426,7 @@ int main()
     auto deviceList = ctx->query_devices();
     for (auto const &dev : deviceList)
     {
-        if(devices_by_serial.count(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER)) > 0)
+        if (devices_by_serial.count(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER)) > 0)
         {
             std::cout << "Device already in devices_by_serial: " << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
             continue; // Skip if already in devices_by_serial
