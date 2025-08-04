@@ -17,14 +17,13 @@ struct PointXYZRGB
 
 bool validPoint(const rs2::vertex &p)
 {
-    const double min_distance = 1e-6;
     return std::fabs(p.x) >= min_distance || std::fabs(p.y) >= min_distance || std::fabs(p.z) >= min_distance;
 }
 
-std::vector<unsigned char> RGBPointsToPCD(std::tuple<rs2::points, rs2::video_frame> data)
+std::vector<unsigned char> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> data)
 {
-    const rs2::points &points = std::get<0>(data);
-    const rs2::video_frame &color = std::get<1>(data);
+    const rs2::points &points = data.first;
+    const rs2::video_frame &color = data.second;
     if (!points || !color)
     {
         throw std::runtime_error("Invalid points or color frame");
@@ -95,7 +94,7 @@ class PointCloudFilter
 {
 public:
     PointCloudFilter() : pointcloud(std::make_shared<rs2::pointcloud>()) {}
-    std::tuple<rs2::points, rs2::video_frame> process(rs2::frameset frameset)
+    std::pair<rs2::points, rs2::video_frame> process(rs2::frameset frameset)
     {
         auto depth_frame = frameset.get_depth_frame();
         if (!depth_frame)
@@ -109,7 +108,7 @@ public:
         }
         pointcloud->map_to(color_frame);
         auto points = pointcloud->calculate(depth_frame);
-        return std::make_tuple(points, color_frame);
+        return std::make_pair(points, color_frame);
     }
 
 private:
@@ -132,11 +131,28 @@ struct my_device
     std::chrono::steady_clock::time_point last_report = std::chrono::steady_clock::now();
 };
 
-std::mutex devices_by_serial_mu;
-std::unordered_map<std::string, std::shared_ptr<my_device>> devices_by_serial;
+std::mutex &devices_by_serial_mu()
+{
+    static std::mutex mu;
+    return mu;
+}
+std::unordered_map<std::string, std::shared_ptr<my_device>> &devices_by_serial()
+{
+    static std::unordered_map<std::string, std::shared_ptr<my_device>> devices;
+    return devices;
+}
 
-std::mutex frame_set_by_serial_mu;
-std::unordered_map<std::string, std::shared_ptr<rs2::frameset>> frame_set_by_serial;
+std::mutex &frame_set_by_serial_mu()
+{
+    static std::mutex mu;
+    return mu;
+}
+
+std::unordered_map<std::string, std::shared_ptr<rs2::frameset>> &frame_set_by_serial()
+{
+    static std::unordered_map<std::string, std::shared_ptr<rs2::frameset>> frame_sets;
+    return frame_sets;
+}
 void printDeviceInfo(rs2::device const &dev)
 {
     std::cout << "DeviceInfo:\n"
@@ -157,10 +173,7 @@ void printDeviceInfo(rs2::device const &dev)
 bool checkIfMatchingColorDepthProfiles(const rs2::video_stream_profile &color,
                                        const rs2::video_stream_profile &depth)
 {
-    if (color.width() == depth.width() &&
-        color.height() == depth.height() &&
-        color.fps() == depth.fps())
-    {
+    if (std::tuple(color.width(), color.height(), color.fps()) == std::tuple(depth.width(), depth.height(), depth.fps())) {
         std::cout << "using width: " << color.width()
                   << " height: " << color.height()
                   << " fps: " << color.fps() << "\n";
@@ -238,7 +251,7 @@ void startStream(const std::string &serial_number, std::shared_ptr<rs2::device> 
     // Enable the device with the config
     cfg->enable_device(my_dev->serial_number);
     {
-        std::lock_guard<std::mutex> lock(devices_by_serial_mu);
+        std::lock_guard<std::mutex> lock(devices_by_serial_mu());
 
         int retries = 5;
         while (retries-- > 0)
@@ -291,8 +304,8 @@ void startStream(const std::string &serial_number, std::shared_ptr<rs2::device> 
                                     my_dev_ptr->last_report = now;
                                 }
 
-                                std::lock_guard<std::mutex> lock(frame_set_by_serial_mu);
-                                frame_set_by_serial[my_dev_ptr->serial_number] = frameset;
+                                std::lock_guard<std::mutex> lock(frame_set_by_serial_mu());
+                                frame_set_by_serial()[my_dev_ptr->serial_number] = frameset;
                             }
                             else
                             {
@@ -316,7 +329,7 @@ void startStream(const std::string &serial_number, std::shared_ptr<rs2::device> 
             }
         }
 
-        devices_by_serial[serial_number] = my_dev;
+        devices_by_serial()[serial_number] = my_dev;
     }
     std::cout << "Started streaming from device with serial number: " << serial_number << std::endl;
 }
@@ -348,7 +361,7 @@ void stopStream(std::shared_ptr<my_device> const &my_dev)
 void stopStreams()
 {
     std::cout << "Stopping all streams" << std::endl;
-    for (auto [key, my_device] : devices_by_serial)
+    for (auto [key, my_device] : devices_by_serial())
     {
         std::cout << "stop stream " << key << "\n";
         stopStream(my_device);
@@ -362,8 +375,8 @@ std::vector<std::shared_ptr<rs2::device>> get_removed_devices(rs2::event_informa
     // Create a snapshot of the current devices_by_serial map
     std::vector<std::shared_ptr<rs2::device>> devices_snapshot;
     {
-        std::lock_guard<std::mutex> lock(devices_by_serial_mu);
-        for (const auto &[serial_number, device] : devices_by_serial)
+        std::lock_guard<std::mutex> lock(devices_by_serial_mu());
+        for (const auto &[serial_number, device] : devices_by_serial())
         {
             devices_snapshot.push_back(device->device);
         }
@@ -402,15 +415,15 @@ int main()
             {
                 std::string dev_serial_number = dev->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
                 std::cout << "Device Removed: " << dev_serial_number << std::endl;
-                if (devices_by_serial.count(dev_serial_number) > 0)
+                if (devices_by_serial().count(dev_serial_number) > 0)
                 {
                     // Stop the stream for the removed device
-                    stopStream(devices_by_serial[dev_serial_number]);
+                    stopStream(devices_by_serial()[dev_serial_number]);
 
                     // Remove from devices_by_serial
                     std::cout << "Removing device " << dev_serial_number << " from devices_by_serial"<< std::endl;
-                    std::lock_guard<std::mutex> lock(devices_by_serial_mu);
-                    devices_by_serial.erase(dev_serial_number);
+                    std::lock_guard<std::mutex> lock(devices_by_serial_mu());
+                    devices_by_serial().erase(dev_serial_number);
                 }
                 else
                     std::cerr << "Removed device " << dev_serial_number << " not found in devices_by_serial.\n";
@@ -431,7 +444,7 @@ int main()
     auto deviceList = ctx->query_devices();
     for (auto const &dev : deviceList)
     {
-        if (devices_by_serial.count(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER)) > 0)
+        if (devices_by_serial().count(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER)) > 0)
         {
             std::cout << "Device already in devices_by_serial: " << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
             continue; // Skip if already in devices_by_serial
@@ -447,10 +460,10 @@ int main()
     std::cout << "stopping orbbec program" << std::endl;
 
     stopStreams();
-    std::lock_guard<std::mutex> lock(devices_by_serial_mu);
-    devices_by_serial.clear();
-    std::lock_guard<std::mutex> frame_lock(frame_set_by_serial_mu);
-    frame_set_by_serial.clear();
+    std::lock_guard<std::mutex> lock(devices_by_serial_mu());
+    devices_by_serial().clear();
+    std::lock_guard<std::mutex> frame_lock(frame_set_by_serial_mu());
+    frame_set_by_serial().clear();
     std::cout << "stopped orbbec program" << std::endl;
     return 0;
 }
