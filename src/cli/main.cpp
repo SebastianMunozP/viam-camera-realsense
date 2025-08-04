@@ -5,6 +5,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <fstream>
+
 #include <librealsense2/rs.hpp>
 
 static const double min_distance = 1e-6;
@@ -20,47 +21,50 @@ bool validPoint(const rs2::vertex &p)
     return std::fabs(p.x) >= min_distance || std::fabs(p.y) >= min_distance || std::fabs(p.z) >= min_distance;
 }
 
-std::vector<unsigned char> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> data)
-{
-    const rs2::points &points = data.first;
-    const rs2::video_frame &color = data.second;
-    if (!points || !color)
-    {
-        throw std::runtime_error("Invalid points or color frame");
+std::vector<PointXYZRGB> getRGBPoints(std::pair<rs2::points, rs2::video_frame>&& data) {
+    rs2::points const& points = data.first;
+    rs2::video_frame const& color = data.second;
+    
+    if (!points || !color) {
+        throw std::runtime_error("Points or color frame data is empty");
     }
-    const rs2::vertex *vertices = points.get_vertices();
-    const rs2::texture_coordinate *tex_coords = points.get_texture_coordinates();
+    
     int num_points = points.size();
-
-    std::vector<PointXYZRGB> pcdPoints;
-    const uint8_t *color_data = reinterpret_cast<const uint8_t *>(color.get_data());
+    const rs2::vertex* vertices = points.get_vertices();
+    const rs2::texture_coordinate* tex_coords = points.get_texture_coordinates();
+    
+    const uint8_t* color_data = reinterpret_cast<const uint8_t*>(color.get_data());
     int width = color.get_width();
     int height = color.get_height();
 
-    for (int i = 0; i < num_points; ++i)
-    {
-        const auto &v = vertices[i];
-        if (!validPoint(v))
+    std::vector<PointXYZRGB> pcdPoints;
+    pcdPoints.reserve(num_points);
+
+    for (int i = 0; i < num_points; ++i) {
+        const auto& v = vertices[i];
+        if (!validPoint(v)) {
             continue;
+        }
 
-        const auto &tc = tex_coords[i];
-        int x = std::min(std::max(int(tc.u * width + 0.5f), 0), width - 1);
-        int y = std::min(std::max(int(tc.v * height + 0.5f), 0), height - 1);
+        const auto& tc = tex_coords[i];
+        int x = std::clamp(static_cast<int>(std::lround(tc.u * width)), 0, width - 1);
+        int y = std::clamp(static_cast<int>(std::lround(tc.v * height)), 0, height - 1);
 
-        int idx = (y * width + x) * 3;
-        unsigned int r = color_data[idx];
-        unsigned int g = color_data[idx + 1];
-        unsigned int b = color_data[idx + 2];
+        size_t idx = (y * width + x) * 3;
+        auto r = static_cast<unsigned int>(color_data[idx]);
+        auto g = static_cast<unsigned int>(color_data[idx + 1]);
+        auto b = static_cast<unsigned int>(color_data[idx + 2]);
         unsigned int rgb = (r << 16) | (g << 8) | b;
 
-        PointXYZRGB pt;
-        pt.x = v.x;
-        pt.y = v.y;
-        pt.z = v.z;
-        pt.rgb = rgb;
-        pcdPoints.push_back(pt);
+        pcdPoints.emplace_back(PointXYZRGB{v.x, v.y, v.z, rgb});
     }
 
+    return pcdPoints;
+}
+
+std::vector<unsigned char> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame>&& data)
+{
+    auto pcdPoints = getRGBPoints(std::move(data));
     std::stringstream header;
     header << "VERSION .7\n"
            << "FIELDS x y z rgb\n"
@@ -75,25 +79,23 @@ std::vector<unsigned char> RGBPointsToPCD(std::pair<rs2::points, rs2::video_fram
     std::string headerStr = header.str();
     std::vector<unsigned char> pcdBytes;
     pcdBytes.insert(pcdBytes.end(), headerStr.begin(), headerStr.end());
-    for (auto &p : pcdPoints)
-    {
-        unsigned char *x = (unsigned char *)&p.x;
-        unsigned char *y = (unsigned char *)&p.y;
-        unsigned char *z = (unsigned char *)&p.z;
-        unsigned char *rgb = (unsigned char *)&p.rgb;
 
-        pcdBytes.insert(pcdBytes.end(), x, x + 4);
-        pcdBytes.insert(pcdBytes.end(), y, y + 4);
-        pcdBytes.insert(pcdBytes.end(), z, z + 4);
-        pcdBytes.insert(pcdBytes.end(), rgb, rgb + 4);
-    }
+    // Assert that PointXYZRGB is a POD type, and that it has no padding, thus can be copied as bytes.
+    // Since vector is contiguous, we can just copy the whole thing
+    static_assert(std::is_pod_v<PointXYZRGB>);
+    static_assert(sizeof(PointXYZRGB) == (3 * sizeof(float)) + sizeof(unsigned int), "PointXYZRGB has unexpected padding");
+
+    const unsigned char* dataPtr = reinterpret_cast<const std::uint8_t*>(pcdPoints.data());
+    size_t dataSize = pcdPoints.size() * sizeof(PointXYZRGB);
+    pcdBytes.insert(pcdBytes.end(), dataPtr, dataPtr + dataSize);
+
     return pcdBytes;
 }
 
 class PointCloudFilter
 {
 public:
-    PointCloudFilter() : pointcloud(std::make_shared<rs2::pointcloud>()) {}
+    PointCloudFilter() : pointcloud_(std::make_shared<rs2::pointcloud>()) {}
     std::pair<rs2::points, rs2::video_frame> process(rs2::frameset frameset)
     {
         auto depth_frame = frameset.get_depth_frame();
@@ -106,13 +108,13 @@ public:
         {
             throw std::runtime_error("No color frame in frameset");
         }
-        pointcloud->map_to(color_frame);
-        auto points = pointcloud->calculate(depth_frame);
+        auto points = pointcloud_->calculate(depth_frame);
+        pointcloud_->map_to(color_frame);
         return std::make_pair(points, color_frame);
     }
 
 private:
-    std::shared_ptr<rs2::pointcloud> pointcloud;
+    std::shared_ptr<rs2::pointcloud> pointcloud_;
 };
 
 struct my_device
