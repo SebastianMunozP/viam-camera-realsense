@@ -96,3 +96,23 @@ endif()
 
 enable_testing()
 add_subdirectory(test)
+
+
+# construct the experimental library
+add_library(viamrealsense2 src/module/realsense.cpp ${THIRD_PARTY_SOURCES} ${HELPER_SOURCES}) 
+target_link_libraries(viamrealsense2 PUBLIC viam-cpp-sdk::viamsdk realsense2::realsense2 PRIVATE turbojpeg ${CMAKE_DL_LIBS})
+
+# Conditionally apply SIMD flags based on the processor architecture for fpng acceleration
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(viamrealsense2 PRIVATE -msse4.1 -maes -mpclmul)
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
+        target_compile_options(viamrealsense2 PRIVATE -xsse4.1 -maes -mpclmul)
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(viamrealsense2 PRIVATE /arch:SSE2)
+    endif()
+endif()
+
+add_executable(viam-camera-realsense2 src/module/main.cpp)
+target_link_libraries(viam-camera-realsense2 PRIVATE viamrealsense2)
+
