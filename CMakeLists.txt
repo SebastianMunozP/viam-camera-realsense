@@ -33,9 +33,6 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     endif()
 endif()
 
-add_executable(viam-camera-realsense-cli src/cli/main.cpp)
-target_link_libraries(viam-camera-realsense-cli PRIVATE realsense2::realsense2)
-
 add_executable(viam-camera-realsense main.cpp)
 target_link_libraries(viam-camera-realsense PRIVATE viamrealsense)
 

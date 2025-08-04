@@ -5,7 +5,7 @@ script:
  - cp ../../build/viam-camera-realsense-cli $TARGET_APPDIR/usr/bin/
  - mkdir -p $TARGET_APPDIR/usr/share/icons/viam/256x256/apps/
  - cp ./viam-server.png $TARGET_APPDIR/usr/share/icons/viam/256x256/apps/viam-server.png
- - go install github.com/Otterverse/aix@latest
+#  - go install github.com/Otterverse/aix@latest
  - cp `go env GOPATH`/bin/aix $TARGET_APPDIR/usr/bin/
  - chmod 755 $TARGET_APPDIR/usr/bin/*
  - |
@@ -31,8 +31,8 @@ AppDir:
     allow_unauthenticated: true
     sources:
     - sourceline: deb [trusted=yes] https://deb.debian.org/debian bookworm main
-    - sourceline: deb [trusted=yes] https://deb.debian.org/debian-security bookworm-security main
-    - sourceline: deb [trusted=yes] https://deb.debian.org/debian bookworm-updates main
+    # - sourceline: deb [trusted=yes] https://deb.debian.org/debian-security bookworm-security main
+    # - sourceline: deb [trusted=yes] https://deb.debian.org/debian bookworm-updates main
     include:
     - libprotobuf32:amd64
     - libturbojpeg0:amd64
