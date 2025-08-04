@@ -11,8 +11,11 @@ build/build.ninja: build CMakeLists.txt
 
 SANITIZE ?= OFF
 viam-camera-realsense: src/* *.cpp build/build.ninja
-	cd build && ninja all -j 4
+	cd build && ninja viam-camera-realsense -j 4
 	cp build/viam-camera-realsense .
+viam-camera-realsense2: src/module/* build/build.ninja
+	cd build && ninja viam-camera-realsense2 -j 4
+	cp build/viam-camera-realsense2 .
 
 all: default
 
@@ -75,6 +78,12 @@ appimage-arm64: viam-camera-realsense
 appimage-amd64: export OUTPUT_NAME = viam-camera-realsense
 appimage-amd64: export ARCH = x86_64
 appimage-amd64: viam-camera-realsense
+	$(call BUILD_APPIMAGE,$(OUTPUT_NAME),$(ARCH))
+	cp ./packaging/appimages/$(OUTPUT_NAME)-*-$(ARCH).AppImage ./packaging/appimages/deploy/
+
+appimage-amd64-rs2: export OUTPUT_NAME = viam-camera-realsense2
+appimage-amd64-rs2: export ARCH = x86_64
+appimage-amd64-rs2: viam-camera-realsense2
 	$(call BUILD_APPIMAGE,$(OUTPUT_NAME),$(ARCH))
 	cp ./packaging/appimages/$(OUTPUT_NAME)-*-$(ARCH).AppImage ./packaging/appimages/deploy/
 
