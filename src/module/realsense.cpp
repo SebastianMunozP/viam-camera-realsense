@@ -353,11 +353,11 @@ namespace realsense
     {
         if (config_ == nullptr)
         {
-            VIAM_SDK_LOG(error) << "Orbbec destructor start: config_ is null, no available serial number";
+            VIAM_SDK_LOG(error) << "Realsense destructor start: config_ is null, no available serial number";
         }
         else
         {
-            VIAM_SDK_LOG(info) << "Orbbec destructor start " << config_->serial_number;
+            VIAM_SDK_LOG(info) << "Realsense destructor start " << config_->serial_number;
         }
         std::string prev_serial_number;
         std::string prev_resource_name;
@@ -369,11 +369,11 @@ namespace realsense
         stopDevice(prev_serial_number, prev_resource_name);
         if (config_ == nullptr)
         {
-            VIAM_SDK_LOG(error) << "Orbbec destructor end: config_ is null, no available serial number";
+            VIAM_SDK_LOG(error) << "Realsense destructor end: config_ is null, no available serial number";
         }
         else
         {
-            VIAM_SDK_LOG(info) << "Orbbec destructor end " << config_->serial_number;
+            VIAM_SDK_LOG(info) << "Realsense destructor end " << config_->serial_number;
         }
     }
     void Realsense::reconfigure(const viam::sdk::Dependencies &deps, const viam::sdk::ResourceConfig &cfg) {}
