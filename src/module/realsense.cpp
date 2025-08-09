@@ -561,6 +561,84 @@ namespace realsense
     }
     viam::sdk::Camera::point_cloud Realsense::get_point_cloud(std::string mime_type, const viam::sdk::ProtoStruct &extra)
     {
+    try {
+        VIAM_SDK_LOG(info) << "[get_point_cloud] start";
+        std::string serial_number;
+        {
+            const std::lock_guard<std::mutex> lock(config_mu_);
+            serial_number = config_->serial_number;
+        }
+        std::shared_ptr<rs2::frameset> fs = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(frame_set_by_serial_mu());
+            auto search = frame_set_by_serial().find(serial_number);
+            if (search == frame_set_by_serial().end()) {
+                throw std::invalid_argument("no frame yet");
+            }
+            fs = search->second;
+        }
+
+        rs2::video_frame color_frame = fs->get_color_frame();
+        if (not color_frame) {
+            throw std::invalid_argument("no color frame");
+        }
+
+        double nowMs = getNowMs();
+        double diff = timeSinceFrameMs(nowMs, color_frame.get_timestamp());
+        if (diff > maxFrameAgeMs)
+        {
+            std::ostringstream buffer;
+            buffer << "no recent color frame: check USB connection, diff: " << diff << "ms";
+            throw std::invalid_argument(buffer.str());
+        }
+
+        rs2::depth_frame depth_frame = fs->get_depth_frame();
+        diff = timeSinceFrameMs(nowMs, depth_frame.get_timestamp());
+        if (diff > maxFrameAgeMs)
+        {
+            std::ostringstream buffer;
+            buffer << "no recent depth frame: check USB connection, diff: " << diff << "ms";
+            throw std::invalid_argument(buffer.str());
+        }
+
+
+        std::uint8_t* colorData = (std::uint8_t*)color_frame.get_data();
+        uint32_t colorDataSize = color_frame.get_data_size();
+        if (colorData == nullptr or colorDataSize == 0) {
+            throw std::runtime_error("[get_image] color data is null");
+        }
+
+
+        std::uint8_t* depthData = (std::uint8_t*)depth_frame.get_data();
+        uint32_t depthDataSize = depth_frame.get_data_size();
+        if (depthData == nullptr or depthDataSize == 0) {
+            throw std::runtime_error("[get_point_cloud] depth data is null");
+        }
+
+
+        // NOTE: UNDER LOCK
+        std::lock_guard<std::mutex> lock(devices_by_serial_mu());
+        auto search = devices_by_serial().find(serial_number);
+        if (search == devices_by_serial().end()) {
+            throw std::invalid_argument("device is not connected");
+        }
+
+        std::unique_ptr<ViamRSDevice>& my_dev = search->second;
+        if (not my_dev->started) {
+            throw std::invalid_argument("device is not started");
+        }
+
+        float scale = depth_frame.get_units();
+        // std::vector<std::uint8_t> data =
+        //     RGBPointsToPCD(my_dev->point_cloud_filter->process(my_dev->align->process(*fs)), scale * mmToMeterMultiple);
+
+        VIAM_SDK_LOG(info) << "[get_point_cloud] end";
+        // return vsdk::Camera::point_cloud{kPcdMimeType, data};
+    } catch (const std::exception& e) {
+        VIAM_SDK_LOG(error) << "[get_point_cloud] error: " << e.what();
+        throw std::runtime_error("failed to create pointcloud: " + std::string(e.what()));
+    }
+
         return point_cloud();
     }
     viam::sdk::Camera::properties Realsense::get_properties()
