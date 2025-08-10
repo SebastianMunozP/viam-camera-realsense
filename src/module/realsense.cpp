@@ -724,21 +724,11 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
             throw std::invalid_argument("device is not started");
         }
 
-        // float scale = depth_frame.get_units();
-        // std::vector<std::uint8_t> data =
-        //     RGBPointsToPCD(my_dev->point_cloud_filter->process(my_dev->align->process(*fs)), scale * mmToMeterMultiple);
-
         std::vector<std::uint8_t> data =
             RGBPointsToPCD(my_dev->point_cloud_filter->process(my_dev->align->process(*fs)), 1.0);
 
         VIAM_SDK_LOG(info) << "[get_point_cloud] data size: " << data.size();
         
-
-        // VIAM_SDK_LOG(info) << "[get_point_cloud] writing file";
-        // std::ofstream outfile("/home/sebastian/Repos/viam-camera-realsense/my_file.pcd", std::ios::out | std::ios::binary);
-        // outfile.write((const char *)&data[0], data.size());
-        // outfile.close();
-
         VIAM_SDK_LOG(info) << "[get_point_cloud] end";
         if(data.size() > MAX_GRPC_MESSAGE_SIZE) {
             VIAM_SDK_LOG(error) << "[get_point_cloud] data size exceeds gRPC message size limit";
