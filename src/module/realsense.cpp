@@ -1,6 +1,7 @@
 
 #include "realsense.hpp"
-#include "../encoding.hpp"
+#include "encoding.hpp"
+#include "utils.hpp"
 #include <iostream>
 #include <fstream>
 
@@ -36,7 +37,6 @@ namespace realsense
 
     constexpr std::string_view service_name = "viam_realsense";
     const float mmToMeterMultiple = 0.001;
-    const uint64_t maxFrameAgeMs = 1e3; // time until a frame is considered stale, in miliseconds (equal to 1 sec)
     static const double min_distance = 1e-6;
 
     static constexpr size_t MAX_GRPC_MESSAGE_SIZE = 33554432;  // 32MB gRPC message size limit
@@ -75,10 +75,6 @@ namespace realsense
         unsigned int rgb;
     };
 
-    bool isValidPoint(const rs2::vertex &p)
-    {
-        return std::fabs(p.x) >= min_distance || std::fabs(p.y) >= min_distance || std::fabs(p.z) >= min_distance;
-    }
 
     struct ViamRSDevice
     {
@@ -95,21 +91,6 @@ namespace realsense
         std::shared_ptr<rs2::config> config;
         size_t frame_count = 0;
         std::chrono::steady_clock::time_point last_report = std::chrono::steady_clock::now();
-    };
-
-    struct raw_camera_image
-    {
-        using deleter_type = void (*)(unsigned char *);
-        using uniq = std::unique_ptr<unsigned char[], deleter_type>;
-
-        static constexpr deleter_type free_deleter = [](unsigned char *ptr)
-        { free(ptr); };
-
-        static constexpr deleter_type array_delete_deleter = [](unsigned char *ptr)
-        { delete[] ptr; };
-
-        uniq bytes;
-        size_t size;
     };
 
     // GLOBALS BEGIN
@@ -137,9 +118,9 @@ namespace realsense
         return mu;
     }
 
-    std::unordered_map<std::string, std::unique_ptr<ViamRSDevice>> &devices_by_serial()
+    std::unordered_map<std::string, std::shared_ptr<ViamRSDevice>> &devices_by_serial()
     {
-        static std::unordered_map<std::string, std::unique_ptr<ViamRSDevice>> devices;
+        static std::unordered_map<std::string, std::shared_ptr<ViamRSDevice>> devices;
         return devices;
     }
 
@@ -154,10 +135,51 @@ namespace realsense
         static std::unordered_map<std::string, std::shared_ptr<rs2::frameset>> frame_sets;
         return frame_sets;
     }
+
+    std::mutex &config_mu_() {
+        static std::mutex mu;
+        return mu;
+    }
+    
     // GLOBALS END
 
     // HELPERS BEGIN
     //
+    std::shared_ptr<rs2::frameset> getFramesetBySerial(const std::string &serial_number)
+    {
+        std::shared_ptr<rs2::frameset> fs = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(frame_set_by_serial_mu());
+            auto search = frame_set_by_serial().find(serial_number);
+            if (search == frame_set_by_serial().end())
+                {
+                    throw std::invalid_argument("no frame yet");
+                }
+                fs = search->second;
+            }
+            return fs;
+    }
+
+    std::string Realsense::getSerialNumber() {
+            std::string serial_number;
+            {
+                const std::lock_guard<std::mutex> lock(config_mu_());
+                serial_number = config_->serial_number;
+            }
+            return serial_number;
+    }
+
+    std::shared_ptr<ViamRSDevice> getDeviceBySerial(std::string const &serial_number)
+    {
+        std::lock_guard<std::mutex> lock(devices_by_serial_mu());
+        auto search = devices_by_serial().find(serial_number);
+        if (search == devices_by_serial().end())
+        {
+            throw std::invalid_argument("Device not found: " + serial_number);
+        }
+        return search->second;
+    }
+
     void printDeviceInfo(rs2::device const &dev)
     {
         std::cout << "DeviceInfo:\n"
@@ -173,25 +195,8 @@ namespace realsense
         std::for_each(devList->begin(), devList->end(), [](const rs2::device &dev)
                       { printDeviceInfo(dev); });
     }
-    double getNowMs()
-    {
-        auto now = std::chrono::high_resolution_clock::now();
-        auto now_ms = std::chrono::duration<double, std::milli>(now.time_since_epoch()).count(); // System time (ms)
 
-        return now_ms;
-    }
-
-    uint64_t timeSinceFrameMs(double nowMs, double imageTimeMs)
-    {
-        if (nowMs > imageTimeMs)
-        {
-            return nowMs - imageTimeMs;
-        }
-        return 0;
-    }
-
-std::vector<PointXYZRGB> getXYZRGBPoints(std::pair<rs2::points, rs2::video_frame>&& data, float scale) {
-    VIAM_SDK_LOG(info) << "[getXYZRGBPoints] Scale: " << scale;
+std::vector<PointXYZRGB> getXYZRGBPoints(std::pair<rs2::points, rs2::video_frame>&& data) {
     rs2::points const& points = data.first;
     rs2::video_frame const& color = data.second;
 
@@ -212,10 +217,6 @@ std::vector<PointXYZRGB> getXYZRGBPoints(std::pair<rs2::points, rs2::video_frame
 
     for (int i = 0; i < num_points; ++i) {
         auto const& vertex = vertices[i];
-        // if (!isValidPoint(v)) {
-        //     VIAM_SDK_LOG(error) << "Invalid point at index " << i;
-        //     continue;
-        // }
 
         auto const& tc = tex_coords[i];
         int u = std::clamp(static_cast<int>(std::lround(tc.u * width)), 0, width - 1);
@@ -228,9 +229,9 @@ std::vector<PointXYZRGB> getXYZRGBPoints(std::pair<rs2::points, rs2::video_frame
         unsigned int rgb = (r << 16) | (g << 8) | b;
 
         PointXYZRGB pt;
-        pt.x = vertex.x * scale;
-        pt.y = vertex.y * scale;
-        pt.z = vertex.z * scale;
+        pt.x = vertex.x;
+        pt.y = vertex.y;
+        pt.z = vertex.z;
         pt.rgb = rgb;
 
         pcdPoints.emplace_back(pt);
@@ -239,9 +240,9 @@ std::vector<PointXYZRGB> getXYZRGBPoints(std::pair<rs2::points, rs2::video_frame
     return pcdPoints;
 }
 
-std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame>&& data, float scale)
+std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame>&& data)
 {
-    auto pcdPoints = getXYZRGBPoints(std::move(data), scale);
+    auto pcdPoints = getXYZRGBPoints(std::move(data));
     if (pcdPoints.empty()) {
         VIAM_SDK_LOG(error) << "[RGBPointsToPCD] No valid points found";
         return {};
@@ -279,17 +280,7 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
     void startDevice(std::string serialNumber, std::string resourceName)
     {
         VIAM_SDK_LOG(info) << service_name << ": starting device " << serialNumber;
-        std::lock_guard<std::mutex> lock(devices_by_serial_mu());
-
-        auto search = devices_by_serial().find(serialNumber);
-        if (search == devices_by_serial().end())
-        {
-            std::ostringstream buffer;
-            buffer << service_name << ": unable to start undetected device " << serialNumber;
-            throw std::invalid_argument(buffer.str());
-        }
-
-        std::unique_ptr<ViamRSDevice> &my_dev = search->second;
+        std::shared_ptr<ViamRSDevice> my_dev = getDeviceBySerial(serialNumber);
         if (my_dev->started)
         {
             std::ostringstream buffer;
@@ -323,15 +314,15 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
                 }
 
                 std::lock_guard<std::mutex> lock(frame_set_by_serial_mu());
-                double nowMs = getNowMs();
-                double diff = timeSinceFrameMs(nowMs, color_frame.get_timestamp());
-                if (diff > maxFrameAgeMs)
+                double nowMs = utils::getNowMs();
+                double diff = utils::timeSinceFrameMs(nowMs, color_frame.get_timestamp());
+                if (diff > utils::maxFrameAgeMs)
                 {
                     std::cerr << "color frame is " << diff << "ms older than now, nowMs: " << nowMs << " frameTimeMs "
                               << color_frame.get_timestamp() << "\n";
                 }
-                diff = timeSinceFrameMs(nowMs, depth_frame.get_timestamp());
-                if (diff > maxFrameAgeMs)
+                diff = utils::timeSinceFrameMs(nowMs, depth_frame.get_timestamp());
+                if (diff > utils::maxFrameAgeMs)
                 {
                     std::cerr << "depth frame is " << diff << "ms older than now, nowMs: " << nowMs << " frameTimeMs "
                               << depth_frame.get_timestamp() << "\n";
@@ -344,14 +335,14 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
                     rs2::frame prevDepth = it->second->get_depth_frame();
                     if (prevColor and prevDepth)
                     {
-                        diff = timeSinceFrameMs(color_frame.get_timestamp(), prevColor.get_timestamp());
-                        if (diff > maxFrameAgeMs)
+                        diff = utils::timeSinceFrameMs(color_frame.get_timestamp(), prevColor.get_timestamp());
+                        if (diff > utils::maxFrameAgeMs)
                         {
                             std::cerr << "previous color frame is " << diff << "ms older than current color frame. nowMs: " << nowMs
                                       << " frameTimeMs " << color_frame.get_timestamp() << "\n";
                         }
-                        diff = timeSinceFrameMs(depth_frame.get_timestamp(), prevDepth.get_timestamp());
-                        if (diff > maxFrameAgeMs)
+                        diff = utils::timeSinceFrameMs(depth_frame.get_timestamp(), prevDepth.get_timestamp());
+                        if (diff > utils::maxFrameAgeMs)
                         {
                             std::cerr << "previous depth frame is " << diff << "ms older than current depth frame. nowMs: " << nowMs
                                       << " frameTimeMs " << depth_frame.get_timestamp() << "\n";
@@ -375,17 +366,8 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
 
     void stopDevice(std::string serialNumber, std::string resourceName)
     {
-        std::lock_guard<std::mutex> lock(devices_by_serial_mu());
-
-        auto search = devices_by_serial().find(serialNumber);
-        if (search == devices_by_serial().end())
-        {
-            VIAM_SDK_LOG(error) << service_name << ": unable to stop undetected device " << serialNumber;
-            return;
-        }
-
-        std::unique_ptr<ViamRSDevice> &my_dev = search->second;
-        if (!my_dev->started)
+        std::shared_ptr<ViamRSDevice> my_dev = getDeviceBySerial(serialNumber);
+        if (not my_dev or not my_dev->started)
         {
             VIAM_SDK_LOG(error) << service_name << ": unable to stop device that is not currently running " << serialNumber;
             return;
@@ -397,24 +379,6 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
             std::lock_guard<std::mutex> lock(serial_by_resource_mu());
             serial_by_resource().erase(resourceName);
         }
-    }
-
-    raw_camera_image encodeDepthRAW(const unsigned char *data, const uint64_t width, const uint64_t height, const bool littleEndian)
-    {
-        viam::sdk::Camera::depth_map m = xt::xarray<uint16_t>::from_shape({height, width});
-        std::copy(reinterpret_cast<const uint16_t *>(data), reinterpret_cast<const uint16_t *>(data) + height * width, m.begin());
-
-        for (size_t i = 0; i < m.size(); i++)
-        {
-            m[i] = m[i] * mmToMeterMultiple;
-        }
-
-        std::vector<unsigned char> encodedData = viam::sdk::Camera::encode_depth_map(m);
-
-        unsigned char *rawBuf = new unsigned char[encodedData.size()];
-        std::memcpy(rawBuf, encodedData.data(), encodedData.size());
-
-        return raw_camera_image{raw_camera_image::uniq(rawBuf, raw_camera_image::array_delete_deleter), encodedData.size()};
     }
 
     // HELPERS END
@@ -458,7 +422,7 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
         std::string prev_serial_number;
         std::string prev_resource_name;
         {
-            const std::lock_guard<std::mutex> lock(config_mu_);
+            const std::lock_guard<std::mutex> lock(config_mu_());
             prev_serial_number = config_->serial_number;
             prev_resource_name = config_->resource_name;
         }
@@ -485,7 +449,7 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
             VIAM_SDK_LOG(info) << "[get_image] start";
             std::string serial_number;
             {
-                const std::lock_guard<std::mutex> lock(config_mu_);
+                const std::lock_guard<std::mutex> lock(config_mu_());
                 serial_number = config_->serial_number;
             }
             std::shared_ptr<rs2::frameset> fs = nullptr;
@@ -498,51 +462,8 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
                 }
                 fs = search->second;
             }
-            auto color = fs->get_color_frame();
-            if (not color)
-            {
-                throw std::invalid_argument("no color frame");
-            }
-
-            // If the image's timestamp is older than a second throw error, this
-            // indicates we no longer have a working camera.
-            double nowMs = getNowMs();
-            double frame_time = color.get_timestamp();
-            uint64_t diff = timeSinceFrameMs(nowMs, frame_time);
-            if (diff > maxFrameAgeMs)
-            {
-                std::ostringstream buffer;
-                buffer << "no recent color frame: check USB connection, diff: " << diff << "ms";
-                throw std::invalid_argument(buffer.str());
-            }
-
-            std::uint8_t *colorData = (std::uint8_t *)color.get_data();
-            if (colorData == nullptr)
-            {
-                throw std::runtime_error("[get_image] color data is null");
-            }
-            uint32_t colorDataSize = color.get_data_size();
-
-            std::unique_ptr<vsdk::Camera::raw_image> response;
-
-            auto stream_profile = color.get_profile().as<rs2::video_stream_profile>();
-            if (!stream_profile)
-            {
-                throw std::runtime_error("[get_image] color frame profile is not a video stream profile");
-            }
-
-            // Encode the image to JPEG format
-            VIAM_SDK_LOG(info) << "[get_image] encoding color image to JPEG";
-            response =
-                encodeJPEGToResponse(colorData,
-                                     stream_profile.width(), stream_profile.height());
-
-            // vsdk::Camera::raw_image response;
-            // response.source_name = kColorSourceName;
-            // response.mime_type = kColorMimeTypeJPEG;
-            // response.bytes.assign(colorData, colorData + colorDataSize);
             VIAM_SDK_LOG(info) << "[get_image] end";
-            return *response;
+            return encoding::encodeFrameToResponse(fs->get_color_frame());
         }
         catch (const std::exception &e)
         {
@@ -555,83 +476,15 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
         try
         {
             VIAM_SDK_LOG(info) << "[get_images] start";
-            std::string serial_number;
-            {
-                const std::lock_guard<std::mutex> lock(config_mu_);
-                serial_number = config_->serial_number;
-            }
-            std::shared_ptr<rs2::frameset> fs = nullptr;
-            {
-                std::lock_guard<std::mutex> lock(frame_set_by_serial_mu());
-                auto search = frame_set_by_serial().find(serial_number);
-                if (search == frame_set_by_serial().end())
-                {
-                    throw std::invalid_argument("no frame yet");
-                }
-                fs = search->second;
-            }
+            std::string serial_number = getSerialNumber();
+            std::shared_ptr<rs2::frameset> fs = getFramesetBySerial(serial_number);
 
-            auto color = fs->first_or_default(RS2_STREAM_COLOR, RS2_FORMAT_MJPEG);
-            if (not color)
-            {
-                throw std::invalid_argument("no color frame");
-            }
-
-            // If the image's timestamp is older than a second throw error, this
-            // indicates we no longer have a working camera.
-            double nowMs = getNowMs();
-            double frame_time = color.get_timestamp();
-            uint64_t diff = timeSinceFrameMs(nowMs, frame_time);
-            if (diff > maxFrameAgeMs)
-            {
-                std::ostringstream buffer;
-                buffer << "no recent color frame: check USB connection, diff: " << diff << "ms";
-                throw std::invalid_argument(buffer.str());
-            }
-
+            auto color = fs->get_color_frame();
             auto depth = fs->get_depth_frame();
-            if (not depth)
-            {
-                throw std::invalid_argument("no depth frame");
-            }
 
-            double depth_frame_time = depth.get_timestamp();
-            diff = timeSinceFrameMs(nowMs, depth_frame_time);
-            if (diff > maxFrameAgeMs)
-            {
-                std::ostringstream buffer;
-                buffer << "no recent depth frame: check USB connection, diff: " << diff << "ms";
-                throw std::invalid_argument(buffer.str());
-            }
-
-            unsigned char *colorData = (unsigned char *)color.get_data();
-            if (colorData == nullptr)
-            {
-                throw std::runtime_error("[get_image] color data is null");
-            }
-            uint32_t colorDataSize = color.get_data_size();
-
-            vsdk::Camera::raw_image color_image;
-            color_image.source_name = kColorSourceName;
-            color_image.mime_type = kColorMimeTypeJPEG;
-            color_image.bytes.assign(colorData, colorData + colorDataSize);
-
-            unsigned char *depthData = (unsigned char *)depth.get_data();
-            if (depthData == nullptr)
-            {
-                throw std::runtime_error("[get_images] depth data is null");
-            }
-            auto depthVid = depth.as<rs2::video_frame>();
-            raw_camera_image rci = encodeDepthRAW(depthData, depthVid.get_width(), depthVid.get_height(), false);
-
-            vsdk::Camera::raw_image depth_image;
-            depth_image.source_name = kDepthSourceName;
-            depth_image.mime_type = kDepthMimeTypeViamDep;
-            depth_image.bytes.assign(rci.bytes.get(), rci.bytes.get() + rci.size);
-
-            vsdk::Camera::image_collection response;
-            response.images.emplace_back(std::move(color_image));
-            response.images.emplace_back(std::move(depth_image));
+            viam::sdk::Camera::image_collection response;
+            response.images.emplace_back(encoding::encodeFrameToResponse(color));
+            response.images.emplace_back(encoding::encodeFrameToResponse(depth));
 
             double colorTS = color.get_timestamp();
             double depthTS = depth.get_timestamp();
@@ -642,7 +495,7 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
                                    << "color timestamp was " << colorTS << " depth timestamp was " << depthTS;
             }
             // use the older of the two timestamps
-            uint64_t timestamp = (colorTS > depthTS) ? depthTS : colorTS;
+            uint64_t timestamp = (depthTS < colorTS) ? depthTS : colorTS;
 
             std::chrono::microseconds latestTimestamp(timestamp);
             response.metadata.captured_at = vsdk::time_pt{std::chrono::duration_cast<std::chrono::nanoseconds>(latestTimestamp)};
@@ -659,29 +512,17 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
     {
     try {
         VIAM_SDK_LOG(info) << "[get_point_cloud] start";
-        std::string serial_number;
-        {
-            const std::lock_guard<std::mutex> lock(config_mu_);
-            serial_number = config_->serial_number;
-        }
-        std::shared_ptr<rs2::frameset> fs = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(frame_set_by_serial_mu());
-            auto search = frame_set_by_serial().find(serial_number);
-            if (search == frame_set_by_serial().end()) {
-                throw std::invalid_argument("no frame yet");
-            }
-            fs = search->second;
-        }
+        std::string serial_number = getSerialNumber();
+        std::shared_ptr<rs2::frameset> fs = getFramesetBySerial(serial_number);
 
         rs2::video_frame color_frame = fs->get_color_frame();
         if (not color_frame) {
             throw std::invalid_argument("no color frame");
         }
 
-        double nowMs = getNowMs();
-        double diff = timeSinceFrameMs(nowMs, color_frame.get_timestamp());
-        if (diff > maxFrameAgeMs)
+        double nowMs = utils::getNowMs();
+        double diff = utils::timeSinceFrameMs(nowMs, color_frame.get_timestamp());
+        if (diff > utils::maxFrameAgeMs)
         {
             std::ostringstream buffer;
             buffer << "no recent color frame: check USB connection, diff: " << diff << "ms";
@@ -689,8 +530,8 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
         }
 
         rs2::depth_frame depth_frame = fs->get_depth_frame();
-        diff = timeSinceFrameMs(nowMs, depth_frame.get_timestamp());
-        if (diff > maxFrameAgeMs)
+        diff = utils::timeSinceFrameMs(nowMs, depth_frame.get_timestamp());
+        if (diff > utils::maxFrameAgeMs)
         {
             std::ostringstream buffer;
             buffer << "no recent depth frame: check USB connection, diff: " << diff << "ms";
@@ -712,23 +553,14 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
         }
 
 
-        // NOTE: UNDER LOCK
-        std::lock_guard<std::mutex> lock(devices_by_serial_mu());
-        auto search = devices_by_serial().find(serial_number);
-        if (search == devices_by_serial().end()) {
-            throw std::invalid_argument("device is not connected");
-        }
-
-        std::unique_ptr<ViamRSDevice>& my_dev = search->second;
+        std::shared_ptr<ViamRSDevice> my_dev = getDeviceBySerial(serial_number);
         if (not my_dev->started) {
             throw std::invalid_argument("device is not started");
         }
 
         std::vector<std::uint8_t> data =
-            RGBPointsToPCD(my_dev->point_cloud_filter->process(my_dev->align->process(*fs)), 1.0);
+            RGBPointsToPCD(my_dev->point_cloud_filter->process(my_dev->align->process(*fs)));
 
-        VIAM_SDK_LOG(info) << "[get_point_cloud] data size: " << data.size();
-        
         VIAM_SDK_LOG(info) << "[get_point_cloud] end";
         if(data.size() > MAX_GRPC_MESSAGE_SIZE) {
             VIAM_SDK_LOG(error) << "[get_point_cloud] data size exceeds gRPC message size limit";
@@ -745,41 +577,21 @@ std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame
         try
         {
             VIAM_SDK_LOG(info) << "[get_properties] start";
-            std::string serial_number;
-            {
-                const std::lock_guard<std::mutex> lock(config_mu_);
-                if (config_ == nullptr)
-                {
-                    throw std::runtime_error("native config is null");
-                }
-                if (config_->serial_number.empty())
-                {
-                    throw std::runtime_error("native config serial number is empty");
-                }
-                serial_number = config_->serial_number;
-            }
-
+            std::string serial_number = getSerialNumber();
             rs2_intrinsics props;
-            {
-                const std::lock_guard<std::mutex> lock(devices_by_serial_mu());
-                auto search = devices_by_serial().find(serial_number);
-                if (search == devices_by_serial().end())
-                {
-                    std::ostringstream buffer;
-                    buffer << service_name << ": device with serial number " << serial_number << " is no longer connected";
-                    throw std::invalid_argument(buffer.str());
-                }
-
-                std::unique_ptr<ViamRSDevice> &my_dev = search->second;
-                if (!my_dev->started)
+                std::shared_ptr<ViamRSDevice> my_dev = getDeviceBySerial(serial_number);
+                if (not my_dev or not my_dev->started or not my_dev->pipe)
                 {
                     std::ostringstream buffer;
                     buffer << service_name << ": device with serial number " << serial_number << " is not longer started";
                     throw std::invalid_argument(buffer.str());
                 }
                 auto color_stream = my_dev->pipe->get_active_profile().get_stream(RS2_STREAM_COLOR).as<rs2::video_stream_profile>();
+                if(not color_stream)
+                {
+                    throw std::runtime_error("color stream is not available");
+                }
                 props = color_stream.get_intrinsics();
-            }
 
             vsdk::Camera::properties p{};
             p.supports_pcd = true;
@@ -942,7 +754,7 @@ VIAM_SDK_LOG(info) << "[get_properties] properties: [" <<
 
         {
             std::lock_guard<std::mutex> lock(devices_by_serial_mu());
-            std::unique_ptr<ViamRSDevice> my_dev = std::make_unique<ViamRSDevice>();
+            std::shared_ptr<ViamRSDevice> my_dev = std::make_shared<ViamRSDevice>();
 
             my_dev->pipe = pipe;
             my_dev->device = dev;
@@ -951,7 +763,7 @@ VIAM_SDK_LOG(info) << "[get_properties] properties: [" <<
             my_dev->align = std::make_shared<rs2::align>(RS2_STREAM_COLOR);
             my_dev->config = config;
 
-            devices_by_serial()[serialNumber] = std::move(my_dev);
+            devices_by_serial()[serialNumber] = my_dev;
         }
 
         config->enable_device(serialNumber);
@@ -1022,14 +834,10 @@ VIAM_SDK_LOG(info) << "[get_properties] properties: [" <<
                     VIAM_SDK_LOG(info) << "Device added: " << device_ptr->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
                     VIAM_SDK_LOG(info) << "serial_by_resource() size: " << serial_by_resource().size();
 
-                    // for (auto &[resource_name, serial_number] : serial_by_resource())
+                    for (auto &[resource_name, serial_number] : serial_by_resource())
                     {
-                        // if (serial_number == device_ptr->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER))
+                        if (serial_number == device_ptr->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER))
                         {
-
-                            std::string serial_number = device_ptr->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-                            std::string resource_name = "test"; // Placeholder resource name
-
                             VIAM_SDK_LOG(info) << "calling startDevice";
                             startDevice(serial_number, resource_name);
                             serial_by_resource()[resource_name] = serial_number;

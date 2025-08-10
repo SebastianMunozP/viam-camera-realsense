@@ -39,8 +39,8 @@ class Realsense final : public viam::sdk::Camera, public viam::sdk::Reconfigurab
 
    private:
     std::unique_ptr<RsResourceConfig> config_;
-    std::mutex config_mu_;
     static std::unique_ptr<RsResourceConfig> configure_(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg);
+    std::string getSerialNumber();
 };
 
 }  // namespace realsense
