@@ -2,6 +2,8 @@
 #include "realsense.hpp"
 #include "../encoding.hpp"
 #include <iostream>
+#include <fstream>
+
 
 #include <viam/sdk/log/logging.hpp>
 #include <viam/sdk/common/proto_value.hpp>
@@ -21,20 +23,23 @@ namespace realsense
     vsdk::Model Realsense::model("viam", "camera", "realsense");
 
     // CONSTANTS BEGIN
-    constexpr std::string_view kResourceType = "CameraRealSense";
-    constexpr std::string_view kAPINamespace = "viam";
-    constexpr std::string_view kAPIType = "camera";
-    constexpr std::string_view kAPISubtype = "realsense";
+    const std::string kResourceType = "CameraRealSense";
+    const std::string kAPINamespace = "viam";
+    const std::string kAPIType = "camera";
+    const std::string kAPISubtype = "realsense";
 
-    constexpr std::string_view kColorSourceName = "color";
-    constexpr std::string_view kColorMimeTypeJPEG = "image/jpeg";
-    constexpr std::string_view kDepthSourceName = "depth";
-    constexpr std::string_view kDepthMimeTypeViamDep = "image/vnd.viam.dep";
-    constexpr std::string_view kPcdMimeType = "pointcloud/pcd";
+    const std::string kColorSourceName = "color";
+    const std::string kColorMimeTypeJPEG = "image/jpeg";
+    const std::string kDepthSourceName = "depth";
+    const std::string kDepthMimeTypeViamDep = "image/vnd.viam.dep";
+    const std::string kPcdMimeType = "pointcloud/pcd";
 
     constexpr std::string_view service_name = "viam_realsense";
     const float mmToMeterMultiple = 0.001;
     const uint64_t maxFrameAgeMs = 1e3; // time until a frame is considered stale, in miliseconds (equal to 1 sec)
+    static const double min_distance = 1e-6;
+
+    static constexpr size_t MAX_GRPC_MESSAGE_SIZE = 33554432;  // 32MB gRPC message size limit
 
     // CONSTANTS END
 
@@ -43,7 +48,7 @@ namespace realsense
     {
     public:
         PointCloudFilter() : pointcloud_(std::make_shared<rs2::pointcloud>()) {}
-        std::tuple<rs2::points, rs2::video_frame> process(rs2::frameset frameset)
+        std::pair<rs2::points, rs2::video_frame> process(rs2::frameset frameset)
         {
             auto depth_frame = frameset.get_depth_frame();
             if (!depth_frame)
@@ -57,7 +62,7 @@ namespace realsense
             }
             pointcloud_->map_to(color_frame);
             auto points = pointcloud_->calculate(depth_frame);
-            return std::make_tuple(points, color_frame);
+            return std::make_pair(points, color_frame);
         }
 
     private:
@@ -69,6 +74,11 @@ namespace realsense
         float x, y, z;
         unsigned int rgb;
     };
+
+    bool isValidPoint(const rs2::vertex &p)
+    {
+        return std::fabs(p.x) >= min_distance || std::fabs(p.y) >= min_distance || std::fabs(p.z) >= min_distance;
+    }
 
     struct ViamRSDevice
     {
@@ -179,6 +189,92 @@ namespace realsense
         }
         return 0;
     }
+
+std::vector<PointXYZRGB> getXYZRGBPoints(std::pair<rs2::points, rs2::video_frame>&& data, float scale) {
+    VIAM_SDK_LOG(info) << "[getXYZRGBPoints] Scale: " << scale;
+    rs2::points const& points = data.first;
+    rs2::video_frame const& color = data.second;
+
+    if (not points or not color) {
+        throw std::runtime_error("Points or color frame data is empty");
+    }
+
+    int num_points = points.size();
+    const rs2::vertex* vertices = points.get_vertices();
+    const rs2::texture_coordinate* tex_coords = points.get_texture_coordinates();
+
+    const uint8_t* color_data = reinterpret_cast<const uint8_t*>(color.get_data());
+    int width = color.get_width();
+    int height = color.get_height();
+
+    std::vector<PointXYZRGB> pcdPoints;
+    pcdPoints.reserve(num_points);
+
+    for (int i = 0; i < num_points; ++i) {
+        auto const& vertex = vertices[i];
+        // if (!isValidPoint(v)) {
+        //     VIAM_SDK_LOG(error) << "Invalid point at index " << i;
+        //     continue;
+        // }
+
+        auto const& tc = tex_coords[i];
+        int u = std::clamp(static_cast<int>(std::lround(tc.u * width)), 0, width - 1);
+        int v = std::clamp(static_cast<int>(std::lround(tc.v * height)), 0, height - 1);
+
+        size_t idx = (v * width + u) * 3;
+        auto r = static_cast<unsigned int>(color_data[idx]);
+        auto g = static_cast<unsigned int>(color_data[idx + 1]);
+        auto b = static_cast<unsigned int>(color_data[idx + 2]);
+        unsigned int rgb = (r << 16) | (g << 8) | b;
+
+        PointXYZRGB pt;
+        pt.x = vertex.x * scale;
+        pt.y = vertex.y * scale;
+        pt.z = vertex.z * scale;
+        pt.rgb = rgb;
+
+        pcdPoints.emplace_back(pt);
+    }
+
+    return pcdPoints;
+}
+
+std::vector<std::uint8_t> RGBPointsToPCD(std::pair<rs2::points, rs2::video_frame>&& data, float scale)
+{
+    auto pcdPoints = getXYZRGBPoints(std::move(data), scale);
+    if (pcdPoints.empty()) {
+        VIAM_SDK_LOG(error) << "[RGBPointsToPCD] No valid points found";
+        return {};
+    }
+    VIAM_SDK_LOG(info) << "[RGBPointsToPCD] Converting " << pcdPoints.size() << " points to PCD format";
+
+    std::stringstream header;
+    header << "VERSION .7\n"
+           << "FIELDS x y z rgb\n"
+           << "SIZE 4 4 4 4\n"
+           << "TYPE F F F U\n"
+           << "COUNT 1 1 1 1\n"
+           << "WIDTH " << pcdPoints.size() << "\n"
+           << "HEIGHT 1\n"
+           << "VIEWPOINT 0 0 0 1 0 0 0\n"
+           << "POINTS " << pcdPoints.size() << "\n"
+           << "DATA binary\n";
+    std::string headerStr = header.str();
+    std::vector<std::uint8_t> pcdBytes;
+    pcdBytes.insert(pcdBytes.end(), headerStr.begin(), headerStr.end());
+
+    // Assert that PointXYZRGB is a POD type, and that it has no padding, thus can be copied as bytes.
+    // Since vector is contiguous, we can just copy the whole thing
+    static_assert(std::is_pod_v<PointXYZRGB>);
+    static_assert(sizeof(PointXYZRGB) == (3 * sizeof(float)) + sizeof(unsigned int), "PointXYZRGB has unexpected padding");
+
+    const std::uint8_t* dataPtr = reinterpret_cast<const std::uint8_t*>(pcdPoints.data());
+    size_t dataSize = pcdPoints.size() * sizeof(PointXYZRGB);
+    pcdBytes.insert(pcdBytes.end(), dataPtr, dataPtr + dataSize);
+
+    VIAM_SDK_LOG(info) << "[RGBPointsToPCD] Converted " << pcdPoints.size() << " points to PCD format, encoded in " << pcdBytes.size() << " bytes";
+    return pcdBytes;
+}
 
     void startDevice(std::string serialNumber, std::string resourceName)
     {
@@ -628,18 +724,31 @@ namespace realsense
             throw std::invalid_argument("device is not started");
         }
 
-        float scale = depth_frame.get_units();
+        // float scale = depth_frame.get_units();
         // std::vector<std::uint8_t> data =
         //     RGBPointsToPCD(my_dev->point_cloud_filter->process(my_dev->align->process(*fs)), scale * mmToMeterMultiple);
 
+        std::vector<std::uint8_t> data =
+            RGBPointsToPCD(my_dev->point_cloud_filter->process(my_dev->align->process(*fs)), 1.0);
+
+        VIAM_SDK_LOG(info) << "[get_point_cloud] data size: " << data.size();
+        
+
+        // VIAM_SDK_LOG(info) << "[get_point_cloud] writing file";
+        // std::ofstream outfile("/home/sebastian/Repos/viam-camera-realsense/my_file.pcd", std::ios::out | std::ios::binary);
+        // outfile.write((const char *)&data[0], data.size());
+        // outfile.close();
+
         VIAM_SDK_LOG(info) << "[get_point_cloud] end";
-        // return vsdk::Camera::point_cloud{kPcdMimeType, data};
+        if(data.size() > MAX_GRPC_MESSAGE_SIZE) {
+            VIAM_SDK_LOG(error) << "[get_point_cloud] data size exceeds gRPC message size limit";
+            return vsdk::Camera::point_cloud{};
+        }
+        return vsdk::Camera::point_cloud{kPcdMimeType, data};
     } catch (const std::exception& e) {
         VIAM_SDK_LOG(error) << "[get_point_cloud] error: " << e.what();
         throw std::runtime_error("failed to create pointcloud: " + std::string(e.what()));
     }
-
-        return point_cloud();
     }
     viam::sdk::Camera::properties Realsense::get_properties()
     {
@@ -690,7 +799,26 @@ namespace realsense
             p.intrinsic_parameters.focal_y_px = props.fy;
             p.intrinsic_parameters.center_x_px = props.ppx;
             p.intrinsic_parameters.center_y_px = props.ppy;
-            // TODO: Set distortion parameters
+            p.distortion_parameters.model = rs2_distortion_to_string(props.model);
+            for(auto const& coeff : props.coeffs)
+                p.distortion_parameters.parameters.push_back(coeff);
+
+                std::stringstream coeffs_stream;
+                for (size_t i = 0; i < p.distortion_parameters.parameters.size(); ++i) {
+    if (i > 0) coeffs_stream << ", ";
+    coeffs_stream << p.distortion_parameters.parameters[i];
+}
+
+VIAM_SDK_LOG(info) << "[get_properties] properties: [" <<
+    "width: " << p.intrinsic_parameters.width_px << ", " <<
+    "height: " << p.intrinsic_parameters.height_px << ", " <<
+    "focal_x: " << p.intrinsic_parameters.focal_x_px << ", " <<
+    "focal_y: " << p.intrinsic_parameters.focal_y_px << ", " <<
+    "center_x: " << p.intrinsic_parameters.center_x_px << ", " <<
+    "center_y: " << p.intrinsic_parameters.center_y_px << ", " <<
+    "distortion_model: " << p.distortion_parameters.model << ", " <<
+    "distortion_coeffs: [" << coeffs_stream.str() << "]" <<
+    "]";
 
             VIAM_SDK_LOG(info) << "[get_properties] end";
             return p;
