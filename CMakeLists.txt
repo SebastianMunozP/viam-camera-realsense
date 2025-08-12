@@ -96,7 +96,7 @@ add_subdirectory(test)
 
 
 # construct the experimental library
-add_library(viamrealsense2 src/module/realsense.cpp ${THIRD_PARTY_SOURCES} ${HELPER_SOURCES}) 
+add_library(viamrealsense2 src/module/realsense.cpp src/module/encoding.cpp ${THIRD_PARTY_SOURCES} ${HELPER_SOURCES}) 
 target_link_libraries(viamrealsense2 PUBLIC viam-cpp-sdk::viamsdk realsense2::realsense2 PRIVATE turbojpeg ${CMAKE_DL_LIBS})
 
 # Conditionally apply SIMD flags based on the processor architecture for fpng acceleration
