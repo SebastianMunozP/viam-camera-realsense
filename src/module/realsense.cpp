@@ -4,6 +4,8 @@
 #include "utils.hpp"
 #include <fstream>
 #include <iostream>
+#include <optional>
+#include <unordered_set>
 
 #include <viam/sdk/common/proto_value.hpp>
 #include <viam/sdk/components/camera.hpp>
@@ -14,6 +16,7 @@
 #include <viam/sdk/registry/registry.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
 #include <viam/sdk/rpc/server.hpp>
+#include <viam/sdk/spatialmath/geometry.hpp>
 
 namespace realsense {
 
@@ -33,15 +36,16 @@ const std::string kDepthSourceName = "depth";
 const std::string kDepthMimeTypeViamDep = "image/vnd.viam.dep";
 const std::string kPcdMimeType = "pointcloud/pcd";
 
-constexpr std::string_view service_name = "viam_realsense";
-const float mmToMeterMultiple = 0.001;
-static const double min_distance = 1e-6;
+const std::string service_name = "viam_realsense";
 static constexpr std::uint64_t maxFrameAgeMs =
     1e3; // time until a frame is considered stale, in miliseconds (equal to 1
          // sec)
 
 static constexpr size_t MAX_GRPC_MESSAGE_SIZE =
     33554432; // 32MB gRPC message size limit
+static const std::unordered_set<std::string> SUPPORTED_CAMERA_MODELS = {
+    "D435", "D435I"
+};
 
 // CONSTANTS END
 
@@ -68,9 +72,6 @@ private:
 };
 
 struct ViamRSDevice {
-  ~ViamRSDevice() {
-    std::cerr << "deleting ViamRSDevice " << serial_number << std::endl;
-  }
   std::string serial_number;
   std::shared_ptr<rs2::device> device;
   bool started;
@@ -168,20 +169,78 @@ getDeviceBySerial(std::string const &serial_number) {
 }
 
 void printDeviceInfo(rs2::device const &dev) {
-  std::cout << "DeviceInfo:\n"
-            << "  Name:                           "
-            << dev.get_info(RS2_CAMERA_INFO_NAME) << "\n"
-            << "  Serial Number:                  "
-            << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << "\n"
-            << "  Firmware Version:               "
-            << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION) << "\n"
-            << "  Recommended Firmware Version:   "
-            << dev.get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)
-            << "\n"
-            << "  ASIC Serial Number:             "
-            << dev.get_info(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER) << "\n"
-            << "  USB Type Descriptor:            "
-            << dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR) << "\n";
+  std::stringstream info;
+  if (dev.supports(RS2_CAMERA_INFO_NAME)) {
+    info << "DeviceInfo:\n"
+         << "  Name:                           "
+         << dev.get_info(RS2_CAMERA_INFO_NAME) << std::endl;
+  }
+  if( dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
+         info << "  Serial Number:                  "
+         << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_PRODUCT_LINE)) {
+    info << "  Product Line:                   "
+         << dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_PRODUCT_ID)) {
+         info << "  Product ID:                      "
+         << dev.get_info(RS2_CAMERA_INFO_PRODUCT_ID) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
+         info << "  USB Type Descriptor:            "
+            << dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_FIRMWARE_VERSION)) {
+    info << "  Firmware Version:               "
+         << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
+         info << "  Recommended Firmware Version:   "
+         << dev.get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)
+         << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
+         info << "  Firmware Update ID:   "
+         << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_PHYSICAL_PORT)) {
+         info << "  Physical Port:   "
+         << dev.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_DEBUG_OP_CODE)) {
+         info << "  Debug OP Code:   "
+            << dev.get_info(RS2_CAMERA_INFO_DEBUG_OP_CODE) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_ADVANCED_MODE)) {
+         info << "  Advanced Mode:   "
+            << dev.get_info(RS2_CAMERA_INFO_ADVANCED_MODE) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_PRODUCT_ID)) {
+         info << "  Product ID:   "
+            << dev.get_info(RS2_CAMERA_INFO_PRODUCT_ID) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_CAMERA_LOCKED)) {
+         info << "  Camera Locked:   "
+              << dev.get_info(RS2_CAMERA_INFO_CAMERA_LOCKED) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER)) {
+         info << "  ASIC Serial Number:             "
+              << dev.get_info(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
+         info << "  USB Type Descriptor:            "
+            << dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_DFU_DEVICE_PATH)) {
+         info << "  DFU Device Path:            "
+              << dev.get_info(RS2_CAMERA_INFO_DFU_DEVICE_PATH) << std::endl;
+  }
+  if(dev.supports(RS2_CAMERA_INFO_IP_ADDRESS)) {
+         info << "  IP Address:            "
+              << dev.get_info(RS2_CAMERA_INFO_IP_ADDRESS) << std::endl;
+  }
+  VIAM_SDK_LOG(info) << info.str();
 }
 void printDeviceList(const std::shared_ptr<rs2::device_list> devList) {
   std::for_each(devList->begin(), devList->end(),
@@ -521,7 +580,10 @@ viam::sdk::Camera::properties Realsense::get_properties() {
 }
 std::vector<viam::sdk::GeometryConfig>
 Realsense::get_geometries(const viam::sdk::ProtoStruct &extra) {
-  return std::vector<viam::sdk::GeometryConfig>();
+    // This is the geometry for the D435 and D435i, the only models that we currently support.
+    // See https://github.com/viam-modules/viam-camera-realsense/pull/75 for explanation of values.
+    // NOTE: If support for additional RealSense camera models is added, update method accordingly.
+    return {vsdk::GeometryConfig(vsdk::pose{-17.5, 0, -12.5}, vsdk::box({90, 25, 25}), "box")};
 }
 
 std::unique_ptr<RsResourceConfig>
@@ -625,9 +687,40 @@ createSwD2CAlignConfig(std::shared_ptr<rs2::pipeline> pipe,
   // If no match found, return nullptr
   return nullptr;
 }
+
+std::optional<std::string> getCameraModel(std::shared_ptr<rs2::device> dev) {
+  if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
+    return std::nullopt;
+  }
+  std::string camera_info = dev->get_info(RS2_CAMERA_INFO_NAME);
+  // Model is the 3rd word in this string
+  std::istringstream iss(camera_info);
+  std::string word;
+  int word_count = 0;
+  while (iss >> word) {
+    word_count++;
+    if (word_count == 3) {
+      std::string camera_model = word;
+      return camera_model;
+    }
+  }
+  return std::nullopt;
+}
+
 void registerDevice(std::string serialNumber,
                     std::shared_ptr<rs2::device> dev) {
-  VIAM_SDK_LOG(info) << "registering " << serialNumber;
+  VIAM_SDK_LOG(info) << "[registerDevice] registering " << serialNumber;
+  auto camera_model = getCameraModel(dev);
+  if(not camera_model) {
+    VIAM_SDK_LOG(error) << "[registerDevice] Failed to register camera serial number: " << serialNumber << " since no camera model found";
+    return;
+  }
+  VIAM_SDK_LOG(info) << "[registerDevice] Found camera model: " << *camera_model;
+  if(SUPPORTED_CAMERA_MODELS.count(*camera_model) == 0) {
+    VIAM_SDK_LOG(error) << "[registerDevice] Failed to register camera serial number: " << serialNumber << " since camera model is not D435 or D435i, camera model: " << *camera_model;
+    return;
+  }
+  
   std::shared_ptr<rs2::pipeline> pipe = std::make_shared<rs2::pipeline>();
   std::shared_ptr<rs2::config> config = createSwD2CAlignConfig(pipe, dev);
   if (config == nullptr) {
@@ -743,11 +836,10 @@ void startRealsenseSDK(std::shared_ptr<rs2::context> ctx) {
   VIAM_SDK_LOG(info) << "devCount: " << deviceList.size() << "\n";
 
   for (auto const &dev : deviceList) {
-    std::cout << "Device Added: " << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER)
-              << std::endl;
     auto dev_ptr = std::make_shared<rs2::device>(dev);
     printDeviceInfo(*dev_ptr);
     registerDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), dev_ptr);
+    VIAM_SDK_LOG(info) << "Device Added: " << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
   }
   VIAM_SDK_LOG(info) << "Realsense SDK started, devices_by_serial size: "
                      << devices_by_serial().size();
