@@ -385,8 +385,56 @@ Realsense::~Realsense() {
     VIAM_SDK_LOG(info) << "Realsense destructor end " << config_->serial_number;
   }
 }
+
+bool isDeviceConnected(const std::string &serial_number) {
+  auto ctx = std::make_shared<rs2::context>();
+  auto devices = ctx->query_devices();
+  for (const auto &dev : devices) {
+    if (dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == serial_number) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void Realsense::reconfigure(const viam::sdk::Dependencies &deps,
-                            const viam::sdk::ResourceConfig &cfg) {}
+                            const viam::sdk::ResourceConfig &cfg) {
+    VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
+    std::string prev_serial_number;
+    std::string prev_resource_name;
+    {
+        const std::lock_guard<std::mutex> lock(config_mu_());
+        prev_serial_number = config_->serial_number;
+        prev_resource_name = config_->resource_name;
+    }
+    VIAM_SDK_LOG(info) << "[reconfigure] stopping device " << prev_serial_number;
+    stopDevice(prev_serial_number, prev_resource_name);
+
+    // Before modifying config and starting the new device, let's make sure the new device is actually connected
+    auto const temp_config = configure_(deps, cfg);
+    if (not isDeviceConnected(temp_config->serial_number)) {
+        VIAM_SDK_LOG(error) << "[reconfigure] new device is not connected";
+        return;
+    }
+
+    std::string new_serial_number;
+    std::string new_resource_name;
+    {
+        const std::lock_guard<std::mutex> lock(config_mu_());
+        config_.reset();
+        config_ = temp_config;
+        new_serial_number = config_->serial_number;
+        new_resource_name = config_->resource_name;
+    }
+    VIAM_SDK_LOG(info) << "[reconfigure] starting device " << new_serial_number;
+    startDevice(new_serial_number, new_resource_name);
+    {
+        std::lock_guard<std::mutex> lock(serial_by_resource_mu());
+        serial_by_resource()[config_->resource_name] = new_serial_number;
+    }
+    VIAM_SDK_LOG(info) << "[reconfigure] Realsense reconfigure end";
+
+                            }
 viam::sdk::ProtoStruct
 Realsense::do_command(const viam::sdk::ProtoStruct &command) {
   VIAM_SDK_LOG(error) << "do_command not implemented";
@@ -642,25 +690,25 @@ createSwD2CAlignConfig(std::shared_ptr<rs2::pipeline> pipe,
   auto color_profiles = color_sensor.get_stream_profiles();
   VIAM_SDK_LOG(info) << "Found " << color_profiles.size() << " color profiles";
   // Log color profiles
-  VIAM_SDK_LOG(info) << "Available color profiles:";
-  for (auto &cp : color_profiles) {
-    auto csp = cp.as<rs2::video_stream_profile>();
-    VIAM_SDK_LOG(info) << "Color profile: " << csp.stream_name()
-                       << " format: " << csp.format()
-                       << " width: " << csp.width()
-                       << " height: " << csp.height() << " fps: " << csp.fps();
-  }
+  // VIAM_SDK_LOG(info) << "Available color profiles:";
+  // for (auto &cp : color_profiles) {
+  //   auto csp = cp.as<rs2::video_stream_profile>();
+  //   VIAM_SDK_LOG(info) << "Color profile: " << csp.stream_name()
+  //                      << " format: " << csp.format()
+  //                      << " width: " << csp.width()
+  //                      << " height: " << csp.height() << " fps: " << csp.fps();
+  // }
   auto depth_profiles = depth_sensor.get_stream_profiles();
-  VIAM_SDK_LOG(info) << "Found " << depth_profiles.size() << " depth profiles";
-  // Log depth profiles
-  VIAM_SDK_LOG(info) << "Available depth profiles:";
-  for (auto &dp : depth_profiles) {
-    auto dsp = dp.as<rs2::video_stream_profile>();
-    VIAM_SDK_LOG(info) << "Depth profile: " << dsp.stream_name()
-                       << " format: " << dsp.format()
-                       << " width: " << dsp.width()
-                       << " height: " << dsp.height() << " fps: " << dsp.fps();
-  }
+  // VIAM_SDK_LOG(info) << "Found " << depth_profiles.size() << " depth profiles";
+  // // Log depth profiles
+  // VIAM_SDK_LOG(info) << "Available depth profiles:";
+  // for (auto &dp : depth_profiles) {
+  //   auto dsp = dp.as<rs2::video_stream_profile>();
+  //   VIAM_SDK_LOG(info) << "Depth profile: " << dsp.stream_name()
+  //                      << " format: " << dsp.format()
+  //                      << " width: " << dsp.width()
+  //                      << " height: " << dsp.height() << " fps: " << dsp.fps();
+  // }
 
   // Find matching profiles (same resolution and FPS)
   for (auto &cp : color_profiles) {
