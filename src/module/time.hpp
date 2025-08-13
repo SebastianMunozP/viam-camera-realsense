@@ -4,7 +4,7 @@
 #include <sstream>
 #include <string>
 namespace realsense {
-namespace utils {
+namespace time {
 inline double getNowMs() {
   auto now = std::chrono::high_resolution_clock::now();
   auto now_ms =
@@ -46,5 +46,5 @@ inline void throwIfTooOld(double const nowMs, double const prevTimeMs,
   }
 }
 
-} // namespace utils
+} // namespace time
 } // namespace realsense

@@ -1,7 +1,5 @@
 
 #pragma once
-#include "utils.hpp"
-
 #include <viam/sdk/components/camera.hpp>
 
 #include <librealsense2/rs.hpp>

@@ -1,7 +1,7 @@
 
 #include "realsense.hpp"
 #include "encoding.hpp"
-#include "utils.hpp"
+#include "time.hpp"
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -280,11 +280,11 @@ void startDevice(std::string serialNumber, std::string resourceName) {
       }
 
       std::lock_guard<std::mutex> lock(frame_set_by_serial_mu());
-      double nowMs = utils::getNowMs();
-      utils::logIfTooOld(std::cerr, nowMs, color_frame.get_timestamp(),
+      double nowMs = time::getNowMs();
+      time::logIfTooOld(std::cerr, nowMs, color_frame.get_timestamp(),
                          maxFrameAgeMs,
                          "[frame_callback] received color frame is too stale");
-      utils::logIfTooOld(std::cerr, nowMs, depth_frame.get_timestamp(),
+      time::logIfTooOld(std::cerr, nowMs, depth_frame.get_timestamp(),
                          maxFrameAgeMs,
                          "[frame_callback] received depth frame is too stale");
 
@@ -293,11 +293,11 @@ void startDevice(std::string serialNumber, std::string resourceName) {
         rs2::frame prevColor = it->second->get_color_frame();
         rs2::frame prevDepth = it->second->get_depth_frame();
         if (prevColor and prevDepth) {
-          utils::logIfTooOld(
+          time::logIfTooOld(
               std::cerr, color_frame.get_timestamp(), prevColor.get_timestamp(),
               maxFrameAgeMs,
               "[frameCallback] previous color frame is too stale");
-          utils::logIfTooOld(
+          time::logIfTooOld(
               std::cerr, depth_frame.get_timestamp(), prevDepth.get_timestamp(),
               maxFrameAgeMs,
               "[frameCallback] previous depth frame is too stale");
@@ -411,7 +411,7 @@ void Realsense::reconfigure(const viam::sdk::Dependencies &deps,
     stopDevice(prev_serial_number, prev_resource_name);
 
     // Before modifying config and starting the new device, let's make sure the new device is actually connected
-    auto const temp_config = configure_(deps, cfg);
+    auto temp_config = configure_(deps, cfg);
     if (not isDeviceConnected(temp_config->serial_number)) {
         VIAM_SDK_LOG(error) << "[reconfigure] new device is not connected";
         return;
@@ -422,7 +422,7 @@ void Realsense::reconfigure(const viam::sdk::Dependencies &deps,
     {
         const std::lock_guard<std::mutex> lock(config_mu_());
         config_.reset();
-        config_ = temp_config;
+        config_ = std::move(temp_config);
         new_serial_number = config_->serial_number;
         new_resource_name = config_->resource_name;
     }
@@ -462,7 +462,7 @@ Realsense::get_image(std::string mime_type,
     VIAM_SDK_LOG(info) << "[get_image] end";
     BOOST_ASSERT_MSG(fs->get_color_frame(),
                      "[encodeFrameToResponse] color frame is invalid");
-    utils::throwIfTooOld(utils::getNowMs(),
+    time::throwIfTooOld(time::getNowMs(),
                          fs->get_color_frame().get_timestamp(), maxFrameAgeMs,
                          "no recent color frame: check USB connection");
     return encoding::encodeFrameToResponse(fs->get_color_frame());
@@ -514,21 +514,21 @@ Realsense::get_point_cloud(std::string mime_type,
     VIAM_SDK_LOG(info) << "[get_point_cloud] start";
     std::string serial_number = getSerialNumber();
     std::shared_ptr<rs2::frameset> fs = getFramesetBySerial(serial_number);
-    double nowMs = utils::getNowMs();
+    double nowMs = time::getNowMs();
 
     rs2::video_frame color_frame = fs->get_color_frame();
     if (not color_frame) {
       throw std::invalid_argument("no color frame");
     }
 
-    utils::throwIfTooOld(nowMs, color_frame.get_timestamp(), maxFrameAgeMs,
+    time::throwIfTooOld(nowMs, color_frame.get_timestamp(), maxFrameAgeMs,
                          "no recent color frame: check USB connection");
 
     rs2::depth_frame depth_frame = fs->get_depth_frame();
     if (not depth_frame) {
       throw std::invalid_argument("no depth frame");
     }
-    utils::throwIfTooOld(nowMs, depth_frame.get_timestamp(), maxFrameAgeMs,
+    time::throwIfTooOld(nowMs, depth_frame.get_timestamp(), maxFrameAgeMs,
                          "no recent depth frame: check USB connection");
 
     std::uint8_t *colorData = (std::uint8_t *)color_frame.get_data();
@@ -689,26 +689,8 @@ createSwD2CAlignConfig(std::shared_ptr<rs2::pipeline> pipe,
   // Get stream profiles
   auto color_profiles = color_sensor.get_stream_profiles();
   VIAM_SDK_LOG(info) << "Found " << color_profiles.size() << " color profiles";
-  // Log color profiles
-  // VIAM_SDK_LOG(info) << "Available color profiles:";
-  // for (auto &cp : color_profiles) {
-  //   auto csp = cp.as<rs2::video_stream_profile>();
-  //   VIAM_SDK_LOG(info) << "Color profile: " << csp.stream_name()
-  //                      << " format: " << csp.format()
-  //                      << " width: " << csp.width()
-  //                      << " height: " << csp.height() << " fps: " << csp.fps();
-  // }
   auto depth_profiles = depth_sensor.get_stream_profiles();
-  // VIAM_SDK_LOG(info) << "Found " << depth_profiles.size() << " depth profiles";
-  // // Log depth profiles
-  // VIAM_SDK_LOG(info) << "Available depth profiles:";
-  // for (auto &dp : depth_profiles) {
-  //   auto dsp = dp.as<rs2::video_stream_profile>();
-  //   VIAM_SDK_LOG(info) << "Depth profile: " << dsp.stream_name()
-  //                      << " format: " << dsp.format()
-  //                      << " width: " << dsp.width()
-  //                      << " height: " << dsp.height() << " fps: " << dsp.fps();
-  // }
+  VIAM_SDK_LOG(info) << "Found " << depth_profiles.size() << " depth profiles";
 
   // Find matching profiles (same resolution and FPS)
   for (auto &cp : color_profiles) {
