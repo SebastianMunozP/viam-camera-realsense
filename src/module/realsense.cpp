@@ -1,5 +1,6 @@
 
 #include "realsense.hpp"
+#include "device.hpp"
 #include "encoding.hpp"
 #include "time.hpp"
 #include <fstream>
@@ -44,45 +45,9 @@ static constexpr std::uint64_t maxFrameAgeMs =
 static constexpr size_t MAX_GRPC_MESSAGE_SIZE =
     33554432; // 32MB gRPC message size limit
 static const std::unordered_set<std::string> SUPPORTED_CAMERA_MODELS = {
-    "D435", "D435I"
-};
+    "D435", "D435I"};
 
 // CONSTANTS END
-
-// STRUCTS BEGIN
-class PointCloudFilter {
-public:
-  PointCloudFilter() : pointcloud_(std::make_shared<rs2::pointcloud>()) {}
-  std::pair<rs2::points, rs2::video_frame> process(rs2::frameset frameset) {
-    auto depth_frame = frameset.get_depth_frame();
-    if (!depth_frame) {
-      throw std::runtime_error("No depth frame in frameset");
-    }
-    auto color_frame = frameset.get_color_frame();
-    if (!color_frame) {
-      throw std::runtime_error("No color frame in frameset");
-    }
-    pointcloud_->map_to(color_frame);
-    auto points = pointcloud_->calculate(depth_frame);
-    return std::make_pair(points, color_frame);
-  }
-
-private:
-  std::shared_ptr<rs2::pointcloud> pointcloud_;
-};
-
-struct ViamRSDevice {
-  std::string serial_number;
-  std::shared_ptr<rs2::device> device;
-  bool started;
-  std::shared_ptr<rs2::pipeline> pipe;
-  std::shared_ptr<PointCloudFilter> point_cloud_filter;
-  std::shared_ptr<rs2::align> align;
-  std::shared_ptr<rs2::config> config;
-  size_t frame_count = 0;
-  std::chrono::steady_clock::time_point last_report =
-      std::chrono::steady_clock::now();
-};
 
 // GLOBALS BEGIN
 // Using the "Construct on First Use Idiom" to prevent the static
@@ -108,9 +73,10 @@ std::mutex &devices_by_serial_mu() {
   return mu;
 }
 
-std::unordered_map<std::string, std::shared_ptr<ViamRSDevice>> &
+std::unordered_map<std::string, std::shared_ptr<device::ViamRSDevice>> &
 devices_by_serial() {
-  static std::unordered_map<std::string, std::shared_ptr<ViamRSDevice>> devices;
+  static std::unordered_map<std::string, std::shared_ptr<device::ViamRSDevice>>
+      devices;
   return devices;
 }
 
@@ -158,7 +124,7 @@ std::string Realsense::getSerialNumber() {
   return serial_number;
 }
 
-std::shared_ptr<ViamRSDevice>
+std::shared_ptr<device::ViamRSDevice>
 getDeviceBySerial(std::string const &serial_number) {
   std::lock_guard<std::mutex> lock(devices_by_serial_mu());
   auto search = devices_by_serial().find(serial_number);
@@ -166,175 +132,6 @@ getDeviceBySerial(std::string const &serial_number) {
     throw std::invalid_argument("Device not found: " + serial_number);
   }
   return search->second;
-}
-
-void printDeviceInfo(rs2::device const &dev) {
-  std::stringstream info;
-  if (dev.supports(RS2_CAMERA_INFO_NAME)) {
-    info << "DeviceInfo:\n"
-         << "  Name:                           "
-         << dev.get_info(RS2_CAMERA_INFO_NAME) << std::endl;
-  }
-  if( dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
-         info << "  Serial Number:                  "
-         << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_PRODUCT_LINE)) {
-    info << "  Product Line:                   "
-         << dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_PRODUCT_ID)) {
-         info << "  Product ID:                      "
-         << dev.get_info(RS2_CAMERA_INFO_PRODUCT_ID) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
-         info << "  USB Type Descriptor:            "
-            << dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_FIRMWARE_VERSION)) {
-    info << "  Firmware Version:               "
-         << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
-         info << "  Recommended Firmware Version:   "
-         << dev.get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)
-         << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
-         info << "  Firmware Update ID:   "
-         << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_PHYSICAL_PORT)) {
-         info << "  Physical Port:   "
-         << dev.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_DEBUG_OP_CODE)) {
-         info << "  Debug OP Code:   "
-            << dev.get_info(RS2_CAMERA_INFO_DEBUG_OP_CODE) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_ADVANCED_MODE)) {
-         info << "  Advanced Mode:   "
-            << dev.get_info(RS2_CAMERA_INFO_ADVANCED_MODE) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_PRODUCT_ID)) {
-         info << "  Product ID:   "
-            << dev.get_info(RS2_CAMERA_INFO_PRODUCT_ID) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_CAMERA_LOCKED)) {
-         info << "  Camera Locked:   "
-              << dev.get_info(RS2_CAMERA_INFO_CAMERA_LOCKED) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER)) {
-         info << "  ASIC Serial Number:             "
-              << dev.get_info(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
-         info << "  USB Type Descriptor:            "
-            << dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_DFU_DEVICE_PATH)) {
-         info << "  DFU Device Path:            "
-              << dev.get_info(RS2_CAMERA_INFO_DFU_DEVICE_PATH) << std::endl;
-  }
-  if(dev.supports(RS2_CAMERA_INFO_IP_ADDRESS)) {
-         info << "  IP Address:            "
-              << dev.get_info(RS2_CAMERA_INFO_IP_ADDRESS) << std::endl;
-  }
-  VIAM_SDK_LOG(info) << info.str();
-}
-void printDeviceList(const std::shared_ptr<rs2::device_list> devList) {
-  std::for_each(devList->begin(), devList->end(),
-                [](const rs2::device &dev) { printDeviceInfo(dev); });
-}
-
-void startDevice(std::string serialNumber, std::string resourceName) {
-  VIAM_SDK_LOG(info) << service_name << ": starting device " << serialNumber;
-  std::shared_ptr<ViamRSDevice> my_dev = getDeviceBySerial(serialNumber);
-  if (my_dev->started) {
-    std::ostringstream buffer;
-    buffer << service_name << ": unable to start already started device "
-           << serialNumber;
-    throw std::invalid_argument(buffer.str());
-  }
-
-  auto frameCallback = [serialNumber](rs2::frame const &frame) {
-    if (frame.is<rs2::frameset>()) {
-      // With callbacks, all synchronized stream will arrive in a single
-      // frameset
-      auto frameset =
-          std::make_shared<rs2::frameset>(frame.as<rs2::frameset>());
-      if (frameset->size() != 2) {
-        std::cerr << "got non 2 frame count: " << frameset->size() << std::endl;
-        return;
-      }
-      auto color_frame = frameset->get_color_frame();
-      if (not color_frame) {
-        std::cerr << "no color frame" << std::endl;
-        return;
-      }
-
-      auto depth_frame = frameset->get_depth_frame();
-      if (not depth_frame) {
-        std::cerr << "no depth frame" << std::endl;
-        return;
-      }
-
-      std::lock_guard<std::mutex> lock(frame_set_by_serial_mu());
-      double nowMs = time::getNowMs();
-      time::logIfTooOld(std::cerr, nowMs, color_frame.get_timestamp(),
-                         maxFrameAgeMs,
-                         "[frame_callback] received color frame is too stale");
-      time::logIfTooOld(std::cerr, nowMs, depth_frame.get_timestamp(),
-                         maxFrameAgeMs,
-                         "[frame_callback] received depth frame is too stale");
-
-      auto it = frame_set_by_serial().find(serialNumber);
-      if (it != frame_set_by_serial().end()) {
-        rs2::frame prevColor = it->second->get_color_frame();
-        rs2::frame prevDepth = it->second->get_depth_frame();
-        if (prevColor and prevDepth) {
-          time::logIfTooOld(
-              std::cerr, color_frame.get_timestamp(), prevColor.get_timestamp(),
-              maxFrameAgeMs,
-              "[frameCallback] previous color frame is too stale");
-          time::logIfTooOld(
-              std::cerr, depth_frame.get_timestamp(), prevDepth.get_timestamp(),
-              maxFrameAgeMs,
-              "[frameCallback] previous depth frame is too stale");
-        }
-      }
-      frame_set_by_serial()[serialNumber] =
-          std::make_shared<rs2::frameset>(frame.as<rs2::frameset>());
-    } else {
-      // Stream that bypass synchronization (such as IMU) will produce single
-      // frames
-      std::cerr << "got non 2 a frameset: " << frame.get_profile().stream_name()
-                << std::endl;
-      return;
-    }
-  };
-
-  my_dev->pipe->start(*my_dev->config, std::move(frameCallback));
-  my_dev->started = true;
-  VIAM_SDK_LOG(info) << service_name << ": device started " << serialNumber;
-}
-
-void stopDevice(std::string serialNumber, std::string resourceName) {
-  std::shared_ptr<ViamRSDevice> my_dev = getDeviceBySerial(serialNumber);
-  if (not my_dev or not my_dev->started) {
-    VIAM_SDK_LOG(error)
-        << service_name
-        << ": unable to stop device that is not currently running "
-        << serialNumber;
-    return;
-  }
-
-  my_dev->pipe->stop();
-  my_dev->started = false;
-  {
-    std::lock_guard<std::mutex> lock(serial_by_resource_mu());
-    serial_by_resource().erase(resourceName);
-  }
 }
 
 // HELPERS END
@@ -355,7 +152,9 @@ Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg)
     : Camera(cfg.name()), config_(configure_(std::move(deps), std::move(cfg))) {
   VIAM_SDK_LOG(info) << "Realsense constructor start "
                      << config_->serial_number;
-  startDevice(config_->serial_number, config_->resource_name);
+  device::startDevice(
+      config_->serial_number, getDeviceBySerial(config_->serial_number),
+      frame_set_by_serial_mu(), frame_set_by_serial(), maxFrameAgeMs);
   {
     std::lock_guard<std::mutex> lock(serial_by_resource_mu());
     serial_by_resource()[config_->resource_name] = config_->serial_number;
@@ -377,7 +176,9 @@ Realsense::~Realsense() {
     prev_serial_number = config_->serial_number;
     prev_resource_name = config_->resource_name;
   }
-  stopDevice(prev_serial_number, prev_resource_name);
+  device::stopDevice(prev_serial_number, prev_resource_name,
+                     getDeviceBySerial(prev_serial_number),
+                     serial_by_resource_mu(), serial_by_resource());
   if (config_ == nullptr) {
     VIAM_SDK_LOG(error) << "Realsense destructor end: config_ is null, no "
                            "available serial number";
@@ -386,55 +187,48 @@ Realsense::~Realsense() {
   }
 }
 
-bool isDeviceConnected(const std::string &serial_number) {
-  auto ctx = std::make_shared<rs2::context>();
-  auto devices = ctx->query_devices();
-  for (const auto &dev : devices) {
-    if (dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == serial_number) {
-      return true;
-    }
-  }
-  return false;
-}
-
 void Realsense::reconfigure(const viam::sdk::Dependencies &deps,
                             const viam::sdk::ResourceConfig &cfg) {
-    VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
-    std::string prev_serial_number;
-    std::string prev_resource_name;
-    {
-        const std::lock_guard<std::mutex> lock(config_mu_());
-        prev_serial_number = config_->serial_number;
-        prev_resource_name = config_->resource_name;
-    }
-    VIAM_SDK_LOG(info) << "[reconfigure] stopping device " << prev_serial_number;
-    stopDevice(prev_serial_number, prev_resource_name);
+  VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
+  std::string prev_serial_number;
+  std::string prev_resource_name;
+  {
+    const std::lock_guard<std::mutex> lock(config_mu_());
+    prev_serial_number = config_->serial_number;
+    prev_resource_name = config_->resource_name;
+  }
+  VIAM_SDK_LOG(info) << "[reconfigure] stopping device " << prev_serial_number;
+  device::stopDevice(prev_serial_number, prev_resource_name,
+                     getDeviceBySerial(prev_serial_number),
+                     serial_by_resource_mu(), serial_by_resource());
 
-    // Before modifying config and starting the new device, let's make sure the new device is actually connected
-    auto temp_config = configure_(deps, cfg);
-    if (not isDeviceConnected(temp_config->serial_number)) {
-        VIAM_SDK_LOG(error) << "[reconfigure] new device is not connected";
-        return;
-    }
+  // Before modifying config and starting the new device, let's make sure the
+  // new device is actually connected
+  auto temp_config = configure_(deps, cfg);
+  if (not device::isDeviceConnected(temp_config->serial_number)) {
+    VIAM_SDK_LOG(error) << "[reconfigure] new device is not connected";
+    return;
+  }
 
-    std::string new_serial_number;
-    std::string new_resource_name;
-    {
-        const std::lock_guard<std::mutex> lock(config_mu_());
-        config_.reset();
-        config_ = std::move(temp_config);
-        new_serial_number = config_->serial_number;
-        new_resource_name = config_->resource_name;
-    }
-    VIAM_SDK_LOG(info) << "[reconfigure] starting device " << new_serial_number;
-    startDevice(new_serial_number, new_resource_name);
-    {
-        std::lock_guard<std::mutex> lock(serial_by_resource_mu());
-        serial_by_resource()[config_->resource_name] = new_serial_number;
-    }
-    VIAM_SDK_LOG(info) << "[reconfigure] Realsense reconfigure end";
-
-                            }
+  std::string new_serial_number;
+  std::string new_resource_name;
+  {
+    const std::lock_guard<std::mutex> lock(config_mu_());
+    config_.reset();
+    config_ = std::move(temp_config);
+    new_serial_number = config_->serial_number;
+    new_resource_name = config_->resource_name;
+  }
+  VIAM_SDK_LOG(info) << "[reconfigure] starting device " << new_serial_number;
+  device::startDevice(
+      new_serial_number, getDeviceBySerial(config_->serial_number),
+      frame_set_by_serial_mu(), frame_set_by_serial(), maxFrameAgeMs);
+  {
+    std::lock_guard<std::mutex> lock(serial_by_resource_mu());
+    serial_by_resource()[config_->resource_name] = new_serial_number;
+  }
+  VIAM_SDK_LOG(info) << "[reconfigure] Realsense reconfigure end";
+}
 viam::sdk::ProtoStruct
 Realsense::do_command(const viam::sdk::ProtoStruct &command) {
   VIAM_SDK_LOG(error) << "do_command not implemented";
@@ -462,9 +256,9 @@ Realsense::get_image(std::string mime_type,
     VIAM_SDK_LOG(info) << "[get_image] end";
     BOOST_ASSERT_MSG(fs->get_color_frame(),
                      "[encodeFrameToResponse] color frame is invalid");
-    time::throwIfTooOld(time::getNowMs(),
-                         fs->get_color_frame().get_timestamp(), maxFrameAgeMs,
-                         "no recent color frame: check USB connection");
+    time::throwIfTooOld(time::getNowMs(), fs->get_color_frame().get_timestamp(),
+                        maxFrameAgeMs,
+                        "no recent color frame: check USB connection");
     return encoding::encodeFrameToResponse(fs->get_color_frame());
   } catch (const std::exception &e) {
     VIAM_SDK_LOG(error) << "[get_image] error: " << e.what();
@@ -522,14 +316,14 @@ Realsense::get_point_cloud(std::string mime_type,
     }
 
     time::throwIfTooOld(nowMs, color_frame.get_timestamp(), maxFrameAgeMs,
-                         "no recent color frame: check USB connection");
+                        "no recent color frame: check USB connection");
 
     rs2::depth_frame depth_frame = fs->get_depth_frame();
     if (not depth_frame) {
       throw std::invalid_argument("no depth frame");
     }
     time::throwIfTooOld(nowMs, depth_frame.get_timestamp(), maxFrameAgeMs,
-                         "no recent depth frame: check USB connection");
+                        "no recent depth frame: check USB connection");
 
     std::uint8_t *colorData = (std::uint8_t *)color_frame.get_data();
     uint32_t colorDataSize = color_frame.get_data_size();
@@ -543,7 +337,8 @@ Realsense::get_point_cloud(std::string mime_type,
       throw std::runtime_error("[get_point_cloud] depth data is null");
     }
 
-    std::shared_ptr<ViamRSDevice> my_dev = getDeviceBySerial(serial_number);
+    std::shared_ptr<device::ViamRSDevice> my_dev =
+        getDeviceBySerial(serial_number);
     if (not my_dev->started) {
       throw std::runtime_error("device is not started");
     }
@@ -569,7 +364,8 @@ viam::sdk::Camera::properties Realsense::get_properties() {
     VIAM_SDK_LOG(info) << "[get_properties] start";
     std::string serial_number = getSerialNumber();
     rs2_intrinsics props;
-    std::shared_ptr<ViamRSDevice> my_dev = getDeviceBySerial(serial_number);
+    std::shared_ptr<device::ViamRSDevice> my_dev =
+        getDeviceBySerial(serial_number);
     if (not my_dev or not my_dev->started or not my_dev->pipe) {
       std::ostringstream buffer;
       buffer << service_name << ": device with serial number " << serial_number
@@ -628,10 +424,13 @@ viam::sdk::Camera::properties Realsense::get_properties() {
 }
 std::vector<viam::sdk::GeometryConfig>
 Realsense::get_geometries(const viam::sdk::ProtoStruct &extra) {
-    // This is the geometry for the D435 and D435i, the only models that we currently support.
-    // See https://github.com/viam-modules/viam-camera-realsense/pull/75 for explanation of values.
-    // NOTE: If support for additional RealSense camera models is added, update method accordingly.
-    return {vsdk::GeometryConfig(vsdk::pose{-17.5, 0, -12.5}, vsdk::box({90, 25, 25}), "box")};
+  // This is the geometry for the D435 and D435i, the only models that we
+  // currently support. See
+  // https://github.com/viam-modules/viam-camera-realsense/pull/75 for
+  // explanation of values. NOTE: If support for additional RealSense camera
+  // models is added, update method accordingly.
+  return {vsdk::GeometryConfig(vsdk::pose{-17.5, 0, -12.5},
+                               vsdk::box({90, 25, 25}), "box")};
 }
 
 std::unique_ptr<RsResourceConfig>
@@ -657,209 +456,13 @@ Realsense::configure_(vsdk::Dependencies dependencies,
   return native_config;
 }
 
-// REALSENSE SDK DEVICE REGISTRY START
-bool checkIfMatchingColorDepthProfiles(const rs2::video_stream_profile &color,
-                                       const rs2::video_stream_profile &depth) {
-  if (std::tuple(color.width(), color.height(), color.fps()) ==
-      std::tuple(depth.width(), depth.height(), depth.fps())) {
-    std::cout << "using width: " << color.width()
-              << " height: " << color.height() << " fps: " << color.fps()
-              << "\n";
-    return true;
-  }
-  return false;
-}
-
-// create a config for software depth-to-color alignment
-std::shared_ptr<rs2::config>
-createSwD2CAlignConfig(std::shared_ptr<rs2::pipeline> pipe,
-                       std::shared_ptr<rs2::device> dev) {
-  auto cfg = std::make_shared<rs2::config>();
-
-  // Query all sensors for the device
-  std::vector<rs2::sensor> sensors = dev->query_sensors();
-  rs2::sensor color_sensor, depth_sensor;
-  for (auto &s : sensors) {
-    if (s.is<rs2::color_sensor>())
-      color_sensor = s;
-    if (s.is<rs2::depth_sensor>())
-      depth_sensor = s;
-  }
-
-  // Get stream profiles
-  auto color_profiles = color_sensor.get_stream_profiles();
-  VIAM_SDK_LOG(info) << "Found " << color_profiles.size() << " color profiles";
-  auto depth_profiles = depth_sensor.get_stream_profiles();
-  VIAM_SDK_LOG(info) << "Found " << depth_profiles.size() << " depth profiles";
-
-  // Find matching profiles (same resolution and FPS)
-  for (auto &cp : color_profiles) {
-    auto csp = cp.as<rs2::video_stream_profile>();
-    if (csp.format() != RS2_FORMAT_RGB8) {
-      continue; // Only consider RGB8 format for color
-    }
-    for (auto &dp : depth_profiles) {
-      auto dsp = dp.as<rs2::video_stream_profile>();
-      if (dsp.format() != RS2_FORMAT_Z16) {
-        continue; // Only consider Z16 format for depth
-      }
-      // Check if color and depth profiles match in resolution and FPS
-      if (checkIfMatchingColorDepthProfiles(csp, dsp)) {
-        // Enable matching streams in config
-        cfg->enable_stream(RS2_STREAM_COLOR, csp.stream_index(), csp.width(),
-                           csp.height(), csp.format(), csp.fps());
-        cfg->enable_stream(RS2_STREAM_DEPTH, dsp.stream_index(), dsp.width(),
-                           dsp.height(), dsp.format(), dsp.fps());
-        return cfg;
-      }
-    }
-  }
-  // If no match found, return nullptr
-  return nullptr;
-}
-
-std::optional<std::string> getCameraModel(std::shared_ptr<rs2::device> dev) {
-  if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
-    return std::nullopt;
-  }
-  std::string camera_info = dev->get_info(RS2_CAMERA_INFO_NAME);
-  // Model is the 3rd word in this string
-  std::istringstream iss(camera_info);
-  std::string word;
-  int word_count = 0;
-  while (iss >> word) {
-    word_count++;
-    if (word_count == 3) {
-      std::string camera_model = word;
-      return camera_model;
-    }
-  }
-  return std::nullopt;
-}
-
-void registerDevice(std::string serialNumber,
-                    std::shared_ptr<rs2::device> dev) {
-  VIAM_SDK_LOG(info) << "[registerDevice] registering " << serialNumber;
-  auto camera_model = getCameraModel(dev);
-  if(not camera_model) {
-    VIAM_SDK_LOG(error) << "[registerDevice] Failed to register camera serial number: " << serialNumber << " since no camera model found";
-    return;
-  }
-  VIAM_SDK_LOG(info) << "[registerDevice] Found camera model: " << *camera_model;
-  if(SUPPORTED_CAMERA_MODELS.count(*camera_model) == 0) {
-    VIAM_SDK_LOG(error) << "[registerDevice] Failed to register camera serial number: " << serialNumber << " since camera model is not D435 or D435i, camera model: " << *camera_model;
-    return;
-  }
-  
-  std::shared_ptr<rs2::pipeline> pipe = std::make_shared<rs2::pipeline>();
-  std::shared_ptr<rs2::config> config = createSwD2CAlignConfig(pipe, dev);
-  if (config == nullptr) {
-    VIAM_SDK_LOG(error)
-        << "Current device does not support software depth-to-color "
-           "alignment.";
-    return;
-  }
-
-  {
-    std::lock_guard<std::mutex> lock(devices_by_serial_mu());
-    std::shared_ptr<ViamRSDevice> my_dev = std::make_shared<ViamRSDevice>();
-
-    my_dev->pipe = pipe;
-    my_dev->device = dev;
-    my_dev->serial_number = serialNumber;
-    my_dev->point_cloud_filter = std::make_shared<PointCloudFilter>();
-    my_dev->align = std::make_shared<rs2::align>(RS2_STREAM_COLOR);
-    my_dev->config = config;
-
-    devices_by_serial()[serialNumber] = my_dev;
-  }
-
-  config->enable_device(serialNumber);
-  VIAM_SDK_LOG(info) << "registered " << serialNumber;
-}
-
-std::unordered_map<std::string, std::shared_ptr<rs2::device>>
-get_removed_devices(rs2::event_information &info) {
-  // This function checks if any devices were removed during the callback
-  // Create a snapshot of the current devices_by_serial map
-  std::vector<std::shared_ptr<rs2::device>> devices_snapshot;
-  {
-    std::lock_guard<std::mutex> lock(devices_by_serial_mu());
-    for (const auto &[serial_number, device] : devices_by_serial()) {
-      devices_snapshot.push_back(device->device);
-    }
-  }
-
-  // Check for removed devices
-  std::unordered_map<std::string, std::shared_ptr<rs2::device>> removed_devices;
-  for (auto const &device : devices_snapshot) {
-    // Check if the device was removed
-    if (info.was_removed(*device)) {
-      // Add to removed devices list
-      removed_devices[device->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER)] = device;
-    }
-  }
-  return removed_devices;
-}
-
-void deviceChangedCallback(rs2::event_information &info) {
-  try {
-    // Handling removed devices, if any
-    // the callback api does not provide a list of removed devices, so we need
-    // to check the current device list for if one or more of them was removed
-    auto removed_devices = get_removed_devices(info);
-    std::cout << "Removed devices count: " << removed_devices.size()
-              << std::endl;
-    for (const auto &dev : removed_devices) {
-      std::string dev_serial_number =
-          dev.second->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-      std::cout << "Device Removed: " << dev_serial_number << std::endl;
-      if (devices_by_serial().count(dev_serial_number) > 0) {
-        // Remove from devices_by_serial
-        std::cout << "Removing device " << dev_serial_number
-                  << " from devices_by_serial" << std::endl;
-        std::lock_guard<std::mutex> lock(devices_by_serial_mu());
-        devices_by_serial().erase(dev_serial_number);
-      } else
-        std::cerr << "Removed device " << dev_serial_number
-                  << " not found in devices_by_serial.\n";
-    }
-
-    // Handling added devices, if any
-    auto added_devices = info.get_new_devices();
-    VIAM_SDK_LOG(info) << " Devices added:\n";
-    for (const auto &dev : added_devices) {
-      std::shared_ptr<rs2::device> device_ptr =
-          std::make_shared<rs2::device>(dev);
-      printDeviceInfo(*device_ptr);
-      registerDevice(device_ptr->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER),
-                     device_ptr);
-      {
-        std::lock_guard<std::mutex> lock(serial_by_resource_mu());
-
-        VIAM_SDK_LOG(info) << "Device added: "
-                           << device_ptr->get_info(
-                                  RS2_CAMERA_INFO_SERIAL_NUMBER);
-        VIAM_SDK_LOG(info) << "serial_by_resource() size: "
-                           << serial_by_resource().size();
-
-        for (auto &[resource_name, serial_number] : serial_by_resource()) {
-          if (serial_number ==
-              device_ptr->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
-            VIAM_SDK_LOG(info) << "calling startDevice";
-            startDevice(serial_number, resource_name);
-            serial_by_resource()[resource_name] = serial_number;
-          }
-        }
-      }
-    }
-  } catch (rs2::error &e) {
-    std::cerr << "Error in devices_changed_callback: " << e.what() << std::endl;
-  }
-}
-
 void startRealsenseSDK(std::shared_ptr<rs2::context> ctx) {
-  ctx->set_devices_changed_callback(deviceChangedCallback);
+  ctx->set_devices_changed_callback([](rs2::event_information &info) {
+    device::deviceChangedCallback(
+        info, SUPPORTED_CAMERA_MODELS, devices_by_serial_mu(),
+        devices_by_serial(), serial_by_resource_mu(), serial_by_resource(),
+        frame_set_by_serial_mu(), frame_set_by_serial(), maxFrameAgeMs);
+  });
   // This will the initial set of connected devices (i.e. the devices that were
   // connected before the callback was set)
   auto deviceList = ctx->query_devices();
@@ -867,9 +470,12 @@ void startRealsenseSDK(std::shared_ptr<rs2::context> ctx) {
 
   for (auto const &dev : deviceList) {
     auto dev_ptr = std::make_shared<rs2::device>(dev);
-    printDeviceInfo(*dev_ptr);
-    registerDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), dev_ptr);
-    VIAM_SDK_LOG(info) << "Device Added: " << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+    device::printDeviceInfo(*dev_ptr);
+    device::registerDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), dev_ptr,
+                           SUPPORTED_CAMERA_MODELS, devices_by_serial_mu(),
+                           devices_by_serial());
+    VIAM_SDK_LOG(info) << "Device Added: "
+                       << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
   }
   VIAM_SDK_LOG(info) << "Realsense SDK started, devices_by_serial size: "
                      << devices_by_serial().size();
