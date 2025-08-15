@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_set>
 
+#include <boost/thread/synchronized_value.hpp>
 #include <librealsense2/rs.hpp>
 
 namespace realsense {
@@ -43,35 +44,47 @@ struct ViamRSDevice {
       std::chrono::steady_clock::now();
 };
 
-void startDevice(std::string serialNumber,
-                 std::shared_ptr<ViamRSDevice> dev_ptr,
-                 std::mutex &frame_set_by_serial_mu,
-                 std::unordered_map<std::string, std::shared_ptr<rs2::frameset>>
-                     &frame_set_by_serial,
-                 std::uint64_t maxFrameAgeMs);
+void startDevice(
+    std::string serialNumber, std::shared_ptr<ViamRSDevice> dev_ptr,
+    boost::synchronized_value<
+        std::unordered_map<std::string, std::shared_ptr<rs2::frameset>>>
+        &frame_set_by_serial,
+    std::uint64_t maxFrameAgeMs);
 void stopDevice(
     std::string serialNumber, std::string resourceName,
-    std::shared_ptr<ViamRSDevice> dev_ptr, std::mutex &serial_by_resource_mu,
-    std::unordered_map<std::string, std::string> &serial_by_resource);
+    std::shared_ptr<ViamRSDevice> dev_ptr,
+    boost::synchronized_value<std::unordered_map<std::string, std::string>>
+        &serial_by_resource);
 bool isDeviceConnected(const std::string &serial_number);
 void registerDevice(
     std::string serialNumber, std::shared_ptr<rs2::device> dev,
     std::unordered_set<std::string> const &supported_camera_models,
-    std::mutex &devices_by_serial_mu,
-    std::unordered_map<std::string, std::shared_ptr<ViamRSDevice>>
+    boost::synchronized_value<
+        std::unordered_map<std::string, std::shared_ptr<ViamRSDevice>>>
         &devices_by_serial);
 void printDeviceInfo(const rs2::device &dev);
 void deviceChangedCallback(
     rs2::event_information &info,
     std::unordered_set<std::string> const &supported_camera_models,
-    std::mutex &devices_by_serial_mu,
-    std::unordered_map<std::string, std::shared_ptr<ViamRSDevice>>
+    boost::synchronized_value<
+        std::unordered_map<std::string, std::shared_ptr<ViamRSDevice>>>
         &devices_by_serial,
-    std::mutex &serial_by_resource_mu,
-    std::unordered_map<std::string, std::string> &serial_by_resource,
-    std::mutex &frame_set_by_serial_mu,
-    std::unordered_map<std::string, std::shared_ptr<rs2::frameset>>
+    boost::synchronized_value<std::unordered_map<std::string, std::string>>
+        &serial_by_resource,
+    boost::synchronized_value<
+        std::unordered_map<std::string, std::shared_ptr<rs2::frameset>>>
         &frame_set_by_serial,
     std::uint64_t maxFrameAgeMs);
+std::shared_ptr<rs2::frameset> getFramesetBySerial(
+    const std::string &serial_number,
+    boost::synchronized_value<
+        std::unordered_map<std::string, std::shared_ptr<rs2::frameset>>>
+        &frame_set_by_serial);
+
+std::shared_ptr<device::ViamRSDevice> getDeviceBySerial(
+    std::string const &serial_number,
+    boost::synchronized_value<
+        std::unordered_map<std::string, std::shared_ptr<device::ViamRSDevice>>>
+        &devices_by_serial);
 } // namespace device
 } // namespace realsense

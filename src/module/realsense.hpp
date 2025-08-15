@@ -1,4 +1,5 @@
 #pragma once
+#include "device.hpp"
 #include <viam/sdk/components/camera.hpp>
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
@@ -8,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include <boost/thread/synchronized_value.hpp>
 namespace realsense {
 
 // The native config struct for realsense resources.
@@ -19,9 +21,6 @@ struct RsResourceConfig {
                             std::string const &resource_name)
       : serial_number(serial_number), resource_name(resource_name) {}
 };
-
-void startRealsenseSDK(std::shared_ptr<rs2::context> ctx);
-void printDeviceInfo(const std::shared_ptr<rs2::device> info);
 
 class Realsense final : public viam::sdk::Camera,
                         public viam::sdk::Reconfigurable {
@@ -45,10 +44,19 @@ public:
   static viam::sdk::Model model;
 
 private:
-  std::unique_ptr<RsResourceConfig> config_;
-  static std::unique_ptr<RsResourceConfig>
-  configure_(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg);
-  std::string getSerialNumber();
+  boost::synchronized_value<RsResourceConfig> config_;
+  boost::synchronized_value<std::unordered_map<std::string, std::string>>
+      serial_by_resource_;
+  boost::synchronized_value<
+      std::unordered_map<std::string, std::shared_ptr<rs2::frameset>>>
+      frame_set_by_serial_;
+  boost::synchronized_value<
+      std::unordered_map<std::string, std::shared_ptr<device::ViamRSDevice>>>
+      devices_by_serial_;
+
+  RsResourceConfig configure(viam::sdk::Dependencies deps,
+                             viam::sdk::ResourceConfig cfg);
+  rs2::context ctx_;
 };
 
 } // namespace realsense

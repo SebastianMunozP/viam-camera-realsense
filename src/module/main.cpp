@@ -12,7 +12,7 @@
 namespace vsdk = ::viam::sdk;
 
 std::vector<std::shared_ptr<vsdk::ModelRegistration>>
-create_all_model_registrations(std::shared_ptr<rs2::context> ctx) {
+create_all_model_registrations() {
   std::vector<std::shared_ptr<vsdk::ModelRegistration>> registrations;
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(
@@ -33,16 +33,14 @@ int serve(int argc, char **argv) try {
   // all Viam C++ SDK objects are destroyed.
   vsdk::Instance inst;
 
-  auto ctx = std::make_shared<rs2::context>();
   for (size_t i = 0; i < argc; i++) {
     if (std::string(argv[i]) == "--log-level=debug") {
       rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
     }
   }
 
-  realsense::startRealsenseSDK(ctx);
   auto module_service = std::make_shared<vsdk::ModuleService>(
-      argc, argv, create_all_model_registrations(ctx));
+      argc, argv, create_all_model_registrations());
   module_service->serve();
 
   return EXIT_SUCCESS;
