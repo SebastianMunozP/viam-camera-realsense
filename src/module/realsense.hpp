@@ -45,14 +45,8 @@ public:
 
 private:
   boost::synchronized_value<RsResourceConfig> config_;
-  boost::synchronized_value<std::unordered_map<std::string, std::string>>
-      serial_by_resource_;
-  boost::synchronized_value<
-      std::unordered_map<std::string, std::shared_ptr<rs2::frameset>>>
-      frame_set_by_serial_;
-  boost::synchronized_value<
-      std::unordered_map<std::string, std::shared_ptr<device::ViamRSDevice>>>
-      devices_by_serial_;
+  boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>> device_;
+  boost::synchronized_value<std::shared_ptr<rs2::frameset>> latest_frameset_;
 
   RsResourceConfig configure(viam::sdk::Dependencies deps,
                              viam::sdk::ResourceConfig cfg);
