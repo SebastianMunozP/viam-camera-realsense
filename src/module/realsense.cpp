@@ -65,12 +65,9 @@ Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg)
     : Camera(cfg.name()), config_(configure(std::move(deps), std::move(cfg))) {
 
   std::string serial_number = config_->serial_number;
-  VIAM_SDK_LOG(info) << "Realsense constructor start " << serial_number;
+  VIAM_SDK_LOG(info) << "[constructor] start " << serial_number;
 
-  VIAM_SDK_LOG(info)
-      << "Realsense::Realsense: Setting devices changed callback";
   ctx_.set_devices_changed_callback([this](rs2::event_information &info) {
-    VIAM_SDK_LOG(info) << "Realsense::Realsense: Calling deviceChangedCallback";
     device::deviceChangedCallback(info, SUPPORTED_CAMERA_MODELS,
                                   devices_by_serial_, serial_by_resource_,
                                   frame_set_by_serial_, maxFrameAgeMs);
@@ -78,25 +75,32 @@ Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg)
   // This will the initial set of connected devices (i.e. the devices that were
   // connected before the callback was set)
   auto deviceList = ctx_.query_devices();
-  VIAM_SDK_LOG(info) << "devCount: " << deviceList.size() << "\n";
+  VIAM_SDK_LOG(info) << "[constructor] Amount of connected devices: "
+                     << deviceList.size() << "\n";
 
   for (auto const &dev : deviceList) {
+    device::printDeviceInfo(dev);
+
     auto dev_ptr = std::make_shared<rs2::device>(dev);
-    device::printDeviceInfo(*dev_ptr);
-    device::registerDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), dev_ptr,
-                           SUPPORTED_CAMERA_MODELS, devices_by_serial_);
-    VIAM_SDK_LOG(info) << "Device Registered: "
-                       << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+    std::string connected_device_serial_number =
+        dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+    if (serial_number == connected_device_serial_number) {
+      device::registerDevice(serial_number, dev_ptr, SUPPORTED_CAMERA_MODELS,
+                             devices_by_serial_);
+
+      auto rs_device = device::getDeviceBySerial(serial_number, devices_by_serial_);
+      BOOST_ASSERT(rs_device != nullptr);
+
+      device::startDevice(
+          serial_number,
+          device::getDeviceBySerial(serial_number, devices_by_serial_),
+          frame_set_by_serial_, maxFrameAgeMs);
+      VIAM_SDK_LOG(info) << "[constructor] Device Registered: "
+                         << serial_number;
+      serial_by_resource_->insert({config_->resource_name, serial_number});
+    }
   }
-  VIAM_SDK_LOG(info) << "Realsense SDK started, devices_by_serial size: "
-                     << devices_by_serial_->size();
 
-  device::startDevice(
-      serial_number,
-      device::getDeviceBySerial(serial_number, devices_by_serial_),
-      frame_set_by_serial_, maxFrameAgeMs);
-
-  serial_by_resource_->insert({config_->resource_name, serial_number});
   VIAM_SDK_LOG(info) << "Realsense constructor end " << serial_number;
 }
 Realsense::~Realsense() {
@@ -279,7 +283,7 @@ Realsense::get_point_cloud(std::string mime_type,
 }
 viam::sdk::Camera::properties Realsense::get_properties() {
   try {
-    VIAM_SDK_LOG(info) << "[get_properties] start";
+    VIAM_SDK_LOG(debug) << "[get_properties] start";
     std::string serial_number = config_->serial_number;
     rs2_intrinsics props;
     std::shared_ptr<device::ViamRSDevice> my_dev =
@@ -317,22 +321,23 @@ viam::sdk::Camera::properties Realsense::get_properties() {
       coeffs_stream << p.distortion_parameters.parameters[i];
     }
 
-    VIAM_SDK_LOG(info) << "[get_properties] properties: ["
-                       << "width: " << p.intrinsic_parameters.width_px << ", "
-                       << "height: " << p.intrinsic_parameters.height_px << ", "
-                       << "focal_x: " << p.intrinsic_parameters.focal_x_px
-                       << ", "
-                       << "focal_y: " << p.intrinsic_parameters.focal_y_px
-                       << ", "
-                       << "center_x: " << p.intrinsic_parameters.center_x_px
-                       << ", "
-                       << "center_y: " << p.intrinsic_parameters.center_y_px
-                       << ", "
-                       << "distortion_model: " << p.distortion_parameters.model
-                       << ", " << "distortion_coeffs: [" << coeffs_stream.str()
-                       << "]" << "]";
+    VIAM_SDK_LOG(debug) << "[get_properties] properties: ["
+                        << "width: " << p.intrinsic_parameters.width_px << ", "
+                        << "height: " << p.intrinsic_parameters.height_px
+                        << ", "
+                        << "focal_x: " << p.intrinsic_parameters.focal_x_px
+                        << ", "
+                        << "focal_y: " << p.intrinsic_parameters.focal_y_px
+                        << ", "
+                        << "center_x: " << p.intrinsic_parameters.center_x_px
+                        << ", "
+                        << "center_y: " << p.intrinsic_parameters.center_y_px
+                        << ", "
+                        << "distortion_model: " << p.distortion_parameters.model
+                        << ", " << "distortion_coeffs: [" << coeffs_stream.str()
+                        << "]" << "]";
 
-    VIAM_SDK_LOG(info) << "[get_properties] end";
+    VIAM_SDK_LOG(debug) << "[get_properties] end";
     return p;
   } catch (const std::exception &e) {
     VIAM_SDK_LOG(error) << "[get_properties] error: " << e.what();

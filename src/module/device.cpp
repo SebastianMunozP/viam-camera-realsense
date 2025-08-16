@@ -14,7 +14,7 @@ namespace realsense {
 namespace device {
 
 // REALSENSE SDK DEVICE REGISTRY START
-void printDeviceInfo(rs2::device const &dev) {
+void printDeviceInfo(rs2::device const &dev) noexcept{
   std::stringstream info;
   if (dev.supports(RS2_CAMERA_INFO_NAME)) {
     info << "DeviceInfo:\n"
@@ -115,28 +115,32 @@ void startDevice(
       auto frameset =
           std::make_shared<rs2::frameset>(frame.as<rs2::frameset>());
       if (frameset->size() != 2) {
-        std::cerr << "got non 2 frame count: " << frameset->size() << std::endl;
+        VIAM_SDK_LOG(error) << "got non 2 frame count: " << frameset->size() << std::endl;
         return;
       }
       auto color_frame = frameset->get_color_frame();
       if (not color_frame) {
-        std::cerr << "no color frame" << std::endl;
+        VIAM_SDK_LOG(error) << "no color frame" << std::endl;
         return;
       }
 
       auto depth_frame = frameset->get_depth_frame();
       if (not depth_frame) {
-        std::cerr << "no depth frame" << std::endl;
+        VIAM_SDK_LOG(error) << "no depth frame" << std::endl;
         return;
       }
 
       double nowMs = time::getNowMs();
-      time::logIfTooOld(std::cerr, nowMs, color_frame.get_timestamp(),
-                        maxFrameAgeMs,
-                        "[frame_callback] received color frame is too stale");
-      time::logIfTooOld(std::cerr, nowMs, depth_frame.get_timestamp(),
-                        maxFrameAgeMs,
-                        "[frame_callback] received depth frame is too stale");
+      double colorAge = nowMs - color_frame.get_timestamp();
+double depthAge = nowMs - depth_frame.get_timestamp();
+
+if (colorAge > maxFrameAgeMs) {
+  VIAM_SDK_LOG(error) << "[frame_callback] received color frame is too stale, age: " << colorAge << "ms";
+}
+
+if (depthAge > maxFrameAgeMs) {
+  VIAM_SDK_LOG(error) << "[frame_callback] received depth frame is too stale, age: " << depthAge << "ms";
+}
 
       auto &&frame_set_by_serial_synch = frame_set_by_serial.synchronize();
       auto it = frame_set_by_serial_synch->find(serialNumber);
@@ -155,13 +159,10 @@ void startDevice(
         }
       }
       frame_set_by_serial_synch->insert_or_assign(serialNumber, frameset);
-      // frame_set_by_serial[serialNumber] =
-      //     std::make_shared<rs2::frameset>(frame.as<rs2::frameset>());
     } else {
       // Stream that bypass synchronization (such as IMU) will produce single
       // frames
-      std::cerr << "got non 2 a frameset: " << frame.get_profile().stream_name()
-                << std::endl;
+      VIAM_SDK_LOG(error) << "got non 2 a frameset: " << frame.get_profile().stream_name();
       return;
     }
   };
@@ -186,10 +187,6 @@ void stopDevice(
   dev_ptr->pipe->stop();
   dev_ptr->started = false;
   serial_by_resource->erase(resourceName);
-  // {
-  //   std::lock_guard<std::mutex> lock(serial_by_resource_mu);
-  //   serial_by_resource.erase(resourceName);
-  // }
 }
 
 bool isDeviceConnected(const std::string &serial_number) {
@@ -204,7 +201,7 @@ bool isDeviceConnected(const std::string &serial_number) {
 }
 
 bool checkIfMatchingColorDepthProfiles(const rs2::video_stream_profile &color,
-                                       const rs2::video_stream_profile &depth) {
+                                       const rs2::video_stream_profile &depth) noexcept{
   if (std::tuple(color.width(), color.height(), color.fps()) ==
       std::tuple(depth.width(), depth.height(), depth.fps())) {
     std::cout << "using width: " << color.width()
@@ -263,7 +260,7 @@ createSwD2CAlignConfig(std::shared_ptr<rs2::pipeline> pipe,
   return nullptr;
 }
 
-std::optional<std::string> getCameraModel(std::shared_ptr<rs2::device> dev) {
+std::optional<std::string> getCameraModel(std::shared_ptr<rs2::device> dev) noexcept {
   if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
     return std::nullopt;
   }
@@ -434,32 +431,24 @@ std::shared_ptr<rs2::frameset> getFramesetBySerial(
     const std::string &serial_number,
     boost::synchronized_value<
         std::unordered_map<std::string, std::shared_ptr<rs2::frameset>>>
-        &frame_set_by_serial) {
-  std::shared_ptr<rs2::frameset> fs = nullptr;
-  {
-    // std::lock_guard<std::mutex> lock(frame_set_by_serial_mu());
-    auto &&frame_set_by_serial_synch = frame_set_by_serial.synchronize();
-    auto search = frame_set_by_serial_synch->find(serial_number);
-    if (search == frame_set_by_serial_synch->end()) {
-      throw std::invalid_argument("no frame yet");
+        &frame_set_by_serial) noexcept {
+    auto it = frame_set_by_serial->find(serial_number);
+    if (it == frame_set_by_serial->end()) {
+      return nullptr;
     }
-    fs = search->second;
-  }
-  return fs;
+    return it->second;
 }
 
 std::shared_ptr<device::ViamRSDevice> getDeviceBySerial(
     std::string const &serial_number,
     boost::synchronized_value<
         std::unordered_map<std::string, std::shared_ptr<device::ViamRSDevice>>>
-        &devices_by_serial) {
-  // std::lock_guard<std::mutex> lock(devices_by_serial_mu());
-  auto &&devices_by_serial_synch = devices_by_serial.synchronize();
-  auto search = devices_by_serial_synch->find(serial_number);
-  if (search == devices_by_serial_synch->end()) {
-    throw std::invalid_argument("Device not found: " + serial_number);
-  }
-  return search->second;
+        &devices_by_serial) noexcept {
+          auto it = devices_by_serial->find(serial_number);
+          if (it == devices_by_serial->end()) {
+            return nullptr;
+          }
+          return it->second;
 }
 
 } // namespace device
