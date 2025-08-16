@@ -64,8 +64,8 @@ std::vector<std::string> validate(vsdk::ResourceConfig cfg) {
 Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg)
     : Camera(cfg.name()), config_(configure(std::move(deps), std::move(cfg))) {
 
-  std::string serial_number = config_->serial_number;
-  VIAM_SDK_LOG(info) << "[constructor] start " << serial_number;
+  std::string requested_serial_number = config_->serial_number;
+  VIAM_SDK_LOG(info) << "[constructor] start " << requested_serial_number;
 
   ctx_.set_devices_changed_callback([this](rs2::event_information &info) {
     device::deviceChangedCallback(info, SUPPORTED_CAMERA_MODELS,
@@ -84,24 +84,25 @@ Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg)
     auto dev_ptr = std::make_shared<rs2::device>(dev);
     std::string connected_device_serial_number =
         dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-    if (serial_number == connected_device_serial_number) {
-      device::registerDevice(serial_number, dev_ptr, SUPPORTED_CAMERA_MODELS,
+    if (requested_serial_number == connected_device_serial_number) {
+      device::registerDevice(requested_serial_number, dev_ptr, SUPPORTED_CAMERA_MODELS,
                              devices_by_serial_);
 
-      auto rs_device = device::getDeviceBySerial(serial_number, devices_by_serial_);
+      auto rs_device =
+          device::getDeviceBySerial(requested_serial_number, devices_by_serial_);
       BOOST_ASSERT(rs_device != nullptr);
 
       device::startDevice(
-          serial_number,
-          device::getDeviceBySerial(serial_number, devices_by_serial_),
+          requested_serial_number,
+          device::getDeviceBySerial(requested_serial_number, devices_by_serial_),
           frame_set_by_serial_, maxFrameAgeMs);
       VIAM_SDK_LOG(info) << "[constructor] Device Registered: "
-                         << serial_number;
-      serial_by_resource_->insert({config_->resource_name, serial_number});
+                         << requested_serial_number;
+      serial_by_resource_->insert({config_->resource_name, requested_serial_number});
     }
   }
 
-  VIAM_SDK_LOG(info) << "Realsense constructor end " << serial_number;
+  VIAM_SDK_LOG(info) << "Realsense constructor end " << requested_serial_number;
 }
 Realsense::~Realsense() {
   VIAM_SDK_LOG(info) << "Realsense destructor start " << config_->serial_number;
@@ -160,7 +161,7 @@ viam::sdk::Camera::raw_image
 Realsense::get_image(std::string mime_type,
                      const viam::sdk::ProtoStruct &extra) {
   try {
-    VIAM_SDK_LOG(info) << "[get_image] start";
+    VIAM_SDK_LOG(debug) << "[get_image] start";
     std::string serial_number;
     serial_number = config_->serial_number;
     std::shared_ptr<rs2::frameset> fs = nullptr;
@@ -173,7 +174,7 @@ Realsense::get_image(std::string mime_type,
       }
       fs = search->second;
     }
-    VIAM_SDK_LOG(info) << "[get_image] end";
+    VIAM_SDK_LOG(debug) << "[get_image] end";
     BOOST_ASSERT_MSG(fs->get_color_frame(),
                      "[encodeFrameToResponse] color frame is invalid");
     time::throwIfTooOld(time::getNowMs(), fs->get_color_frame().get_timestamp(),
@@ -226,7 +227,7 @@ viam::sdk::Camera::point_cloud
 Realsense::get_point_cloud(std::string mime_type,
                            const viam::sdk::ProtoStruct &extra) {
   try {
-    VIAM_SDK_LOG(info) << "[get_point_cloud] start";
+    VIAM_SDK_LOG(debug) << "[get_point_cloud] start";
     std::string serial_number = config_->serial_number;
     std::shared_ptr<rs2::frameset> fs =
         device::getFramesetBySerial(serial_number, frame_set_by_serial_);
@@ -268,7 +269,7 @@ Realsense::get_point_cloud(std::string mime_type,
     std::vector<std::uint8_t> data = encoding::encodeRGBPointsToPCD(
         my_dev->point_cloud_filter->process(my_dev->align->process(*fs)));
 
-    VIAM_SDK_LOG(info) << "[get_point_cloud] end";
+    VIAM_SDK_LOG(debug) << "[get_point_cloud] end";
     if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
       VIAM_SDK_LOG(error)
           << "[get_point_cloud] data size exceeds gRPC message size limit";

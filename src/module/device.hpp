@@ -70,7 +70,6 @@ void deviceChangedCallback(
         &frame_set_by_serial,
     std::uint64_t maxFrameAgeMs);
 
-
 void startDevice(
     std::string serialNumber, std::shared_ptr<ViamRSDevice> dev_ptr,
     boost::synchronized_value<

@@ -32,7 +32,7 @@ std::vector<std::uint8_t> encodeJPEG(const std::uint8_t *data, const uint width,
   std::size_t encodedSize = 0;
   tjhandle handle = tjInitCompress();
   if (handle == nullptr) {
-    throw std::runtime_error("[GetImage] failed to init JPEG compressor");
+    throw std::runtime_error("[encodeJPEG] failed to init JPEG compressor");
   }
   int success;
   try {
@@ -41,12 +41,13 @@ std::vector<std::uint8_t> encodeJPEG(const std::uint8_t *data, const uint width,
     tjDestroy(handle);
   } catch (const std::exception &e) {
     tjDestroy(handle);
-    throw std::runtime_error("[GetImage] JPEG compressor failed to compress: " +
-                             std::string(e.what()));
+    throw std::runtime_error(
+        "[encodeJPEG] JPEG compressor failed to compress: " +
+        std::string(e.what()));
   }
   if (success != 0) {
     throw std::runtime_error(
-        "[GetImage] JPEG compressor failed to compress image");
+        "[encodeJPEG] JPEG compressor failed to compress image");
   }
 
   std::vector<std::uint8_t> output(encoded, encoded + encodedSize);
@@ -65,7 +66,7 @@ viam::sdk::Camera::raw_image encodeJPEGToResponse(const std::uint8_t *data,
 // Template specializations
 template <typename FrameT>
 viam::sdk::Camera::raw_image encodeFrameToResponse(FrameT const &frame) {
-  VIAM_SDK_LOG(error) << "[get_image] unsupported frame type";
+  VIAM_SDK_LOG(error) << "[encodeFrameToResponse] unsupported frame type";
   return {};
 }
 template <>
@@ -73,13 +74,13 @@ viam::sdk::Camera::raw_image
 encodeFrameToResponse<rs2::video_frame>(rs2::video_frame const &frame) {
   auto data = reinterpret_cast<const std::uint8_t *>(frame.get_data());
   if (data == nullptr) {
-    throw std::runtime_error("[get_image] frame data is null");
+    throw std::runtime_error("[encodeFrameToResponse] frame data is null");
   }
 
   auto stream_profile = frame.get_profile().as<rs2::video_stream_profile>();
   if (not stream_profile) {
     throw std::runtime_error(
-        "[get_image] frame profile is not a video stream profile");
+        "[encodeFrameToResponse] frame profile is not a video stream profile");
   }
   return encodeJPEGToResponse(data, stream_profile.width(),
                               stream_profile.height());
@@ -90,13 +91,13 @@ viam::sdk::Camera::raw_image
 encodeFrameToResponse<rs2::depth_frame>(rs2::depth_frame const &frame) {
   auto data = reinterpret_cast<const std::uint8_t *>(frame.get_data());
   if (data == nullptr) {
-    throw std::runtime_error("[get_image] frame data is null");
+    throw std::runtime_error("[encodeFrameToResponse] frame data is null");
   }
 
   auto stream_profile = frame.get_profile().as<rs2::video_stream_profile>();
   if (not stream_profile) {
     throw std::runtime_error(
-        "[get_image] frame profile is not a video stream profile");
+        "[encodeFrameToResponse] frame profile is not a video stream profile");
   }
   return encodeDepthRAWToResponse(data, stream_profile.width(),
                                   stream_profile.height());
@@ -159,11 +160,9 @@ std::vector<std::uint8_t>
 encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data) {
   auto pcdPoints = getPCDPoints(std::move(data));
   if (pcdPoints.empty()) {
-    VIAM_SDK_LOG(error) << "[RGBPointsToPCD] No valid points found";
+    VIAM_SDK_LOG(error) << "[encodeRGBPointsToPCD] No valid points found";
     return {};
   }
-  VIAM_SDK_LOG(info) << "[RGBPointsToPCD] Converting " << pcdPoints.size()
-                     << " points to PCD format";
 
   std::stringstream header;
   header << "VERSION .7\n"
@@ -193,9 +192,9 @@ encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data) {
   size_t dataSize = pcdPoints.size() * sizeof(PointXYZRGB);
   pcdBytes.insert(pcdBytes.end(), dataPtr, dataPtr + dataSize);
 
-  VIAM_SDK_LOG(info) << "[RGBPointsToPCD] Converted " << pcdPoints.size()
-                     << " points to PCD format, encoded in " << pcdBytes.size()
-                     << " bytes";
+  VIAM_SDK_LOG(debug) << "[encodeRGBPointsToPCD] Converted " << pcdPoints.size()
+                      << " points to PCD format, encoded in " << pcdBytes.size()
+                      << " bytes";
   return pcdBytes;
 }
 
