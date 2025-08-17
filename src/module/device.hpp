@@ -39,9 +39,6 @@ struct ViamRSDevice {
   std::shared_ptr<PointCloudFilter> point_cloud_filter;
   std::shared_ptr<rs2::align> align;
   std::shared_ptr<rs2::config> config;
-  size_t frame_count = 0;
-  std::chrono::steady_clock::time_point last_report =
-      std::chrono::steady_clock::now();
 };
 
 // Utilities
