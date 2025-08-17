@@ -109,7 +109,8 @@ getCameraModel(std::shared_ptr<rs2::device> dev) noexcept {
   return std::nullopt;
 }
 
-/***************************** STREAM PROFILES *************************************/
+/***************************** STREAM PROFILES
+ * *************************************/
 
 bool checkIfMatchingColorDepthProfiles(
     const rs2::video_stream_profile &color,
@@ -172,7 +173,6 @@ createSwD2CAlignConfig(std::shared_ptr<rs2::pipeline> pipe,
   return nullptr;
 }
 
-
 /***************************** CALLBACKS *************************************/
 
 void frameCallback(
@@ -182,8 +182,7 @@ void frameCallback(
   // frameset
   auto frameset = std::make_shared<rs2::frameset>(frame.as<rs2::frameset>());
   if (not frameset or frameset->size() != 2) {
-    std::cerr << "got non 2 frame count: " << frameset->size()
-                        << std::endl;
+    std::cerr << "got non 2 frame count: " << frameset->size() << std::endl;
     return;
   }
   auto color_frame = frameset->get_color_frame();
@@ -223,8 +222,8 @@ void deviceChangedCallback(
     boost::synchronized_value<std::shared_ptr<rs2::frameset>>
         &frame_set_storage,
     std::uint64_t maxFrameAgeMs) {
-  std::cout
-      << "[deviceChangedCallback] Device connection status changed" << std::endl;
+  std::cout << "[deviceChangedCallback] Device connection status changed"
+            << std::endl;
   try {
     std::shared_ptr<ViamRSDevice> current_device = *device;
     if (info.was_removed(*current_device->device)) {
@@ -260,7 +259,8 @@ void deviceChangedCallback(
   }
 }
 
-/***************************** DEVICE CONTROL *************************************/
+/***************************** DEVICE CONTROL
+ * *************************************/
 
 void stopDevice(boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) {
   std::shared_ptr<ViamRSDevice> dev_ptr = *dev;
@@ -277,7 +277,7 @@ void stopDevice(boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) {
   }
 
   dev_ptr->pipe->stop();
-  dev = nullptr;
+  dev_ptr->started = false;
 }
 
 void startDevice(std::string serialNumber,
@@ -351,6 +351,35 @@ createDevice(std::string serial_number, std::shared_ptr<rs2::device> dev,
   return my_dev;
 }
 
+void destroyDevice(
+    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) {
+  std::shared_ptr<ViamRSDevice> device = *dev;
+  if (!device)
+    return;
+  VIAM_SDK_LOG(info) << "[destroyDevice] destroying device "
+                     << device->serial_number;
+
+  // Stop streaming if still running
+  if (device->started) {
+    VIAM_SDK_LOG(info) << "[destroyDevice] stopping pipe "
+                       << device->serial_number;
+    device->pipe->stop();
+    device->started = false;
+  }
+
+  // Clear all resources
+  VIAM_SDK_LOG(info) << "[destroyDevice] clearing resources "
+                     << device->serial_number;
+  device->pipe.reset();
+  device->device.reset();
+  device->config.reset();
+  device->align.reset();
+  device->point_cloud_filter.reset();
+
+  VIAM_SDK_LOG(info) << "[destroyDevice] device destroyed: "
+                     << device->serial_number;
+  dev = nullptr;
+}
 
 } // namespace device
 } // namespace realsense

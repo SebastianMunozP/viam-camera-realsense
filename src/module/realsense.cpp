@@ -87,7 +87,6 @@ Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg)
     if (requested_serial_number == connected_device_serial_number) {
       device_ = device::createDevice(connected_device_serial_number, dev_ptr,
                                      SUPPORTED_CAMERA_MODELS);
-
       BOOST_ASSERT(device_ != nullptr);
 
       device::startDevice(connected_device_serial_number, device_,
@@ -106,6 +105,7 @@ Realsense::~Realsense() {
   prev_serial_number = config_->serial_number;
   prev_resource_name = config_->resource_name;
   device::stopDevice(device_);
+  device::destroyDevice(device_);
 
   VIAM_SDK_LOG(info) << "Realsense destructor end " << config_->serial_number;
 }
@@ -117,6 +117,7 @@ void Realsense::reconfigure(const viam::sdk::Dependencies &deps,
   prev_serial_number = config_->serial_number;
   VIAM_SDK_LOG(info) << "[reconfigure] stopping device " << prev_serial_number;
   device::stopDevice(device_);
+  device::destroyDevice(device_);
 
   // Before modifying config and starting the new device, let's make sure the
   // new device is actually connected
@@ -140,7 +141,6 @@ void Realsense::reconfigure(const viam::sdk::Dependencies &deps,
     if (requested_serial_number == connected_device_serial_number) {
       device_ = device::createDevice(connected_device_serial_number, dev_ptr,
                                      SUPPORTED_CAMERA_MODELS);
-
       BOOST_ASSERT(device_ != nullptr);
 
       device::startDevice(connected_device_serial_number, device_,

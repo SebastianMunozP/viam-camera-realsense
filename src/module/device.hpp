@@ -44,6 +44,7 @@ struct ViamRSDevice {
       std::chrono::steady_clock::now();
 };
 
+// Utilities
 void printDeviceInfo(const rs2::device &dev) noexcept;
 void deviceChangedCallback(
     rs2::event_information &info,
@@ -53,6 +54,8 @@ void deviceChangedCallback(
     boost::synchronized_value<std::shared_ptr<rs2::frameset>>
         &frame_set_storage,
     std::uint64_t maxFrameAgeMs);
+
+// Streaming lifecycle
 void startDevice(
     std::string serialNumber,
     boost::synchronized_value<std::shared_ptr<ViamRSDevice>> dev_ptr,
@@ -61,9 +64,12 @@ void startDevice(
     std::uint64_t maxFrameAgeMs);
 void stopDevice(boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev);
 
+// Device lifecycle
 std::shared_ptr<ViamRSDevice>
 createDevice(std::string serial_number, std::shared_ptr<rs2::device> dev,
              std::unordered_set<std::string> const &supported_camera_models);
+void destroyDevice(
+    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev);
 
 } // namespace device
 } // namespace realsense
