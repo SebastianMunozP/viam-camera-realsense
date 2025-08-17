@@ -12,6 +12,8 @@
 namespace realsense {
 namespace device {
 
+/***************************** UTILS *************************************/
+
 void printDeviceInfo(rs2::device const &dev) noexcept {
   std::stringstream info;
   if (dev.supports(RS2_CAMERA_INFO_NAME)) {
@@ -86,21 +88,28 @@ void printDeviceInfo(rs2::device const &dev) noexcept {
   }
   VIAM_SDK_LOG(info) << info.str();
 }
-void printDeviceList(const std::shared_ptr<rs2::device_list> devList) {
-  std::for_each(devList->begin(), devList->end(),
-                [](const rs2::device &dev) { printDeviceInfo(dev); });
-}
 
-bool isDeviceConnected(const std::string &serial_number) {
-  auto ctx = std::make_shared<rs2::context>();
-  auto devices = ctx->query_devices();
-  for (const auto &dev : devices) {
-    if (dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == serial_number) {
-      return true;
+std::optional<std::string>
+getCameraModel(std::shared_ptr<rs2::device> dev) noexcept {
+  if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
+    return std::nullopt;
+  }
+  std::string camera_info = dev->get_info(RS2_CAMERA_INFO_NAME);
+  // Model is the 3rd word in this string
+  std::istringstream iss(camera_info);
+  std::string word;
+  int word_count = 0;
+  while (iss >> word) {
+    word_count++;
+    if (word_count == 3) {
+      std::string camera_model = word;
+      return camera_model;
     }
   }
-  return false;
+  return std::nullopt;
 }
+
+/***************************** STREAM PROFILES *************************************/
 
 bool checkIfMatchingColorDepthProfiles(
     const rs2::video_stream_profile &color,
@@ -163,25 +172,8 @@ createSwD2CAlignConfig(std::shared_ptr<rs2::pipeline> pipe,
   return nullptr;
 }
 
-std::optional<std::string>
-getCameraModel(std::shared_ptr<rs2::device> dev) noexcept {
-  if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
-    return std::nullopt;
-  }
-  std::string camera_info = dev->get_info(RS2_CAMERA_INFO_NAME);
-  // Model is the 3rd word in this string
-  std::istringstream iss(camera_info);
-  std::string word;
-  int word_count = 0;
-  while (iss >> word) {
-    word_count++;
-    if (word_count == 3) {
-      std::string camera_model = word;
-      return camera_model;
-    }
-  }
-  return std::nullopt;
-}
+
+/***************************** CALLBACKS *************************************/
 
 void frameCallback(
     rs2::frame const &frame, std::uint64_t const maxFrameAgeMs,
@@ -190,19 +182,19 @@ void frameCallback(
   // frameset
   auto frameset = std::make_shared<rs2::frameset>(frame.as<rs2::frameset>());
   if (not frameset or frameset->size() != 2) {
-    VIAM_SDK_LOG(error) << "got non 2 frame count: " << frameset->size()
+    std::cerr << "got non 2 frame count: " << frameset->size()
                         << std::endl;
     return;
   }
   auto color_frame = frameset->get_color_frame();
   if (not color_frame) {
-    VIAM_SDK_LOG(error) << "no color frame" << std::endl;
+    std::cerr << "no color frame" << std::endl;
     return;
   }
 
   auto depth_frame = frameset->get_depth_frame();
   if (not depth_frame) {
-    VIAM_SDK_LOG(error) << "no depth frame" << std::endl;
+    std::cerr << "no depth frame" << std::endl;
     return;
   }
 
@@ -211,19 +203,64 @@ void frameCallback(
   double depthAge = nowMs - depth_frame.get_timestamp();
 
   if (colorAge > maxFrameAgeMs) {
-    VIAM_SDK_LOG(error)
-        << "[frame_callback] received color frame is too stale, age: "
-        << colorAge << "ms";
+    std::cerr << "[frame_callback] received color frame is too stale, age: "
+              << colorAge << "ms" << std::endl;
   }
 
   if (depthAge > maxFrameAgeMs) {
-    VIAM_SDK_LOG(error)
-        << "[frame_callback] received depth frame is too stale, age: "
-        << depthAge << "ms";
+    std::cerr << "[frame_callback] received depth frame is too stale, age: "
+              << depthAge << "ms" << std::endl;
   }
 
   frame_set_ = frameset;
 }
+
+void deviceChangedCallback(
+    rs2::event_information &info,
+    std::unordered_set<std::string> const &supported_camera_models,
+    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &device,
+    std::string const &required_serial_number,
+    boost::synchronized_value<std::shared_ptr<rs2::frameset>>
+        &frame_set_storage,
+    std::uint64_t maxFrameAgeMs) {
+  std::cout
+      << "[deviceChangedCallback] Device connection status changed" << std::endl;
+  try {
+    std::shared_ptr<ViamRSDevice> current_device = *device;
+    if (info.was_removed(*current_device->device)) {
+      std::cerr << "[deviceChangedCallback] Device removed: "
+                << current_device->serial_number << std::endl;
+      device = nullptr;
+    }
+
+    // Handling added devices, if any
+    auto added_devices = info.get_new_devices();
+    std::cout << "[deviceChangedCallback] Amount of devices added: "
+              << added_devices.size() << std::endl;
+    for (const auto &added_device : added_devices) {
+      std::string connected_device_serial_number =
+          added_device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+
+      if (connected_device_serial_number == required_serial_number) {
+        std::cout << "[deviceChangedCallback] New device added: "
+                  << connected_device_serial_number << std::endl;
+        auto added_device_ptr = std::make_shared<rs2::device>(added_device);
+        device = createDevice(connected_device_serial_number, added_device_ptr,
+                              supported_camera_models);
+        std::shared_ptr<ViamRSDevice> current_device = *device;
+        startDevice(connected_device_serial_number, current_device,
+                    frame_set_storage, maxFrameAgeMs);
+        std::cout << "[deviceChangedCallback] Device Registered: "
+                  << required_serial_number << std::endl;
+      }
+    }
+  } catch (rs2::error &e) {
+    std::cerr << "[deviceChangedCallback] Error in deviceChangedCallback: "
+              << e.what() << std::endl;
+  }
+}
+
+/***************************** DEVICE CONTROL *************************************/
 
 void stopDevice(boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) {
   std::shared_ptr<ViamRSDevice> dev_ptr = *dev;
@@ -314,51 +351,6 @@ createDevice(std::string serial_number, std::shared_ptr<rs2::device> dev,
   return my_dev;
 }
 
-void deviceChangedCallback(
-    rs2::event_information &info,
-    std::unordered_set<std::string> const &supported_camera_models,
-    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &device,
-    std::string const &required_serial_number,
-    boost::synchronized_value<std::shared_ptr<rs2::frameset>>
-        &frame_set_storage,
-    std::uint64_t maxFrameAgeMs) {
-  VIAM_SDK_LOG(info)
-      << "[deviceChangedCallback] Device connection status changed";
-  try {
-    std::shared_ptr<ViamRSDevice> current_device = *device;
-    if (info.was_removed(*current_device->device)) {
-      VIAM_SDK_LOG(info) << "[deviceChangedCallback] Device removed: "
-                         << current_device->serial_number;
-      device = nullptr;
-    }
-
-    // Handling added devices, if any
-    auto added_devices = info.get_new_devices();
-    VIAM_SDK_LOG(info) << "[deviceChangedCallback] Amount of devices added: "
-                       << added_devices.size();
-    for (const auto &added_device : added_devices) {
-      std::string connected_device_serial_number =
-          added_device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-
-      if (connected_device_serial_number == required_serial_number) {
-        VIAM_SDK_LOG(info) << "[deviceChangedCallback] New device added: "
-                           << connected_device_serial_number;
-        auto added_device_ptr = std::make_shared<rs2::device>(added_device);
-        device = createDevice(connected_device_serial_number, added_device_ptr,
-                              supported_camera_models);
-        std::shared_ptr<ViamRSDevice> current_device = *device;
-        startDevice(connected_device_serial_number, current_device,
-                    frame_set_storage, maxFrameAgeMs);
-        VIAM_SDK_LOG(info) << "[deviceChangedCallback] Device Registered: "
-                           << required_serial_number;
-      }
-    }
-  } catch (rs2::error &e) {
-    VIAM_SDK_LOG(error)
-        << "[deviceChangedCallback] Error in deviceChangedCallback: "
-        << e.what() << std::endl;
-  }
-}
 
 } // namespace device
 } // namespace realsense
