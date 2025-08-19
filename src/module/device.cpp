@@ -14,7 +14,7 @@ namespace device {
 
 /***************************** UTILS *************************************/
 
-void printDeviceInfo(rs2::device const &dev) noexcept {
+void printDeviceInfo(rs2::device const &dev) {
   std::stringstream info;
   if (dev.supports(RS2_CAMERA_INFO_NAME)) {
     info << "DeviceInfo:\n"
@@ -90,7 +90,7 @@ void printDeviceInfo(rs2::device const &dev) noexcept {
 }
 
 std::optional<std::string>
-getCameraModel(std::shared_ptr<rs2::device> dev) noexcept {
+getCameraModel(std::shared_ptr<rs2::device> dev) {
   if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
     return std::nullopt;
   }
