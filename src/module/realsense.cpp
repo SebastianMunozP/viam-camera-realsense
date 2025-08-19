@@ -61,20 +61,20 @@ std::vector<std::string> validate(vsdk::ResourceConfig cfg) {
   return {};
 }
 
-Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg)
-    : Camera(cfg.name()), config_(configure(std::move(deps), std::move(cfg))) {
+Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg, std::shared_ptr<rs2::context> ctx)
+    : Camera(cfg.name()), config_(configure(std::move(deps), std::move(cfg))), ctx_(ctx) {
 
   std::string requested_serial_number = config_->serial_number;
   VIAM_SDK_LOG(info) << "[constructor] start " << requested_serial_number;
 
-  ctx_.set_devices_changed_callback([this](rs2::event_information &info) {
+  ctx_->set_devices_changed_callback([this](rs2::event_information &info) {
     device::deviceChangedCallback(info, SUPPORTED_CAMERA_MODELS, device_,
                                   config_->serial_number, latest_frameset_,
                                   maxFrameAgeMs);
   });
   // This will the initial set of connected devices (i.e. the devices that were
   // connected before the callback was set)
-  auto deviceList = ctx_.query_devices();
+  auto deviceList = ctx_->query_devices();
   VIAM_SDK_LOG(info) << "[constructor] Amount of connected devices: "
                      << deviceList.size() << "\n";
 
@@ -128,7 +128,7 @@ void Realsense::reconfigure(const viam::sdk::Dependencies &deps,
 
   // This will the initial set of connected devices (i.e. the devices that were
   // connected before the callback was set)
-  auto deviceList = ctx_.query_devices();
+  auto deviceList = ctx_->query_devices();
   VIAM_SDK_LOG(info) << "[constructor] Amount of connected devices: "
                      << deviceList.size() << "\n";
 

@@ -12,14 +12,15 @@
 namespace vsdk = ::viam::sdk;
 
 std::vector<std::shared_ptr<vsdk::ModelRegistration>>
-create_all_model_registrations() {
+create_all_model_registrations(std::shared_ptr<rs2::context> ctx) {
   std::vector<std::shared_ptr<vsdk::ModelRegistration>> registrations;
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(
       vsdk::API::get<vsdk::Camera>(), realsense::Realsense::model,
-      [](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
+      [ctx](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
         return std::make_unique<realsense::Realsense>(std::move(deps),
-                                                      std::move(config));
+                                                      std::move(config),
+                                                      ctx);
       }));
 
   // TODO: Add discovery model registration as well
@@ -39,8 +40,9 @@ int serve(int argc, char **argv) try {
     }
   }
 
+  auto ctx = std::make_shared<rs2::context>();
   auto module_service = std::make_shared<vsdk::ModuleService>(
-      argc, argv, create_all_model_registrations());
+      argc, argv, create_all_model_registrations(ctx));
   module_service->serve();
 
   return EXIT_SUCCESS;

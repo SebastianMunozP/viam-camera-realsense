@@ -259,8 +259,7 @@ void deviceChangedCallback(
   }
 }
 
-/***************************** DEVICE CONTROL
- * *************************************/
+/************************** DEVICE CONTROL **************************/
 
 void stopDevice(boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) {
   std::shared_ptr<ViamRSDevice> dev_ptr = *dev;
