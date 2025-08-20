@@ -50,15 +50,30 @@ static const std::unordered_set<std::string> SUPPORTED_CAMERA_MODELS = {
 // CONSTANTS END
 
 // RESOURCE BEGIN
-std::vector<std::string> validate(vsdk::ResourceConfig cfg) {
+void validate(vsdk::ResourceConfig cfg) {
+  VIAM_SDK_LOG(info) << "[validate] Validating that serial_number is present";
   auto attrs = cfg.attributes();
 
-  if (attrs.count("serial_number")) {
-    if (!attrs["serial_number"].get<std::string>()) {
-      throw std::invalid_argument("serial_number must be a string");
-    }
+  if (not attrs.count("serial_number")) {
+    VIAM_SDK_LOG(error) << "[validate] Missing required attribute: serial_number";
+    throw std::invalid_argument("serial_number is a required argument");
   }
-  return {};
+
+  VIAM_SDK_LOG(info) << "[validate] Validating that serial_number is a string";
+  if(not attrs["serial_number"].is_a<std::string>()) {
+    VIAM_SDK_LOG(error) << "[validate] serial_number is not a string";
+    throw std::invalid_argument("serial_number must be a string");
+  }
+
+  VIAM_SDK_LOG(info) << "[validate] Validating that serial_number is not empty";
+  // We already stablished this is a string, so it's safe to call this
+  std::string const serial = attrs["serial_number"].get_unchecked<std::string>();
+  if (serial.empty()) {
+    VIAM_SDK_LOG(error) << "[validate] serial_number is empty";
+    throw std::invalid_argument("serial_number must be a non-empty string");
+  }
+  // If we reach here, the serial number is valid
+  return;
 }
 
 Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg, std::shared_ptr<rs2::context> ctx)
@@ -369,21 +384,11 @@ Realsense::get_geometries(const viam::sdk::ProtoStruct &extra) {
 
 RsResourceConfig Realsense::configure(vsdk::Dependencies dependencies,
                                       vsdk::ResourceConfig configuration) {
+  validate(configuration);
   auto attrs = configuration.attributes();
 
-  std::string serial_number_from_config;
-  if (!attrs.count("serial_number")) {
-    throw std::invalid_argument("serial_number is a required argument");
-  }
-
-  const std::string *serial_val = attrs["serial_number"].get<std::string>();
-  if (serial_val == nullptr) {
-    throw std::invalid_argument("serial_number must be a string");
-  }
-
-  serial_number_from_config = *serial_val;
-
-  auto native_config = realsense::RsResourceConfig(serial_number_from_config,
+  std::string const serial = attrs["serial_number"].get_unchecked<std::string>();
+  auto native_config = realsense::RsResourceConfig(serial,
                                                    configuration.name());
 
   return native_config;
