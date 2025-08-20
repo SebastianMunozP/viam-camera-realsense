@@ -117,9 +117,8 @@ bool checkIfMatchingColorDepthProfiles(
     const rs2::video_stream_profile &depth) noexcept {
   if (std::tuple(color.width(), color.height(), color.fps()) ==
       std::tuple(depth.width(), depth.height(), depth.fps())) {
-    std::cout << "using width: " << color.width()
-              << " height: " << color.height() << " fps: " << color.fps()
-              << "\n";
+    VIAM_SDK_LOG(info) << "using width: " << color.width()
+              << " height: " << color.height() << " fps: " << color.fps();
     return true;
   }
   return false;
@@ -226,7 +225,7 @@ void deviceChangedCallback(
             << std::endl;
   try {
     std::shared_ptr<ViamRSDevice> current_device = *device;
-    if (info.was_removed(*current_device->device)) {
+    if (current_device and info.was_removed(*current_device->device)) {
       std::cerr << "[deviceChangedCallback] Device removed: "
                 << current_device->serial_number << std::endl;
       device = nullptr;
@@ -234,20 +233,23 @@ void deviceChangedCallback(
 
     // Handling added devices, if any
     auto added_devices = info.get_new_devices();
-    std::cout << "[deviceChangedCallback] Amount of devices added: "
+    std::cout << "[deviceChangedCallback] Amount of new devices detected: "
               << added_devices.size() << std::endl;
+    std::cout << "[deviceChangedCallback] Required Serial Number: "
+              << required_serial_number << std::endl;
     for (const auto &added_device : added_devices) {
       std::string connected_device_serial_number =
           added_device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+      std::cout << "[deviceChangedCallback] New device detected: "
+                  << connected_device_serial_number << std::endl;
 
       if (connected_device_serial_number == required_serial_number) {
-        std::cout << "[deviceChangedCallback] New device added: "
+        std::cerr << "[deviceChangedCallback] New device added: "
                   << connected_device_serial_number << std::endl;
         auto added_device_ptr = std::make_shared<rs2::device>(added_device);
         device = createDevice(connected_device_serial_number, added_device_ptr,
                               supported_camera_models);
-        std::shared_ptr<ViamRSDevice> current_device = *device;
-        startDevice(connected_device_serial_number, current_device,
+        startDevice(connected_device_serial_number, device,
                     frame_set_storage, maxFrameAgeMs);
         std::cout << "[deviceChangedCallback] Device Registered: "
                   << required_serial_number << std::endl;
@@ -302,7 +304,7 @@ void startDevice(std::string serialNumber,
   VIAM_SDK_LOG(info) << "[startDevice]  device started " << serialNumber;
 }
 
-std::shared_ptr<ViamRSDevice>
+boost::synchronized_value<std::shared_ptr<ViamRSDevice>>
 createDevice(std::string serial_number, std::shared_ptr<rs2::device> dev,
              std::unordered_set<std::string> const &supported_camera_models) {
   VIAM_SDK_LOG(info) << "[createDevice] creating device serial number: "
@@ -312,7 +314,7 @@ createDevice(std::string serial_number, std::shared_ptr<rs2::device> dev,
     VIAM_SDK_LOG(error)
         << "[registerDevice] Failed to register camera serial number: "
         << serial_number << " since no camera model found";
-    return nullptr;
+    return boost::synchronized_value<std::shared_ptr<ViamRSDevice>>(nullptr);
   }
   VIAM_SDK_LOG(info) << "[registerDevice] Found camera model: "
                      << *camera_model;
@@ -322,7 +324,7 @@ createDevice(std::string serial_number, std::shared_ptr<rs2::device> dev,
         << serial_number
         << " since camera model is not D435 or D435i, camera model: "
         << *camera_model;
-    return nullptr;
+    return boost::synchronized_value<std::shared_ptr<ViamRSDevice>>(nullptr);
   } else {
     VIAM_SDK_LOG(info) << "[registerDevice] Camera model is supported: "
                        << *camera_model;
@@ -334,7 +336,7 @@ createDevice(std::string serial_number, std::shared_ptr<rs2::device> dev,
     VIAM_SDK_LOG(error)
         << "Current device does not support software depth-to-color "
            "alignment.";
-    return nullptr;
+    return boost::synchronized_value<std::shared_ptr<ViamRSDevice>>(nullptr);
   }
 
   std::shared_ptr<ViamRSDevice> my_dev = std::make_shared<ViamRSDevice>();

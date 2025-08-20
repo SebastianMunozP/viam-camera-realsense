@@ -42,7 +42,7 @@ struct ViamRSDevice {
 };
 
 // Utilities
-void printDeviceInfo(const rs2::device &dev) noexcept;
+void printDeviceInfo(const rs2::device &dev);
 void deviceChangedCallback(
     rs2::event_information &info,
     std::unordered_set<std::string> const &supported_camera_models,
@@ -62,7 +62,7 @@ void startDevice(
 void stopDevice(boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev);
 
 // Device lifecycle
-std::shared_ptr<ViamRSDevice>
+boost::synchronized_value<std::shared_ptr<ViamRSDevice>>
 createDevice(std::string serial_number, std::shared_ptr<rs2::device> dev,
              std::unordered_set<std::string> const &supported_camera_models);
 void destroyDevice(
