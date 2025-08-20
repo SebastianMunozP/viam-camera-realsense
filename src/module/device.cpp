@@ -181,7 +181,7 @@ void frameCallback(
   // frameset
   auto frameset = std::make_shared<rs2::frameset>(frame.as<rs2::frameset>());
   if (not frameset or frameset->size() != 2) {
-    std::cerr << "got non 2 frame count: " << frameset->size() << std::endl;
+    std::cerr << "got count other than 2: " << frameset->size() << std::endl;
     return;
   }
   auto color_frame = frameset->get_color_frame();
