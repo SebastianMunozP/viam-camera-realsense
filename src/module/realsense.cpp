@@ -55,19 +55,21 @@ std::vector<std::string> Realsense::validate(vsdk::ResourceConfig cfg) {
   auto attrs = cfg.attributes();
 
   if (not attrs.count("serial_number")) {
-    VIAM_SDK_LOG(error) << "[validate] Missing required attribute: serial_number";
+    VIAM_SDK_LOG(error)
+        << "[validate] Missing required attribute: serial_number";
     throw std::invalid_argument("serial_number is a required argument");
   }
 
   VIAM_SDK_LOG(info) << "[validate] Validating that serial_number is a string";
-  if(not attrs["serial_number"].is_a<std::string>()) {
+  if (not attrs["serial_number"].is_a<std::string>()) {
     VIAM_SDK_LOG(error) << "[validate] serial_number is not a string";
     throw std::invalid_argument("serial_number must be a string");
   }
 
   VIAM_SDK_LOG(info) << "[validate] Validating that serial_number is not empty";
   // We already stablished this is a string, so it's safe to call this
-  std::string const serial = attrs["serial_number"].get_unchecked<std::string>();
+  std::string const serial =
+      attrs["serial_number"].get_unchecked<std::string>();
   if (serial.empty()) {
     VIAM_SDK_LOG(error) << "[validate] serial_number is empty";
     throw std::invalid_argument("serial_number must be a non-empty string");
@@ -76,8 +78,10 @@ std::vector<std::string> Realsense::validate(vsdk::ResourceConfig cfg) {
   return {};
 }
 
-Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg, std::shared_ptr<rs2::context> ctx)
-    : Camera(cfg.name()), config_(configure(std::move(deps), std::move(cfg))), ctx_(ctx) {
+Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg,
+                     std::shared_ptr<rs2::context> ctx)
+    : Camera(cfg.name()), config_(configure(std::move(deps), std::move(cfg))),
+      ctx_(ctx) {
 
   std::string requested_serial_number = config_->serial_number;
   VIAM_SDK_LOG(info) << "[constructor] start " << requested_serial_number;
@@ -131,8 +135,16 @@ void Realsense::reconfigure(const viam::sdk::Dependencies &deps,
   std::string prev_serial_number;
   prev_serial_number = config_->serial_number;
   VIAM_SDK_LOG(info) << "[reconfigure] stopping device " << prev_serial_number;
-  device::stopDevice(device_);
-  device::destroyDevice(device_);
+  if (not device::stopDevice(device_)) {
+    VIAM_SDK_LOG(error) << "[reconfigure] failed to stop device "
+                        << prev_serial_number;
+    throw std::runtime_error("failed to stop device " + prev_serial_number);
+  }
+  if (not device::destroyDevice(device_)) {
+    VIAM_SDK_LOG(error) << "[reconfigure] failed to destroy device "
+                        << prev_serial_number;
+    throw std::runtime_error("failed to destroy device " + prev_serial_number);
+  }
 
   // Before modifying config and starting the new device, let's make sure the
   // new device is actually connected
@@ -144,7 +156,7 @@ void Realsense::reconfigure(const viam::sdk::Dependencies &deps,
   // This will the initial set of connected devices (i.e. the devices that were
   // connected before the callback was set)
   auto deviceList = ctx_->query_devices();
-  VIAM_SDK_LOG(info) << "[constructor] Amount of connected devices: "
+  VIAM_SDK_LOG(info) << "[constructor] Number of connected devices: "
                      << deviceList.size() << "\n";
 
   for (auto const &dev : deviceList) {
@@ -224,7 +236,8 @@ viam::sdk::Camera::image_collection Realsense::get_images() {
                          << " depth timestamp was " << depthTS;
     }
     // use the older of the two timestamps
-    std::uint64_t timestamp = static_cast<std::uint64_t>(std::llround((depthTS < colorTS) ? depthTS : colorTS));
+    std::uint64_t timestamp =
+        static_cast<std::uint64_t>(std::llround(std::min(depthTS, colorTS)));
 
     std::chrono::microseconds latestTimestamp(timestamp);
     response.metadata.captured_at = vsdk::time_pt{
@@ -387,12 +400,13 @@ RsResourceConfig Realsense::configure(vsdk::Dependencies dependencies,
   auto attrs = configuration.attributes();
 
   /*
-   * Validation already checks that serial_number exists, it is a string and it is not empty, so we can
-   * safely extract it without additional checks.
+   * Validation already checks that serial_number exists, it is a string and it
+   * is not empty, so we can safely extract it without additional checks.
    */
-  std::string const serial = attrs["serial_number"].get_unchecked<std::string>();
-  auto native_config = realsense::RsResourceConfig(serial,
-                                                   configuration.name());
+  std::string const serial =
+      attrs["serial_number"].get_unchecked<std::string>();
+  auto native_config =
+      realsense::RsResourceConfig(serial, configuration.name());
 
   return native_config;
 }

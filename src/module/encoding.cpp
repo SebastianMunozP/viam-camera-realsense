@@ -142,7 +142,7 @@ getPCDPoints(std::pair<rs2::points, rs2::video_frame> &&data) {
     auto r = static_cast<unsigned int>(color_data[idx]);
     auto g = static_cast<unsigned int>(color_data[idx + 1]);
     auto b = static_cast<unsigned int>(color_data[idx + 2]);
-    unsigned int rgb = (r << 16) | (g << 8) | b;
+    std::uint32_t rgb = (r << 16) | (g << 8) | b;
 
     PointXYZRGB pt;
     pt.x = vertex.x;
@@ -179,11 +179,14 @@ encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data) {
   std::vector<std::uint8_t> pcdBytes;
   pcdBytes.insert(pcdBytes.end(), headerStr.begin(), headerStr.end());
 
-  // Assert that PointXYZRGB is a POD type (a Plain Old Data type is defined by being trivially copyable and having a standard memory layout), and that it has no padding, thus can
-  // be copied as bytes. Since vector is contiguous, we can just copy the whole
-  // thing
-  static_assert(std::is_trivially_copyable_v<PointXYZRGB> and std::is_standard_layout_v<PointXYZRGB>,
-                "PointXYZRGB must be trivially copyable and have standard layout");
+  // Assert that PointXYZRGB is a POD type (a Plain Old Data type is defined by
+  // being trivially copyable and having a standard memory layout), and that it
+  // has no padding, thus can be copied as bytes. Since vector is contiguous, we
+  // can just copy the whole thing
+  static_assert(
+      std::is_trivially_copyable_v<PointXYZRGB> and
+          std::is_standard_layout_v<PointXYZRGB>,
+      "PointXYZRGB must be trivially copyable and have standard layout");
   static_assert(sizeof(PointXYZRGB) ==
                     (3 * sizeof(float)) + sizeof(unsigned int),
                 "PointXYZRGB has unexpected padding");

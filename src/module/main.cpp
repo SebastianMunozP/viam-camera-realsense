@@ -19,8 +19,7 @@ create_all_model_registrations(std::shared_ptr<rs2::context> ctx) {
       vsdk::API::get<vsdk::Camera>(), realsense::Realsense::model,
       [ctx](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
         return std::make_unique<realsense::Realsense>(std::move(deps),
-                                                      std::move(config),
-                                                      ctx);
+                                                      std::move(config), ctx);
       },
       realsense::Realsense::validate));
 

@@ -54,19 +54,20 @@ void deviceChangedCallback(
 
 // Streaming lifecycle
 void startDevice(
-    std::string const& serialNumber,
+    std::string const &serialNumber,
     boost::synchronized_value<std::shared_ptr<ViamRSDevice>> dev_ptr,
     boost::synchronized_value<std::shared_ptr<rs2::frameset>>
         &frame_set_storage,
     std::uint64_t maxFrameAgeMs);
-void stopDevice(boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev);
+bool stopDevice(
+    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) noexcept;
 
 // Device lifecycle
 boost::synchronized_value<std::shared_ptr<ViamRSDevice>>
-createDevice(std::string const& serial_number, std::shared_ptr<rs2::device> dev,
+createDevice(std::string const &serial_number, std::shared_ptr<rs2::device> dev,
              std::unordered_set<std::string> const &supported_camera_models);
-void destroyDevice(
-    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev);
+bool destroyDevice(
+    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) noexcept;
 
 } // namespace device
 } // namespace realsense

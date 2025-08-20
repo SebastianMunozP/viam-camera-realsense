@@ -74,10 +74,6 @@ void printDeviceInfo(rs2::device const &dev) {
     info << "  ASIC Serial Number:             "
          << dev.get_info(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER) << std::endl;
   }
-  if (dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
-    info << "  USB Type Descriptor:            "
-         << dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR) << std::endl;
-  }
   if (dev.supports(RS2_CAMERA_INFO_DFU_DEVICE_PATH)) {
     info << "  DFU Device Path:            "
          << dev.get_info(RS2_CAMERA_INFO_DFU_DEVICE_PATH) << std::endl;
@@ -89,8 +85,7 @@ void printDeviceInfo(rs2::device const &dev) {
   VIAM_SDK_LOG(info) << info.str();
 }
 
-std::optional<std::string>
-getCameraModel(std::shared_ptr<rs2::device> dev) {
+std::optional<std::string> getCameraModel(std::shared_ptr<rs2::device> dev) {
   if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
     return std::nullopt;
   }
@@ -118,7 +113,8 @@ bool checkIfMatchingColorDepthProfiles(
   if (std::tuple(color.width(), color.height(), color.fps()) ==
       std::tuple(depth.width(), depth.height(), depth.fps())) {
     VIAM_SDK_LOG(info) << "using width: " << color.width()
-              << " height: " << color.height() << " fps: " << color.fps();
+                       << " height: " << color.height()
+                       << " fps: " << color.fps();
     return true;
   }
   return false;
@@ -241,7 +237,7 @@ void deviceChangedCallback(
       std::string connected_device_serial_number =
           added_device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
       std::cout << "[deviceChangedCallback] New device detected: "
-                  << connected_device_serial_number << std::endl;
+                << connected_device_serial_number << std::endl;
 
       if (connected_device_serial_number == required_serial_number) {
         std::cerr << "[deviceChangedCallback] New device added: "
@@ -249,8 +245,8 @@ void deviceChangedCallback(
         auto added_device_ptr = std::make_shared<rs2::device>(added_device);
         device = createDevice(connected_device_serial_number, added_device_ptr,
                               supported_camera_models);
-        startDevice(connected_device_serial_number, device,
-                    frame_set_storage, maxFrameAgeMs);
+        startDevice(connected_device_serial_number, device, frame_set_storage,
+                    maxFrameAgeMs);
         std::cout << "[deviceChangedCallback] Device Registered: "
                   << required_serial_number << std::endl;
       }
@@ -263,25 +259,36 @@ void deviceChangedCallback(
 
 /************************** DEVICE CONTROL **************************/
 
-void stopDevice(boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) {
-  std::shared_ptr<ViamRSDevice> dev_ptr = *dev;
-  if (not dev_ptr) {
-    VIAM_SDK_LOG(error)
-        << "[stopDevice] trying to stop a device that does not exist";
-    return;
-  }
-  if (not dev_ptr->started) {
-    VIAM_SDK_LOG(error)
-        << "[stopDevice] unable to stop device that is not currently running "
-        << dev_ptr->serial_number;
-    return;
-  }
+bool stopDevice(
+    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) noexcept {
+  try {
+    std::shared_ptr<ViamRSDevice> dev_ptr = *dev;
+    if (not dev_ptr) {
+      VIAM_SDK_LOG(error)
+          << "[stopDevice] trying to stop a device that does not exist";
+      return false;
+    }
+    if (not dev_ptr->started) {
+      VIAM_SDK_LOG(error)
+          << "[stopDevice] unable to stop device that is not currently running "
+          << dev_ptr->serial_number;
+      return false;
+    }
 
-  dev_ptr->pipe->stop();
-  dev_ptr->started = false;
+    dev_ptr->pipe->stop();
+    dev_ptr->started = false;
+    return true;
+  } catch (const std::exception &e) {
+    VIAM_SDK_LOG(error)
+        << "[stopDevice] Exception caught while stopping device: " << e.what();
+  } catch (...) {
+    VIAM_SDK_LOG(error)
+        << "[stopDevice] Unknown exception caught while stopping device";
+  }
+  return false;
 }
 
-void startDevice(std::string const& serialNumber,
+void startDevice(std::string const &serialNumber,
                  boost::synchronized_value<std::shared_ptr<ViamRSDevice>> dev,
                  boost::synchronized_value<std::shared_ptr<rs2::frameset>>
                      &frame_set_storage,
@@ -305,7 +312,7 @@ void startDevice(std::string const& serialNumber,
 }
 
 boost::synchronized_value<std::shared_ptr<ViamRSDevice>>
-createDevice(std::string const& serial_number, std::shared_ptr<rs2::device> dev,
+createDevice(std::string const &serial_number, std::shared_ptr<rs2::device> dev,
              std::unordered_set<std::string> const &supported_camera_models) {
   VIAM_SDK_LOG(info) << "[createDevice] creating device serial number: "
                      << serial_number;
@@ -352,34 +359,46 @@ createDevice(std::string const& serial_number, std::shared_ptr<rs2::device> dev,
   return my_dev;
 }
 
-void destroyDevice(
-    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) {
-  std::shared_ptr<ViamRSDevice> device = *dev;
-  if (!device)
-    return;
-  VIAM_SDK_LOG(info) << "[destroyDevice] destroying device "
-                     << device->serial_number;
-
-  // Stop streaming if still running
-  if (device->started) {
-    VIAM_SDK_LOG(info) << "[destroyDevice] stopping pipe "
+bool destroyDevice(
+    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) noexcept {
+  try {
+    std::shared_ptr<ViamRSDevice> device = *dev;
+    if (!device)
+      return false;
+    VIAM_SDK_LOG(info) << "[destroyDevice] destroying device "
                        << device->serial_number;
-    device->pipe->stop();
-    device->started = false;
+
+    // Stop streaming if still running
+    if (device->started) {
+      VIAM_SDK_LOG(info) << "[destroyDevice] stopping pipe "
+                         << device->serial_number;
+      device->pipe->stop();
+      device->started = false;
+    }
+
+    // Clear all resources
+    VIAM_SDK_LOG(info) << "[destroyDevice] clearing resources "
+                       << device->serial_number;
+    device->pipe.reset();
+    device->device.reset();
+    device->config.reset();
+    device->align.reset();
+    device->point_cloud_filter.reset();
+
+    VIAM_SDK_LOG(info) << "[destroyDevice] device destroyed: "
+                       << device->serial_number;
+    dev = nullptr;
+  } catch (const std::exception &e) {
+    VIAM_SDK_LOG(error)
+        << "[destroyDevice] Exception caught while destroying device: "
+        << e.what();
+    return false;
+  } catch (...) {
+    VIAM_SDK_LOG(error)
+        << "[destroyDevice] Unknown exception caught while destroying device";
+    return false;
   }
-
-  // Clear all resources
-  VIAM_SDK_LOG(info) << "[destroyDevice] clearing resources "
-                     << device->serial_number;
-  device->pipe.reset();
-  device->device.reset();
-  device->config.reset();
-  device->align.reset();
-  device->point_cloud_filter.reset();
-
-  VIAM_SDK_LOG(info) << "[destroyDevice] device destroyed: "
-                     << device->serial_number;
-  dev = nullptr;
+  return true;
 }
 
 } // namespace device

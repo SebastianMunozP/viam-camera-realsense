@@ -25,7 +25,8 @@ struct RsResourceConfig {
 class Realsense final : public viam::sdk::Camera,
                         public viam::sdk::Reconfigurable {
 public:
-  Realsense(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg, std::shared_ptr<rs2::context> ctx);
+  Realsense(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg,
+            std::shared_ptr<rs2::context> ctx);
   ~Realsense();
   void reconfigure(const viam::sdk::Dependencies &deps,
                    const viam::sdk::ResourceConfig &cfg) override;
