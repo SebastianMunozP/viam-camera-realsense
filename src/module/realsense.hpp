@@ -40,6 +40,7 @@ public:
   std::vector<viam::sdk::GeometryConfig>
   get_geometries(const viam::sdk::ProtoStruct &extra) override;
 
+  static std::vector<std::string> validate(viam::sdk::ResourceConfig cfg);
   static viam::sdk::GeometryConfig geometry;
   static viam::sdk::Model model;
 

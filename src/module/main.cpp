@@ -21,7 +21,8 @@ create_all_model_registrations(std::shared_ptr<rs2::context> ctx) {
         return std::make_unique<realsense::Realsense>(std::move(deps),
                                                       std::move(config),
                                                       ctx);
-      }));
+      },
+      realsense::Realsense::validate));
 
   // TODO: Add discovery model registration as well
 

@@ -50,7 +50,7 @@ static const std::unordered_set<std::string> SUPPORTED_CAMERA_MODELS = {
 // CONSTANTS END
 
 // RESOURCE BEGIN
-void validate(vsdk::ResourceConfig cfg) {
+std::vector<std::string> Realsense::validate(vsdk::ResourceConfig cfg) {
   VIAM_SDK_LOG(info) << "[validate] Validating that serial_number is present";
   auto attrs = cfg.attributes();
 
@@ -73,7 +73,7 @@ void validate(vsdk::ResourceConfig cfg) {
     throw std::invalid_argument("serial_number must be a non-empty string");
   }
   // If we reach here, the serial number is valid
-  return;
+  return {};
 }
 
 Realsense::Realsense(vsdk::Dependencies deps, vsdk::ResourceConfig cfg, std::shared_ptr<rs2::context> ctx)
@@ -224,7 +224,7 @@ viam::sdk::Camera::image_collection Realsense::get_images() {
                          << " depth timestamp was " << depthTS;
     }
     // use the older of the two timestamps
-    uint64_t timestamp = static_cast<uint64_t>(std::llround((depthTS < colorTS) ? depthTS : colorTS));
+    std::uint64_t timestamp = static_cast<std::uint64_t>(std::llround((depthTS < colorTS) ? depthTS : colorTS));
 
     std::chrono::microseconds latestTimestamp(timestamp);
     response.metadata.captured_at = vsdk::time_pt{
@@ -384,9 +384,12 @@ Realsense::get_geometries(const viam::sdk::ProtoStruct &extra) {
 
 RsResourceConfig Realsense::configure(vsdk::Dependencies dependencies,
                                       vsdk::ResourceConfig configuration) {
-  validate(configuration);
   auto attrs = configuration.attributes();
 
+  /*
+   * Validation already checks that serial_number exists, it is a string and it is not empty, so we can
+   * safely extract it without additional checks.
+   */
   std::string const serial = attrs["serial_number"].get_unchecked<std::string>();
   auto native_config = realsense::RsResourceConfig(serial,
                                                    configuration.name());
