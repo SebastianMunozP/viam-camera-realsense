@@ -14,11 +14,11 @@ inline double getNowMs() {
   return now_ms;
 }
 
-inline std::uint64_t timeSincePrevMs(double nowMs, double prevTimeMs) {
+inline double timeSincePrevMs(double nowMs, double prevTimeMs) {
   if (nowMs > prevTimeMs) {
     return nowMs - prevTimeMs;
   }
-  return 0;
+  return 0.0;
 }
 
 inline bool isTooOld(double const nowMs, double const prevTimeMs,

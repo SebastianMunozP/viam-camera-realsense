@@ -224,7 +224,7 @@ viam::sdk::Camera::image_collection Realsense::get_images() {
                          << " depth timestamp was " << depthTS;
     }
     // use the older of the two timestamps
-    uint64_t timestamp = (depthTS < colorTS) ? depthTS : colorTS;
+    uint64_t timestamp = static_cast<uint64_t>(std::llround((depthTS < colorTS) ? depthTS : colorTS));
 
     std::chrono::microseconds latestTimestamp(timestamp);
     response.metadata.captured_at = vsdk::time_pt{
