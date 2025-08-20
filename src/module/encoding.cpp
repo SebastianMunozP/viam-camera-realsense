@@ -179,10 +179,11 @@ encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data) {
   std::vector<std::uint8_t> pcdBytes;
   pcdBytes.insert(pcdBytes.end(), headerStr.begin(), headerStr.end());
 
-  // Assert that PointXYZRGB is a POD type, and that it has no padding, thus can
+  // Assert that PointXYZRGB is a POD type (a Plain Old Data type is defined by being trivially copyable and having a standard memory layout), and that it has no padding, thus can
   // be copied as bytes. Since vector is contiguous, we can just copy the whole
   // thing
-  static_assert(std::is_pod_v<PointXYZRGB>);
+  static_assert(std::is_trivially_copyable_v<PointXYZRGB> and std::is_standard_layout_v<PointXYZRGB>,
+                "PointXYZRGB must be trivially copyable and have standard layout");
   static_assert(sizeof(PointXYZRGB) ==
                     (3 * sizeof(float)) + sizeof(unsigned int),
                 "PointXYZRGB has unexpected padding");
