@@ -12,7 +12,7 @@
 namespace vsdk = ::viam::sdk;
 
 std::vector<std::shared_ptr<vsdk::ModelRegistration>>
-create_all_model_registrations(std::shared_ptr<rs2::context> ctx) {
+create_all_model_registrations(std::shared_ptr<realsense::RealsenseContext> ctx) {
   std::vector<std::shared_ptr<vsdk::ModelRegistration>> registrations;
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(
@@ -41,8 +41,9 @@ int serve(int argc, char **argv) try {
   }
 
   auto ctx = std::make_shared<rs2::context>();
+  auto rs_ctx = std::make_shared<realsense::RealsenseContext>(ctx);
   auto module_service = std::make_shared<vsdk::ModuleService>(
-      argc, argv, create_all_model_registrations(ctx));
+      argc, argv, create_all_model_registrations(rs_ctx));
   module_service->serve();
 
   return EXIT_SUCCESS;
