@@ -96,7 +96,7 @@ add_subdirectory(test)
 
 
 # construct the experimental library
-add_library(viamrealsense2 src/module/realsense.cpp src/module/encoding.cpp src/module/device.cpp ${THIRD_PARTY_SOURCES}) 
+add_library(viamrealsense2 src/module/encoding.cpp src/module/device.cpp ${THIRD_PARTY_SOURCES}) 
 # Make include paths explicit
 target_include_directories(viamrealsense2 PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module

@@ -12,16 +12,17 @@
 namespace vsdk = ::viam::sdk;
 
 std::vector<std::shared_ptr<vsdk::ModelRegistration>>
-create_all_model_registrations(std::shared_ptr<realsense::RealsenseContext> ctx) {
+create_all_model_registrations(std::shared_ptr<realsense::RealsenseContext<rs2::context>> ctx) {
   std::vector<std::shared_ptr<vsdk::ModelRegistration>> registrations;
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(
-      vsdk::API::get<vsdk::Camera>(), realsense::Realsense::model,
+      vsdk::API::get<vsdk::Camera>(), realsense::Realsense<rs2::context>::model,
       [ctx](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
-        return std::make_unique<realsense::Realsense>(std::move(deps),
-                                                      std::move(config), ctx);
+        return std::make_unique<realsense::Realsense<rs2::context>>(
+            std::move(deps), std::move(config), ctx);
       },
-      realsense::Realsense::validate));
+      realsense::Realsense<
+          realsense::RealsenseContext<rs2::context>>::validate));
 
   // TODO: Add discovery model registration as well
 
@@ -40,10 +41,12 @@ int serve(int argc, char **argv) try {
     }
   }
 
-  auto ctx = std::make_shared<rs2::context>();
-  auto rs_ctx = std::make_shared<realsense::RealsenseContext>(ctx);
+  auto rs_ctx = std::make_shared<rs2::context>();
+  auto ctx =
+      std::make_shared<realsense::RealsenseContext<rs2::context>>(rs_ctx);
+
   auto module_service = std::make_shared<vsdk::ModuleService>(
-      argc, argv, create_all_model_registrations(rs_ctx));
+      argc, argv, create_all_model_registrations(ctx));
   module_service->serve();
 
   return EXIT_SUCCESS;
