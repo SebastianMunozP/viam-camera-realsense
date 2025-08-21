@@ -140,7 +140,7 @@ public:
                        << deviceList.size() << "\n";
 
     for (auto const &dev : deviceList) {
-      device::printDeviceInfo(dev);
+      device_funcs_.printDeviceInfo(dev);
 
       auto dev_ptr = std::make_shared<rs2::device>(dev);
       std::string connected_device_serial_number =
@@ -203,7 +203,7 @@ public:
                        << deviceList.size() << "\n";
 
     for (auto const &dev : deviceList) {
-      device::printDeviceInfo(dev);
+      device_funcs_.printDeviceInfo(dev);
 
       auto dev_ptr = std::make_shared<rs2::device>(dev);
       std::string connected_device_serial_number =
