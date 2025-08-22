@@ -10,7 +10,7 @@ std::vector<std::uint8_t> encodeDepthRAW(const std::uint8_t *data,
   if (data == nullptr) {
     throw std::runtime_error("[encodeDepthRAW] data pointer is null");
   }
-  
+
   if (width == 0 || height == 0) {
     throw std::runtime_error("[encodeDepthRAW] invalid dimensions");
   }
@@ -29,7 +29,7 @@ viam::sdk::Camera::raw_image encodeDepthRAWToResponse(const std::uint8_t *data,
   if (data == nullptr) {
     throw std::runtime_error("[encodeDepthRAWToResponse] data pointer is null");
   }
-  
+
   if (width == 0 || height == 0) {
     throw std::runtime_error("[encodeDepthRAWToResponse] invalid dimensions");
   }
@@ -45,7 +45,7 @@ std::vector<std::uint8_t> encodeJPEG(const std::uint8_t *data, const uint width,
   if (data == nullptr) {
     throw std::runtime_error("[encodeJPEG] data pointer is null");
   }
-  
+
   if (width == 0 || height == 0) {
     throw std::runtime_error("[encodeJPEG] invalid dimensions");
   }
@@ -82,7 +82,7 @@ viam::sdk::Camera::raw_image encodeJPEGToResponse(const std::uint8_t *data,
   if (data == nullptr) {
     throw std::runtime_error("[encodeJPEGToResponse] data pointer is null");
   }
-  
+
   if (width == 0 || height == 0) {
     throw std::runtime_error("[encodeJPEGToResponse] invalid dimensions");
   }
@@ -102,8 +102,8 @@ encodeVideoFrameToResponse(rs2::video_frame const &frame) {
 
   auto stream_profile = frame.get_profile().as<rs2::video_stream_profile>();
   if (not stream_profile) {
-    throw std::runtime_error(
-        "[encodeVideoFrameToResponse] frame profile is not a video stream profile");
+    throw std::runtime_error("[encodeVideoFrameToResponse] frame profile is "
+                             "not a video stream profile");
   }
   return encodeJPEGToResponse(data, stream_profile.width(),
                               stream_profile.height());
@@ -118,8 +118,8 @@ encodeDepthFrameToResponse(rs2::depth_frame const &frame) {
 
   auto stream_profile = frame.get_profile().as<rs2::video_stream_profile>();
   if (not stream_profile) {
-    throw std::runtime_error(
-        "[encodeDepthFrameToResponse] frame profile is not a video stream profile");
+    throw std::runtime_error("[encodeDepthFrameToResponse] frame profile is "
+                             "not a video stream profile");
   }
   return encodeDepthRAWToResponse(data, stream_profile.width(),
                                   stream_profile.height());

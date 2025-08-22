@@ -12,7 +12,8 @@
 namespace vsdk = ::viam::sdk;
 
 std::vector<std::shared_ptr<vsdk::ModelRegistration>>
-create_all_model_registrations(std::shared_ptr<realsense::RealsenseContext<rs2::context>> ctx) {
+create_all_model_registrations(
+    std::shared_ptr<realsense::RealsenseContext<rs2::context>> ctx) {
   std::vector<std::shared_ptr<vsdk::ModelRegistration>> registrations;
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(

@@ -8,11 +8,11 @@
 
 #include <librealsense2/rs.hpp>
 
-#include <string>
-#include <vector>
 #include <functional>
-#include <unordered_set>
 #include <memory>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 #include <boost/thread/synchronized_value.hpp>
 namespace realsense {
