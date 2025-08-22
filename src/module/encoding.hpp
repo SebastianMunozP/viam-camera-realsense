@@ -18,16 +18,11 @@ viam::sdk::Camera::raw_image encodeJPEGToResponse(const std::uint8_t *data,
                                                   const uint width,
                                                   const uint height);
 
-template <typename FrameT>
-viam::sdk::Camera::raw_image encodeFrameToResponse(FrameT const &frame);
-
-template <>
 viam::sdk::Camera::raw_image
-encodeFrameToResponse<rs2::video_frame>(rs2::video_frame const &frame);
+encodeVideoFrameToResponse(rs2::video_frame const &frame);
 
-template <>
 viam::sdk::Camera::raw_image
-encodeFrameToResponse<rs2::depth_frame>(rs2::depth_frame const &frame);
+encodeDepthFrameToResponse(rs2::depth_frame const &frame);
 
 std::vector<std::uint8_t>
 encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data);

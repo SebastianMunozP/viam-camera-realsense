@@ -57,5 +57,5 @@ add_test(NAME RealsenseTests COMMAND realsense_tests2)
 add_test(NAME TimeTests COMMAND time_tests2)
 
 # Optional: Create a meta-target to build all tests
-add_custom_target(all_tests)
-add_dependencies(all_tests device_tests2 encoding_tests2 realsense_tests2 time_tests2)
+add_custom_target(test2_all)
+add_dependencies(test2_all device_tests2 encoding_tests2 realsense_tests2 time_tests2)

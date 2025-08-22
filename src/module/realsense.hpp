@@ -240,13 +240,13 @@ public:
       }
 
       BOOST_ASSERT_MSG(fs->get_color_frame(),
-                       "[encodeFrameToResponse] color frame is invalid");
+                       "[get_image] color frame is invalid");
       time::throwIfTooOld(time::getNowMs(),
                           fs->get_color_frame().get_timestamp(), maxFrameAgeMs,
                           "no recent color frame: check USB connection");
 
       VIAM_SDK_LOG(debug) << "[get_image] end";
-      return encoding::encodeFrameToResponse(fs->get_color_frame());
+      return encoding::encodeVideoFrameToResponse(fs->get_color_frame());
     } catch (const std::exception &e) {
       VIAM_SDK_LOG(error) << "[get_image] error: " << e.what();
       throw std::runtime_error("failed to create image: " +
@@ -267,8 +267,8 @@ public:
       auto depth = fs->get_depth_frame();
 
       viam::sdk::Camera::image_collection response;
-      response.images.emplace_back(encoding::encodeFrameToResponse(color));
-      response.images.emplace_back(encoding::encodeFrameToResponse(depth));
+      response.images.emplace_back(encoding::encodeVideoFrameToResponse(color));
+      response.images.emplace_back(encoding::encodeDepthFrameToResponse(depth));
 
       double colorTS = color.get_timestamp();
       double depthTS = depth.get_timestamp();

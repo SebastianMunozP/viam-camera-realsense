@@ -7,6 +7,13 @@ namespace encoding {
 std::vector<std::uint8_t> encodeDepthRAW(const std::uint8_t *data,
                                          const uint64_t width,
                                          const uint64_t height) {
+  if (data == nullptr) {
+    throw std::runtime_error("[encodeDepthRAW] data pointer is null");
+  }
+  
+  if (width == 0 || height == 0) {
+    throw std::runtime_error("[encodeDepthRAW] invalid dimensions");
+  }
   viam::sdk::Camera::depth_map m =
       xt::xarray<uint16_t>::from_shape({height, width});
   std::copy(reinterpret_cast<const uint16_t *>(data),
@@ -19,6 +26,13 @@ std::vector<std::uint8_t> encodeDepthRAW(const std::uint8_t *data,
 viam::sdk::Camera::raw_image encodeDepthRAWToResponse(const std::uint8_t *data,
                                                       const uint width,
                                                       const uint height) {
+  if (data == nullptr) {
+    throw std::runtime_error("[encodeDepthRAWToResponse] data pointer is null");
+  }
+  
+  if (width == 0 || height == 0) {
+    throw std::runtime_error("[encodeDepthRAWToResponse] invalid dimensions");
+  }
   viam::sdk::Camera::raw_image response{};
   response.source_name = "depth";
   response.mime_type = "image/vnd.viam.dep";
@@ -28,6 +42,13 @@ viam::sdk::Camera::raw_image encodeDepthRAWToResponse(const std::uint8_t *data,
 
 std::vector<std::uint8_t> encodeJPEG(const std::uint8_t *data, const uint width,
                                      const uint height) {
+  if (data == nullptr) {
+    throw std::runtime_error("[encodeJPEG] data pointer is null");
+  }
+  
+  if (width == 0 || height == 0) {
+    throw std::runtime_error("[encodeJPEG] invalid dimensions");
+  }
   std::uint8_t *encoded = nullptr;
   std::size_t encodedSize = 0;
   tjhandle handle = tjInitCompress();
@@ -51,53 +72,54 @@ std::vector<std::uint8_t> encodeJPEG(const std::uint8_t *data, const uint width,
   }
 
   std::vector<std::uint8_t> output(encoded, encoded + encodedSize);
+  tjFree(encoded); // Free the compressed data
   return output;
 }
 
 viam::sdk::Camera::raw_image encodeJPEGToResponse(const std::uint8_t *data,
                                                   const uint width,
                                                   const uint height) {
+  if (data == nullptr) {
+    throw std::runtime_error("[encodeJPEGToResponse] data pointer is null");
+  }
+  
+  if (width == 0 || height == 0) {
+    throw std::runtime_error("[encodeJPEGToResponse] invalid dimensions");
+  }
   viam::sdk::Camera::raw_image response;
   response.source_name = "color";
   response.mime_type = "image/jpeg";
   response.bytes = encodeJPEG(data, width, height);
   return response;
 }
-// Template specializations
-template <typename FrameT>
-viam::sdk::Camera::raw_image encodeFrameToResponse(FrameT const &frame) {
-  VIAM_SDK_LOG(error) << "[encodeFrameToResponse] unsupported frame type";
-  return {};
-}
-template <>
+
 viam::sdk::Camera::raw_image
-encodeFrameToResponse<rs2::video_frame>(rs2::video_frame const &frame) {
+encodeVideoFrameToResponse(rs2::video_frame const &frame) {
   auto data = reinterpret_cast<const std::uint8_t *>(frame.get_data());
   if (data == nullptr) {
-    throw std::runtime_error("[encodeFrameToResponse] frame data is null");
+    throw std::runtime_error("[encodeVideoFrameToResponse] frame data is null");
   }
 
   auto stream_profile = frame.get_profile().as<rs2::video_stream_profile>();
   if (not stream_profile) {
     throw std::runtime_error(
-        "[encodeFrameToResponse] frame profile is not a video stream profile");
+        "[encodeVideoFrameToResponse] frame profile is not a video stream profile");
   }
   return encodeJPEGToResponse(data, stream_profile.width(),
                               stream_profile.height());
 }
 
-template <>
 viam::sdk::Camera::raw_image
-encodeFrameToResponse<rs2::depth_frame>(rs2::depth_frame const &frame) {
+encodeDepthFrameToResponse(rs2::depth_frame const &frame) {
   auto data = reinterpret_cast<const std::uint8_t *>(frame.get_data());
   if (data == nullptr) {
-    throw std::runtime_error("[encodeFrameToResponse] frame data is null");
+    throw std::runtime_error("[encodeDepthFrameToResponse] frame data is null");
   }
 
   auto stream_profile = frame.get_profile().as<rs2::video_stream_profile>();
   if (not stream_profile) {
     throw std::runtime_error(
-        "[encodeFrameToResponse] frame profile is not a video stream profile");
+        "[encodeDepthFrameToResponse] frame profile is not a video stream profile");
   }
   return encodeDepthRAWToResponse(data, stream_profile.width(),
                                   stream_profile.height());
