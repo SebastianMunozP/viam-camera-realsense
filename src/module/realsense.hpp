@@ -512,7 +512,7 @@ private:
         .createDevice =
             [](const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
                const std::unordered_set<std::string> &supported_models) {
-              return device::createDevice(serial, dev_ptr, supported_models);
+              return device::createDevice<device::ViamRSDevice>(serial, dev_ptr, supported_models);
             },
         .startDevice =
             [](const std::string &serial,

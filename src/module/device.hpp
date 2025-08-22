@@ -1,9 +1,15 @@
 #pragma once
 
+#include "time.hpp"
+
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_set>
+#include <optional>
+
+#include <viam/sdk/log/logging.hpp>
 
 #include <boost/thread/synchronized_value.hpp>
 #include <librealsense2/rs.hpp>
@@ -40,34 +46,52 @@ struct ViamRSDevice {
   std::shared_ptr<rs2::align> align;
   std::shared_ptr<rs2::config> config;
 };
+/********************** UTILITIES ************************/
+template <typename DeviceT>
+void printDeviceInfo(DeviceT const &dev);
 
-// Utilities
-void printDeviceInfo(const rs2::device &dev);
+
+/********************** CALLBACKS ************************/
+template <typename EventInformationT, typename ViamDeviceT, typename FrameSetT>
 void deviceChangedCallback(
-    rs2::event_information &info,
+    EventInformationT &info,
     std::unordered_set<std::string> const &supported_camera_models,
-    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &device,
+    boost::synchronized_value<std::shared_ptr<ViamDeviceT>> &device,
     std::string const &required_serial_number,
-    boost::synchronized_value<std::shared_ptr<rs2::frameset>>
+    boost::synchronized_value<std::shared_ptr<FrameSetT>>
         &frame_set_storage,
     std::uint64_t maxFrameAgeMs);
 
-// Streaming lifecycle
-void startDevice(
-    std::string const &serialNumber,
-    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> dev_ptr,
-    boost::synchronized_value<std::shared_ptr<rs2::frameset>>
-        &frame_set_storage,
-    std::uint64_t maxFrameAgeMs);
-bool stopDevice(
-    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) noexcept;
+template <typename FrameT, typename FrameSetT>
+void frameCallback(
+    FrameT const &frame, std::uint64_t const maxFrameAgeMs,
+    boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_);
 
-// Device lifecycle
-boost::synchronized_value<std::shared_ptr<ViamRSDevice>>
-createDevice(std::string const &serial_number, std::shared_ptr<rs2::device> dev,
+
+/********************** DEVICE LIFECYCLE ************************/
+template <typename ViamDeviceT = ViamRSDevice, typename DeviceT = rs2::device, typename ConfigT = rs2::config, typename ColorSensorT = rs2::color_sensor, typename DepthSensorT = rs2::depth_sensor, typename VideoStreamProfileT = rs2::video_stream_profile>
+boost::synchronized_value<std::shared_ptr<ViamDeviceT>>
+createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
              std::unordered_set<std::string> const &supported_camera_models);
+
+template <typename ViamDeviceT>
 bool destroyDevice(
-    boost::synchronized_value<std::shared_ptr<ViamRSDevice>> &dev) noexcept;
+    boost::synchronized_value<std::shared_ptr<ViamDeviceT>> &dev) noexcept;
+
+
+/********************** STREAMING LIFECYCLE ************************/
+template <typename ViamDeviceT, typename FrameSetT>
+void startDevice(std::string const &serialNumber,
+                 boost::synchronized_value<std::shared_ptr<ViamDeviceT>> dev,
+                 boost::synchronized_value<std::shared_ptr<FrameSetT>>
+                     &frame_set_storage,
+                 std::uint64_t const maxFrameAgeMs);
+
+template <typename ViamDeviceT>
+bool stopDevice(
+    boost::synchronized_value<std::shared_ptr<ViamDeviceT>> &dev) noexcept;
 
 } // namespace device
 } // namespace realsense
+
+#include "device_impl.hpp"
