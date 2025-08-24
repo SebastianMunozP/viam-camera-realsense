@@ -5,9 +5,9 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_set>
-#include <optional>
 
 #include <viam/sdk/log/logging.hpp>
 
@@ -18,28 +18,26 @@ namespace realsense {
 namespace device {
 
 /********************** UTILITIES ************************/
-template<typename DeviceT>
+template <typename DeviceT>
 std::optional<std::string> getCameraModel(std::shared_ptr<DeviceT> dev) {
-    if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
-        return std::nullopt;
-    }
-    std::string camera_info = dev->get_info(RS2_CAMERA_INFO_NAME);
-    // Model is the 3rd word in this string
-    std::istringstream iss(camera_info);
-    std::string word;
-    int word_count = 0;
-    while (iss >> word) {
-        word_count++;
-        if (word_count == 3) {
-            return word;
-        }
-    }
+  if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
     return std::nullopt;
+  }
+  std::string camera_info = dev->get_info(RS2_CAMERA_INFO_NAME);
+  // Model is the 3rd word in this string
+  std::istringstream iss(camera_info);
+  std::string word;
+  int word_count = 0;
+  while (iss >> word) {
+    word_count++;
+    if (word_count == 3) {
+      return word;
+    }
+  }
+  return std::nullopt;
 }
 
-
-template <typename DeviceT>
-void printDeviceInfo(DeviceT const &dev) {
+template <typename DeviceT> void printDeviceInfo(DeviceT const &dev) {
   std::stringstream info;
   if (dev.supports(RS2_CAMERA_INFO_NAME)) {
     info << "DeviceInfo:\n"
@@ -158,8 +156,7 @@ void deviceChangedCallback(
     std::unordered_set<std::string> const &supported_camera_models,
     boost::synchronized_value<std::shared_ptr<ViamDeviceT>> &device,
     std::string const &required_serial_number,
-    boost::synchronized_value<std::shared_ptr<FrameSetT>>
-        &frame_set_storage,
+    boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_storage,
     std::uint64_t maxFrameAgeMs) {
   std::cout << "[deviceChangedCallback] Device connection status changed"
             << std::endl;
@@ -186,7 +183,9 @@ void deviceChangedCallback(
       if (connected_device_serial_number == required_serial_number) {
         std::cerr << "[deviceChangedCallback] New device added: "
                   << connected_device_serial_number << std::endl;
-        auto added_device_ptr = std::make_shared<std::decay_t<decltype(added_device)>>(added_device);
+        auto added_device_ptr =
+            std::make_shared<std::decay_t<decltype(added_device)>>(
+                added_device);
         device = createDevice(connected_device_serial_number, added_device_ptr,
                               supported_camera_models);
         startDevice(connected_device_serial_number, device, frame_set_storage,
@@ -200,9 +199,6 @@ void deviceChangedCallback(
               << e.what() << std::endl;
   }
 }
-
-
-
 
 /************************ STREAM PROFILES ************************/
 
@@ -221,47 +217,48 @@ bool checkIfMatchingColorDepthProfiles(
 }
 
 // create a config for software depth-to-color alignment
-template<typename DeviceT, typename ConfigT, typename ColorSensorT, typename DepthSensorT, typename VideoStreamProfileT>
+template <typename DeviceT, typename ConfigT, typename ColorSensorT,
+          typename DepthSensorT, typename VideoStreamProfileT>
 std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev) {
-    auto cfg = std::make_shared<ConfigT>();
-    
-    // Query all sensors for the device
-    auto sensors = dev->query_sensors();
+  auto cfg = std::make_shared<ConfigT>();
 
-    typename decltype(sensors)::value_type color_sensor;
-    typename decltype(sensors)::value_type depth_sensor;
-    for (auto &s : sensors) {
-        if (s.template is<ColorSensorT>())
-            color_sensor = s;
-        if (s.template is<DepthSensorT>())
-            depth_sensor = s;
+  // Query all sensors for the device
+  auto sensors = dev->query_sensors();
+
+  typename decltype(sensors)::value_type color_sensor;
+  typename decltype(sensors)::value_type depth_sensor;
+  for (auto &s : sensors) {
+    if (s.template is<ColorSensorT>())
+      color_sensor = s;
+    if (s.template is<DepthSensorT>())
+      depth_sensor = s;
+  }
+
+  // Get stream profiles
+  auto color_profiles = color_sensor.get_stream_profiles();
+  auto depth_profiles = depth_sensor.get_stream_profiles();
+
+  // Find matching profiles
+  for (auto &cp : color_profiles) {
+    auto csp = cp.template as<VideoStreamProfileT>();
+    if (csp.format() != RS2_FORMAT_RGB8) {
+      continue;
     }
-    
-    // Get stream profiles
-    auto color_profiles = color_sensor.get_stream_profiles();
-    auto depth_profiles = depth_sensor.get_stream_profiles();
-    
-    // Find matching profiles
-    for (auto &cp : color_profiles) {
-        auto csp = cp.template as<VideoStreamProfileT>();
-        if (csp.format() != RS2_FORMAT_RGB8) {
-            continue;
-        }
-        for (auto &dp : depth_profiles) {
-            auto dsp = dp.template as<VideoStreamProfileT>();
-            if (dsp.format() != RS2_FORMAT_Z16) {
-                continue;
-            }
-            if (checkIfMatchingColorDepthProfiles(csp, dsp)) {
-                cfg->enable_stream(RS2_STREAM_COLOR, csp.stream_index(), 
-                                 csp.width(), csp.height(), csp.format(), csp.fps());
-                cfg->enable_stream(RS2_STREAM_DEPTH, dsp.stream_index(), 
-                                 dsp.width(), dsp.height(), dsp.format(), dsp.fps());
-                return cfg;
-            }
-        }
+    for (auto &dp : depth_profiles) {
+      auto dsp = dp.template as<VideoStreamProfileT>();
+      if (dsp.format() != RS2_FORMAT_Z16) {
+        continue;
+      }
+      if (checkIfMatchingColorDepthProfiles(csp, dsp)) {
+        cfg->enable_stream(RS2_STREAM_COLOR, csp.stream_index(), csp.width(),
+                           csp.height(), csp.format(), csp.fps());
+        cfg->enable_stream(RS2_STREAM_DEPTH, dsp.stream_index(), dsp.width(),
+                           dsp.height(), dsp.format(), dsp.fps());
+        return cfg;
+      }
     }
-    return nullptr;
+  }
+  return nullptr;
 }
 
 /********************** DEVICE LIFECYCLE ************************/
@@ -308,7 +305,9 @@ bool destroyDevice(
   return true;
 }
 
-template <typename ViamDeviceT, typename DeviceT, typename ConfigT, typename ColorSensorT, typename DepthSensorT, typename VideoStreamProfileT>
+template <typename ViamDeviceT, typename DeviceT, typename ConfigT,
+          typename ColorSensorT, typename DepthSensorT,
+          typename VideoStreamProfileT>
 boost::synchronized_value<std::shared_ptr<ViamDeviceT>>
 createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
              std::unordered_set<std::string> const &supported_camera_models) {
@@ -335,7 +334,8 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
                        << *camera_model;
   }
 
-  auto config = createSwD2CAlignConfig<DeviceT, ConfigT, ColorSensorT, DepthSensorT, VideoStreamProfileT>(dev);
+  auto config = createSwD2CAlignConfig<DeviceT, ConfigT, ColorSensorT,
+                                       DepthSensorT, VideoStreamProfileT>(dev);
   if (config == nullptr) {
     VIAM_SDK_LOG(error)
         << "Current device does not support software depth-to-color "
@@ -347,21 +347,21 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
   my_dev->device = dev;
   my_dev->serial_number = serial_number;
   my_dev->point_cloud_filter = std::make_shared<PointCloudFilter>();
-  my_dev->align = std::make_shared<std::decay_t<decltype(*my_dev->align)>>(RS2_STREAM_COLOR);
+  my_dev->align = std::make_shared<std::decay_t<decltype(*my_dev->align)>>(
+      RS2_STREAM_COLOR);
   my_dev->config = config;
 
   VIAM_SDK_LOG(info) << "[createDevice] created " << serial_number;
   return my_dev;
 }
 
-
 /********************** STREAMING LIFECYCLE ************************/
 template <typename ViamDeviceT, typename FrameSetT>
-void startDevice(std::string const &serialNumber,
-                 boost::synchronized_value<std::shared_ptr<ViamDeviceT>> dev,
-                 boost::synchronized_value<std::shared_ptr<FrameSetT>>
-                     &frame_set_storage,
-                 std::uint64_t const maxFrameAgeMs) {
+void startDevice(
+    std::string const &serialNumber,
+    boost::synchronized_value<std::shared_ptr<ViamDeviceT>> dev,
+    boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_storage,
+    std::uint64_t const maxFrameAgeMs) {
   VIAM_SDK_LOG(info) << "[startDevice] starting device " << serialNumber;
   std::shared_ptr<ViamRSDevice> dev_ptr = *dev;
   if (dev_ptr->started) {
@@ -372,10 +372,10 @@ void startDevice(std::string const &serialNumber,
   }
 
   dev_ptr->config->enable_device(serialNumber);
-  dev_ptr->pipe->start(*dev_ptr->config, [maxFrameAgeMs, &frame_set_storage](
-                                             auto const &frame) {
-    frameCallback(frame, maxFrameAgeMs, frame_set_storage);
-  });
+  dev_ptr->pipe->start(*dev_ptr->config,
+                       [maxFrameAgeMs, &frame_set_storage](auto const &frame) {
+                         frameCallback(frame, maxFrameAgeMs, frame_set_storage);
+                       });
   dev_ptr->started = true;
   VIAM_SDK_LOG(info) << "[startDevice]  device started " << serialNumber;
 }
@@ -409,5 +409,5 @@ bool stopDevice(
   }
   return false;
 }
-}
-}
+} // namespace device
+} // namespace realsense
