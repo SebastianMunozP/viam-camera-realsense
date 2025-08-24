@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
-#include "encoding.hpp"
+#include "module/encoding.hpp"
 #include <viam/sdk/components/camera.hpp>
 
 #include <librealsense2/rs.hpp>

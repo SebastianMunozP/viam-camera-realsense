@@ -113,8 +113,6 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
         target_compile_options(viamrealsense2 PRIVATE /arch:SSE2)
     endif()
 endif()
-enable_testing()
-add_subdirectory(test2)
 
 add_executable(viam-camera-realsense2 src/module/main.cpp)
 target_link_libraries(viam-camera-realsense2 PRIVATE viamrealsense2)
