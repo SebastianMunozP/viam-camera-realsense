@@ -15,13 +15,14 @@ namespace vsdk = ::viam::sdk;
 std::vector<std::shared_ptr<vsdk::ModelRegistration>>
 create_all_model_registrations(std::shared_ptr<rs2::context> ctx) {
   std::vector<std::shared_ptr<vsdk::ModelRegistration>> registrations;
+  auto realsense_ctx =
+      std::make_shared<realsense::RealsenseContext<rs2::context>>(ctx);
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(
       vsdk::API::get<vsdk::Camera>(), realsense::Realsense<rs2::context>::model,
-      [ctx](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
+      [realsense_ctx](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
         return std::make_unique<realsense::Realsense<rs2::context>>(
-            std::move(deps), std::move(config),
-            std::make_shared<realsense::RealsenseContext<rs2::context>>(ctx));
+            std::move(deps), std::move(config), realsense_ctx);
       },
       realsense::Realsense<
           realsense::RealsenseContext<rs2::context>>::validate));
