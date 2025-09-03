@@ -290,7 +290,6 @@ public:
                   const viam::sdk::ProtoStruct &extra) override {
     try {
       VIAM_SDK_LOG(debug) << "[get_point_cloud] start";
-      std::string serial_number = config_->serial_number;
       std::shared_ptr<rs2::frameset> fs = *latest_frameset_;
       if (not fs) {
         VIAM_SDK_LOG(error) << "[get_point_cloud] no frameset available";

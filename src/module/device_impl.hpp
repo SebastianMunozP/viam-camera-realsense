@@ -118,18 +118,19 @@ void frameCallback(
   // frameset
   auto frameset = std::make_shared<FrameSetT>(frame.template as<FrameSetT>());
   if (not frameset or frameset->size() != 2) {
-    std::cerr << "got count other than 2: " << frameset->size() << std::endl;
+    std::cerr << "[frame_callback] got count other than 2: " << frameset->size()
+              << std::endl;
     return;
   }
   auto color_frame = frameset->get_color_frame();
   if (not color_frame) {
-    std::cerr << "no color frame" << std::endl;
+    std::cerr << "[frame_callback] no color frame" << std::endl;
     return;
   }
 
   auto depth_frame = frameset->get_depth_frame();
   if (not depth_frame) {
-    std::cerr << "no depth frame" << std::endl;
+    std::cerr << "[frame_callback] no depth frame" << std::endl;
     return;
   }
 
@@ -200,10 +201,14 @@ std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev) {
         continue;
       }
       if (checkIfMatchingColorDepthProfiles(csp, dsp)) {
+        VIAM_SDK_LOG(info) << "[createSwD2CAlignConfig] Found matching color "
+                              "and depth stream profiles";
         cfg->enable_stream(RS2_STREAM_COLOR, csp.stream_index(), csp.width(),
                            csp.height(), csp.format(), csp.fps());
         cfg->enable_stream(RS2_STREAM_DEPTH, dsp.stream_index(), dsp.width(),
                            dsp.height(), dsp.format(), dsp.fps());
+        VIAM_SDK_LOG(info)
+            << "[createSwD2CAlignConfig] enabled color and depth streams";
         return cfg;
       }
     }
@@ -266,30 +271,29 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
   auto camera_model = getCameraModel(dev);
   if (not camera_model) {
     VIAM_SDK_LOG(error)
-        << "[registerDevice] Failed to register camera serial number: "
+        << "[createDevice] Failed to register camera serial number: "
         << serial_number << " since no camera model found";
     return boost::synchronized_value<std::shared_ptr<ViamDeviceT>>(nullptr);
   }
-  VIAM_SDK_LOG(info) << "[registerDevice] Found camera model: "
-                     << *camera_model;
+  VIAM_SDK_LOG(info) << "[createDevice] Found camera model: " << *camera_model;
   if (supported_camera_models.count(*camera_model) == 0) {
     VIAM_SDK_LOG(error)
-        << "[registerDevice] Failed to register camera serial number: "
+        << "[createDevice] Failed to register camera serial number: "
         << serial_number
         << " since camera model is not D435 or D435i, camera model: "
         << *camera_model;
     return boost::synchronized_value<std::shared_ptr<ViamDeviceT>>(nullptr);
   } else {
-    VIAM_SDK_LOG(info) << "[registerDevice] Camera model is supported: "
+    VIAM_SDK_LOG(info) << "[createDevice] Camera model is supported: "
                        << *camera_model;
   }
 
   auto config = createSwD2CAlignConfig<DeviceT, ConfigT, ColorSensorT,
                                        DepthSensorT, VideoStreamProfileT>(dev);
   if (config == nullptr) {
-    VIAM_SDK_LOG(error)
-        << "Current device does not support software depth-to-color "
-           "alignment.";
+    VIAM_SDK_LOG(error) << "[createDevice] Current device does not support "
+                           "software depth-to-color "
+                           "alignment.";
     return boost::synchronized_value<std::shared_ptr<ViamDeviceT>>(nullptr);
   }
   std::shared_ptr<ViamDeviceT> my_dev = std::make_shared<ViamDeviceT>();
