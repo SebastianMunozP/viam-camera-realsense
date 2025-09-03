@@ -32,18 +32,25 @@ public:
     int devCount = deviceList.size();
 
     if (devCount == 0) {
-      VIAM_SDK_LOG(warn) << "No Realsense devices found during discovery";
+      VIAM_SDK_LOG(warn)
+          << "[discover_resources] No Realsense devices found during discovery";
       return {};
     }
 
-    VIAM_SDK_LOG(info) << "Discovered " << devCount << " devices";
+    VIAM_SDK_LOG(info) << "[discover_resources] Discovered " << devCount
+                       << " devices";
 
     for (auto const &dev : deviceList) {
       if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
         std::string serial_number = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
         viam::sdk::ProtoStruct attributes;
-        attributes.emplace("serial_number", serial_number);
+        attributes["serial_number"] = serial_number;
+
+        viam::sdk::ProtoList sensors;
+        sensors.push_back("color");
+        sensors.push_back("depth");
+        attributes["sensors"] = sensors;
 
         std::ostringstream name;
         name << "realsense-" << serial_number;
