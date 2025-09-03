@@ -31,7 +31,8 @@ create_all_model_registrations(std::shared_ptr<rs2::context> ctx) {
       vsdk::API::get<vsdk::Discovery>(),
       realsense::discovery::RealsenseDiscovery<rs2::context>::model,
       [ctx](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
-        return std::make_unique<realsense::discovery::RealsenseDiscovery<rs2::context>>(
+        return std::make_unique<
+            realsense::discovery::RealsenseDiscovery<rs2::context>>(
             std::move(deps), std::move(config), ctx);
       }));
 

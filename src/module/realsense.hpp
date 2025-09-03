@@ -439,27 +439,24 @@ public:
     VIAM_SDK_LOG(info) << "[validate] Validating that serial_number is present";
     auto attrs = cfg.attributes();
 
-    if (not attrs.count("serial_number")) {
-      VIAM_SDK_LOG(error)
-          << "[validate] Missing required attribute: serial_number";
-      throw std::invalid_argument("serial_number is a required argument");
-    }
+    if (attrs.count("serial_number")) {
 
-    VIAM_SDK_LOG(info)
-        << "[validate] Validating that serial_number is a string";
-    if (not attrs["serial_number"].is_a<std::string>()) {
-      VIAM_SDK_LOG(error) << "[validate] serial_number is not a string";
-      throw std::invalid_argument("serial_number must be a string");
-    }
+      VIAM_SDK_LOG(info)
+          << "[validate] Validating that serial_number is a string";
+      if (not attrs["serial_number"].is_a<std::string>()) {
+        VIAM_SDK_LOG(error) << "[validate] serial_number is not a string";
+        throw std::invalid_argument("serial_number must be a string");
+      }
 
-    VIAM_SDK_LOG(info)
-        << "[validate] Validating that serial_number is not empty";
-    // We already stablished this is a string, so it's safe to call this
-    std::string const serial =
-        attrs["serial_number"].get_unchecked<std::string>();
-    if (serial.empty()) {
-      VIAM_SDK_LOG(error) << "[validate] serial_number is empty";
-      throw std::invalid_argument("serial_number must be a non-empty string");
+      VIAM_SDK_LOG(info)
+          << "[validate] Validating that serial_number is not empty";
+      // We already stablished this is a string, so it's safe to call this
+      std::string const serial =
+          attrs["serial_number"].get_unchecked<std::string>();
+      if (serial.empty()) {
+        VIAM_SDK_LOG(error) << "[validate] serial_number is empty";
+        throw std::invalid_argument("serial_number must be a non-empty string");
+      }
     }
     // If we reach here, the serial number is valid
     return {};

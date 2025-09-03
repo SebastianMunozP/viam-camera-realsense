@@ -1,10 +1,10 @@
 default: viam-camera-realsense
 
-format: src/*.cpp src/*.hpp test/*.cpp
-	ls src/*.cpp src/*.hpp test/*.cpp | xargs clang-format -i --style="{BasedOnStyle: Google, IndentWidth: 4, ColumnLimit: 100}"
+lint:
+	./bin/run-clang-format.sh
 
-build:
-	mkdir build
+build: lint
+	mkdir -p build
 
 build/build.ninja: build CMakeLists.txt
 	cd build && cmake -G Ninja -DENABLE_SANITIZER=$(SANITIZE) -DCMAKE_BUILD_TYPE=RelWithDebInfo .. 
@@ -27,6 +27,8 @@ clean-all: clean
 
 test: build/build.ninja
 	cd build && ninja -j 4 test/all && ctest --output-on-failure
+
+.PHONY: build lint
 
 # Docker
 BUILD_CMD = docker buildx build --pull $(BUILD_PUSH) --force-rm --no-cache --build-arg MAIN_TAG=$(MAIN_TAG) --build-arg BASE_TAG=$(BUILD_TAG) --platform linux/$(BUILD_TAG) -f $(BUILD_FILE) -t '$(MAIN_TAG):$(BUILD_TAG)' .
@@ -78,11 +80,5 @@ appimage-arm64: viam-camera-realsense
 appimage-amd64: export OUTPUT_NAME = viam-camera-realsense
 appimage-amd64: export ARCH = x86_64
 appimage-amd64: viam-camera-realsense
-	$(call BUILD_APPIMAGE,$(OUTPUT_NAME),$(ARCH))
-	cp ./packaging/appimages/$(OUTPUT_NAME)-*-$(ARCH).AppImage ./packaging/appimages/deploy/
-
-appimage-amd64-rs2: export OUTPUT_NAME = viam-camera-realsense2
-appimage-amd64-rs2: export ARCH = x86_64
-appimage-amd64-rs2: viam-camera-realsense2
 	$(call BUILD_APPIMAGE,$(OUTPUT_NAME),$(ARCH))
 	cp ./packaging/appimages/$(OUTPUT_NAME)-*-$(ARCH).AppImage ./packaging/appimages/deploy/
