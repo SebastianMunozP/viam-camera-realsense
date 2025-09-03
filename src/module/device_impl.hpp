@@ -150,56 +150,6 @@ void frameCallback(
   frame_set_ = frameset;
 }
 
-template <typename EventInformationT, typename ViamDeviceT, typename FrameSetT>
-void deviceChangedCallback(
-    EventInformationT &info,
-    std::unordered_set<std::string> const &supported_camera_models,
-    boost::synchronized_value<std::shared_ptr<ViamDeviceT>> &device,
-    std::string const &required_serial_number,
-    boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_storage,
-    std::uint64_t maxFrameAgeMs) {
-  std::cout << "[deviceChangedCallback] Device connection status changed"
-            << std::endl;
-  try {
-    std::shared_ptr<ViamDeviceT> current_device = *device;
-    if (current_device and info.was_removed(*current_device->device)) {
-      std::cerr << "[deviceChangedCallback] Device removed: "
-                << current_device->serial_number << std::endl;
-      device = nullptr;
-    }
-
-    // Handling added devices, if any
-    auto added_devices = info.get_new_devices();
-    std::cout << "[deviceChangedCallback] Amount of new devices detected: "
-              << added_devices.size() << std::endl;
-    std::cout << "[deviceChangedCallback] Required Serial Number: "
-              << required_serial_number << std::endl;
-    for (const auto &added_device : added_devices) {
-      std::string connected_device_serial_number =
-          added_device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-      std::cout << "[deviceChangedCallback] New device detected: "
-                << connected_device_serial_number << std::endl;
-
-      if (connected_device_serial_number == required_serial_number) {
-        std::cerr << "[deviceChangedCallback] New device added: "
-                  << connected_device_serial_number << std::endl;
-        auto added_device_ptr =
-            std::make_shared<std::decay_t<decltype(added_device)>>(
-                added_device);
-        device = createDevice(connected_device_serial_number, added_device_ptr,
-                              supported_camera_models);
-        startDevice(connected_device_serial_number, device, frame_set_storage,
-                    maxFrameAgeMs);
-        std::cout << "[deviceChangedCallback] Device Registered: "
-                  << required_serial_number << std::endl;
-      }
-    }
-  } catch (rs2::error &e) {
-    std::cerr << "[deviceChangedCallback] Error in deviceChangedCallback: "
-              << e.what() << std::endl;
-  }
-}
-
 /************************ STREAM PROFILES ************************/
 
 template <typename VideoStreamProfileT>

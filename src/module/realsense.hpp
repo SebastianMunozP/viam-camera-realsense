@@ -104,13 +104,6 @@ struct DeviceFunctions {
       boost::synchronized_value<std::shared_ptr<rs2::frameset>> &,
       std::uint64_t)>
       startDevice;
-  std::function<void(
-      rs2::event_information &, const std::unordered_set<std::string> &,
-      boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>> &,
-      const std::string &,
-      boost::synchronized_value<std::shared_ptr<rs2::frameset>> &,
-      std::uint64_t)>
-      deviceChangedCallback;
 };
 
 template <typename ContextT>
@@ -118,13 +111,18 @@ class Realsense final : public viam::sdk::Camera,
                         public viam::sdk::Reconfigurable {
 public:
   Realsense(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg,
-            std::shared_ptr<RealsenseContext<ContextT>> ctx)
-      : Realsense(deps, cfg, ctx, createDefaultDeviceFunctions()) {}
+            std::shared_ptr<RealsenseContext<ContextT>> ctx,
+            boost::synchronized_value<std::unordered_set<std::string>>
+                &assigned_serials)
+      : Realsense(deps, cfg, ctx, createDefaultDeviceFunctions(),
+                  assigned_serials) {}
   Realsense(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg,
             std::shared_ptr<RealsenseContext<ContextT>> ctx,
-            DeviceFunctions device_funcs)
+            DeviceFunctions device_funcs,
+            boost::synchronized_value<std::unordered_set<std::string>>
+                &assigned_serials)
       : Camera(cfg.name()), config_(configure(deps, cfg)), realsense_ctx_(ctx),
-        device_funcs_(device_funcs) {
+        device_funcs_(device_funcs), assigned_serials_(assigned_serials) {
 
     std::string requested_serial_number = config_->serial_number;
     VIAM_SDK_LOG(info) << "[constructor] start for resource "
@@ -132,53 +130,55 @@ public:
                        << requested_serial_number;
 
     realsense_ctx_->addInstance(this);
-    auto rs_ctx = realsense_ctx_->getRsContext();
     // This will the initial set of connected devices (i.e. the devices that
     // were connected before the callback was set)
-    auto deviceList = rs_ctx->query_devices();
-    VIAM_SDK_LOG(info) << "[constructor] Amount of connected devices: "
-                       << deviceList.size() << "\n";
-
-    for (auto const &dev : deviceList) {
-      device_funcs_.printDeviceInfo(dev);
-
-      auto dev_ptr = std::make_shared<rs2::device>(dev);
-      std::string connected_device_serial_number =
-          dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-      if (requested_serial_number.empty() or
-          requested_serial_number == connected_device_serial_number) {
-        config_->serial_number = connected_device_serial_number;
-        device_ = device_funcs_.createDevice(connected_device_serial_number,
-                                             dev_ptr, SUPPORTED_CAMERA_MODELS);
-        BOOST_ASSERT(device_ != nullptr);
-
-        device_funcs_.startDevice(connected_device_serial_number, device_,
-                                  latest_frameset_, maxFrameAgeMs);
-        VIAM_SDK_LOG(info) << "[constructor] Device Registered: "
-                           << requested_serial_number;
+    auto rs_ctx = realsense_ctx_->getRsContext();
+    auto device_list = rs_ctx->query_devices();
+    if (not assign_and_initialize_device(device_list)) {
+      if (not requested_serial_number.empty()) {
+        VIAM_SDK_LOG(error) << "[constructor] failed to start device "
+                            << requested_serial_number;
+        throw std::runtime_error("failed to start device " +
+                                 requested_serial_number);
+      } else {
+        VIAM_SDK_LOG(error) << "[constructor] failed to start a device";
+        throw std::runtime_error("failed to start a device");
       }
     }
+    camera_assigned_ = true;
 
     VIAM_SDK_LOG(info) << "Realsense constructor end "
                        << requested_serial_number;
   }
   ~Realsense() {
-    VIAM_SDK_LOG(info) << "Realsense destructor start "
-                       << config_->serial_number;
-    realsense_ctx_->removeInstance(this);
+    {
+      auto device_guard = device_.synchronize();
+      auto dev_ptr = *device_guard;
+      if (dev_ptr) {
+        VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
+                           << dev_ptr->serial_number;
+        assigned_serials_->erase(dev_ptr->serial_number);
+        realsense_ctx_->removeInstance(this);
+      }
+    }
 
+    // Now call stopDevice and destroyDevice (these will lock internally)
     device_funcs_.stopDevice(device_);
     device_funcs_.destroyDevice(device_);
-
-    VIAM_SDK_LOG(info) << "Realsense destructor end " << config_->serial_number;
+    VIAM_SDK_LOG(info) << "[destructor] Realsense destructor end";
   }
   void reconfigure(const viam::sdk::Dependencies &deps,
                    const viam::sdk::ResourceConfig &cfg) override {
     VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
+    auto device_guard = device_.synchronize();
+    auto dev_ptr = *device_guard;
     std::string prev_serial_number;
-    prev_serial_number = config_->serial_number;
-    VIAM_SDK_LOG(info) << "[reconfigure] stopping device "
-                       << prev_serial_number;
+    if (dev_ptr) {
+      VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
+                         << dev_ptr->serial_number;
+      assigned_serials_->erase(dev_ptr->serial_number);
+      prev_serial_number = dev_ptr->serial_number;
+    }
     if (not device_funcs_.stopDevice(device_)) {
       VIAM_SDK_LOG(error) << "[reconfigure] failed to stop device "
                           << prev_serial_number;
@@ -190,37 +190,25 @@ public:
       throw std::runtime_error("failed to destroy device " +
                                prev_serial_number);
     }
+    camera_assigned_ = false;
 
     // Before modifying config and starting the new device, let's make sure the
     // new device is actually connected
     config_ = configure(deps, cfg);
-    std::string requested_serial_number = config_->serial_number;
-    VIAM_SDK_LOG(info) << "[reconfigure] starting device "
-                       << requested_serial_number;
-
-    // This will the initial set of connected devices (i.e. the devices that
-    // were connected before the callback was set)
-    auto deviceList = realsense_ctx_->getRsContext()->query_devices();
-    VIAM_SDK_LOG(info) << "[constructor] Number of connected devices: "
-                       << deviceList.size() << "\n";
-
-    for (auto const &dev : deviceList) {
-      device_funcs_.printDeviceInfo(dev);
-
-      auto dev_ptr = std::make_shared<rs2::device>(dev);
-      std::string connected_device_serial_number =
-          dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-      if (requested_serial_number == connected_device_serial_number) {
-        device_ = device_funcs_.createDevice(connected_device_serial_number,
-                                             dev_ptr, SUPPORTED_CAMERA_MODELS);
-        BOOST_ASSERT(device_ != nullptr);
-
-        device_funcs_.startDevice(connected_device_serial_number, device_,
-                                  latest_frameset_, maxFrameAgeMs);
-        VIAM_SDK_LOG(info) << "[reconfigure] Device Registered: "
-                           << requested_serial_number;
+    auto rs_ctx = realsense_ctx_->getRsContext();
+    auto device_list = rs_ctx->query_devices();
+    if (not assign_and_initialize_device(device_list)) {
+      if (not config_->serial_number.empty()) {
+        VIAM_SDK_LOG(error) << "[reconfigure] failed to start device "
+                            << config_->serial_number;
+        throw std::runtime_error("failed to start device " +
+                                 config_->serial_number);
+      } else {
+        VIAM_SDK_LOG(error) << "[reconfigure] failed to start a device";
+        throw std::runtime_error("failed to start a device");
       }
     }
+    camera_assigned_ = true;
     VIAM_SDK_LOG(info) << "[reconfigure] Realsense reconfigure end";
   }
   viam::sdk::ProtoStruct
@@ -470,26 +458,104 @@ public:
     VIAM_SDK_LOG(info) << "[handleDeviceChange] Processing for serial: "
                        << config_->serial_number;
 
-    device_funcs_.deviceChangedCallback(info, SUPPORTED_CAMERA_MODELS, device_,
-                                        config_->serial_number,
-                                        latest_frameset_, maxFrameAgeMs);
+    deviceChangedCallback(info);
   }
 
 private:
   boost::synchronized_value<RsResourceConfig> config_;
   boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>> device_;
   boost::synchronized_value<std::shared_ptr<rs2::frameset>> latest_frameset_;
+  boost::synchronized_value<std::unordered_set<std::string>> &assigned_serials_;
+  boost::synchronized_value<bool> camera_assigned_;
 
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<ContextT>> realsense_ctx_;
+
+  void deviceChangedCallback(rs2::event_information &info) {
+    std::cout << "[deviceChangedCallback] Device connection status changed"
+              << std::endl;
+    try {
+      std::string const required_serial_number = config_->serial_number;
+      std::shared_ptr<device::ViamRSDevice> current_device = *device_;
+      if (current_device and info.was_removed(*current_device->device)) {
+        std::cerr << "[deviceChangedCallback] Device removed: "
+                  << current_device->serial_number << std::endl;
+        assigned_serials_->erase(current_device->serial_number);
+        device_ = nullptr;
+        camera_assigned_ = false;
+      }
+
+      // Handling added devices, if any
+      auto added_devices = info.get_new_devices();
+      if (not camera_assigned_) {
+        if (assign_and_initialize_device(added_devices)) {
+          camera_assigned_ = true;
+          std::cout << "[deviceChangedCallback] Device assigned successfully";
+        } else {
+          std::cerr << "[deviceChangedCallback] No matching device found";
+        }
+      }
+    } catch (std::exception &e) {
+      std::cerr << "[deviceChangedCallback] Exception occurred: " << e.what()
+                << std::endl;
+    }
+  }
+
+  bool assign_and_initialize_device(rs2::device_list const &device_list) {
+    if (camera_assigned_) {
+      std::cerr << "[assign_and_initialize_device] Camera is already assigned"
+                << std::endl;
+      return true;
+    }
+    std::string requested_serial_number = config_->serial_number;
+    VIAM_SDK_LOG(info) << "[assign_and_initialize_device] starting device "
+                       << config_->serial_number;
+    // This will the initial set of connected devices (i.e. the devices that
+    // were connected before the callback was set)
+    VIAM_SDK_LOG(info)
+        << "[assign_and_initialize_device] Number of connected devices: "
+        << device_list.size() << "\n";
+
+    for (auto const &dev : device_list) {
+      device_funcs_.printDeviceInfo(dev);
+
+      auto dev_ptr = std::make_shared<rs2::device>(dev);
+      std::string connected_device_serial_number =
+          dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+
+      // Atomically check and insert serial number
+      {
+        auto serials_guard = assigned_serials_.synchronize();
+        if ((requested_serial_number.empty() &&
+             serials_guard->count(connected_device_serial_number) == 0) ||
+            (requested_serial_number == connected_device_serial_number)) {
+
+          serials_guard->insert(connected_device_serial_number);
+          device_ = device_funcs_.createDevice(
+              connected_device_serial_number, dev_ptr, SUPPORTED_CAMERA_MODELS);
+          BOOST_ASSERT(device_ != nullptr);
+
+          device_funcs_.startDevice(connected_device_serial_number, device_,
+                                    latest_frameset_, maxFrameAgeMs);
+          VIAM_SDK_LOG(info)
+              << "[assign_and_initialize_device] Device Registered: "
+              << requested_serial_number;
+          camera_assigned_ = true;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   RsResourceConfig configure(viam::sdk::Dependencies dependencies,
                              viam::sdk::ResourceConfig configuration) {
     auto attrs = configuration.attributes();
 
     /*
-     * Validation already checks that serial_number exists, it is a string and
-     * it is not empty, so we can safely extract it without additional checks.
+     * Validation already checks that serial_number exists, it is a string
+     * and it is not empty, so we can safely extract it without additional
+     * checks.
      */
     std::string serial;
     if (attrs.count("serial_number")) {
@@ -525,20 +591,7 @@ private:
                std::uint64_t maxFrameAgeMs) {
               return device::startDevice(serial, device, latest_frameset,
                                          maxFrameAgeMs);
-            },
-        .deviceChangedCallback =
-            [](rs2::event_information &info,
-               const std::unordered_set<std::string> &supported_models,
-               boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>>
-                   &device,
-               const std::string &serial,
-               boost::synchronized_value<std::shared_ptr<rs2::frameset>>
-                   &latest_frameset,
-               std::uint64_t maxFrameAgeMs) {
-              device::deviceChangedCallback(info, supported_models, device,
-                                            serial, latest_frameset,
-                                            maxFrameAgeMs);
             }};
-  }
+  };
 };
-} // namespace realsense
+}; // namespace realsense

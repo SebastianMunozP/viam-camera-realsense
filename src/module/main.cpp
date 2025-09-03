@@ -8,21 +8,27 @@
 #include <iostream>
 #include <memory>
 
+#include <boost/thread/synchronized_value.hpp>
 #include <librealsense2/rs.hpp>
 
 namespace vsdk = ::viam::sdk;
 
 std::vector<std::shared_ptr<vsdk::ModelRegistration>>
-create_all_model_registrations(std::shared_ptr<rs2::context> ctx) {
+create_all_model_registrations(
+    std::shared_ptr<rs2::context> ctx,
+    boost::synchronized_value<std::unordered_set<std::string>>
+        &assigned_serials) {
   std::vector<std::shared_ptr<vsdk::ModelRegistration>> registrations;
   auto realsense_ctx =
       std::make_shared<realsense::RealsenseContext<rs2::context>>(ctx);
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(
       vsdk::API::get<vsdk::Camera>(), realsense::Realsense<rs2::context>::model,
-      [realsense_ctx](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
+      [realsense_ctx, &assigned_serials](vsdk::Dependencies deps,
+                                         vsdk::ResourceConfig config) {
         return std::make_unique<realsense::Realsense<rs2::context>>(
-            std::move(deps), std::move(config), realsense_ctx);
+            std::move(deps), std::move(config), realsense_ctx,
+            assigned_serials);
       },
       realsense::Realsense<
           realsense::RealsenseContext<rs2::context>>::validate));
@@ -52,9 +58,10 @@ int serve(int argc, char **argv) try {
   }
 
   auto rs_ctx = std::make_shared<rs2::context>();
+  boost::synchronized_value<std::unordered_set<std::string>> assigned_serials;
 
   auto module_service = std::make_shared<vsdk::ModuleService>(
-      argc, argv, create_all_model_registrations(rs_ctx));
+      argc, argv, create_all_model_registrations(rs_ctx, assigned_serials));
   module_service->serve();
 
   return EXIT_SUCCESS;
