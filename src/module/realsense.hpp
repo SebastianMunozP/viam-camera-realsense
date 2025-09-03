@@ -234,6 +234,7 @@ public:
     VIAM_SDK_LOG(error) << "do_command not implemented";
     return viam::sdk::ProtoStruct();
   }
+
   viam::sdk::Camera::raw_image
   get_image(std::string mime_type,
             const viam::sdk::ProtoStruct &extra) override {
@@ -523,6 +524,37 @@ public:
         throw std::invalid_argument("serial_number must be a non-empty string");
       }
     }
+
+    if (attrs.count("width_px")) {
+      VIAM_SDK_LOG(info) << "[validate] Validating that width_px is a double";
+      if (not attrs["width_px"].is_a<double>()) {
+        VIAM_SDK_LOG(error) << "[validate] width_px is not a double";
+        throw std::invalid_argument("width_px must be a double");
+      }
+      int width = attrs["width_px"].get_unchecked<double>();
+      if (width <= 0) {
+        VIAM_SDK_LOG(error) << "[validate] width_px must be positive";
+        throw std::invalid_argument("width_px must be positive");
+      }
+    }
+
+    if (attrs.count("height_px")) {
+      VIAM_SDK_LOG(info) << "[validate] Validating that height_px is a double";
+      if (not attrs["height_px"].is_a<double>()) {
+        VIAM_SDK_LOG(error) << "[validate] height_px is not a double";
+        throw std::invalid_argument("height_px must be a double");
+      }
+      int height = attrs["height_px"].get_unchecked<double>();
+      if (height <= 0) {
+        VIAM_SDK_LOG(error) << "[validate] height_px must be positive";
+        throw std::invalid_argument("height_px must be positive");
+      }
+    }
+
+    if (attrs.count("little_endian_depth")) {
+      VIAM_SDK_LOG(error) << "[validate] little_endian_depth is not supported";
+    }
+
     // If we reach here, the serial number is valid
     return {};
   }
