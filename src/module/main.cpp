@@ -16,8 +16,8 @@ namespace vsdk = ::viam::sdk;
 std::vector<std::shared_ptr<vsdk::ModelRegistration>>
 create_all_model_registrations(
     std::shared_ptr<rs2::context> ctx,
-    boost::synchronized_value<std::unordered_set<std::string>>
-        &assigned_serials) {
+    std::shared_ptr<boost::synchronized_value<std::unordered_set<std::string>>>
+        assigned_serials) {
   std::vector<std::shared_ptr<vsdk::ModelRegistration>> registrations;
   auto realsense_ctx =
       std::make_shared<realsense::RealsenseContext<rs2::context>>(ctx);
@@ -58,7 +58,8 @@ int serve(int argc, char **argv) try {
   }
 
   auto rs_ctx = std::make_shared<rs2::context>();
-  boost::synchronized_value<std::unordered_set<std::string>> assigned_serials;
+  auto assigned_serials = std::make_shared<
+      boost::synchronized_value<std::unordered_set<std::string>>>();
 
   auto module_service = std::make_shared<vsdk::ModuleService>(
       argc, argv, create_all_model_registrations(rs_ctx, assigned_serials));

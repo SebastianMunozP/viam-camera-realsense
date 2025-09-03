@@ -112,15 +112,17 @@ class Realsense final : public viam::sdk::Camera,
 public:
   Realsense(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg,
             std::shared_ptr<RealsenseContext<ContextT>> ctx,
-            boost::synchronized_value<std::unordered_set<std::string>>
-                &assigned_serials)
+            std::shared_ptr<
+                boost::synchronized_value<std::unordered_set<std::string>>>
+                assigned_serials)
       : Realsense(deps, cfg, ctx, createDefaultDeviceFunctions(),
                   assigned_serials) {}
   Realsense(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg,
             std::shared_ptr<RealsenseContext<ContextT>> ctx,
             DeviceFunctions device_funcs,
-            boost::synchronized_value<std::unordered_set<std::string>>
-                &assigned_serials)
+            std::shared_ptr<
+                boost::synchronized_value<std::unordered_set<std::string>>>
+                assigned_serials)
       : Camera(cfg.name()), config_(configure(deps, cfg)), realsense_ctx_(ctx),
         device_funcs_(device_funcs), assigned_serials_(assigned_serials) {
 
@@ -157,7 +159,10 @@ public:
       if (dev_ptr) {
         VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
                            << dev_ptr->serial_number;
-        assigned_serials_->erase(dev_ptr->serial_number);
+        {
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(dev_ptr->serial_number);
+        }
         realsense_ctx_->removeInstance(this);
       }
     }
@@ -176,7 +181,10 @@ public:
     if (dev_ptr) {
       VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
                          << dev_ptr->serial_number;
-      assigned_serials_->erase(dev_ptr->serial_number);
+      {
+        auto serials_guard = assigned_serials_->synchronize();
+        serials_guard->erase(dev_ptr->serial_number);
+      }
       prev_serial_number = dev_ptr->serial_number;
     }
     if (not device_funcs_.stopDevice(device_)) {
@@ -464,7 +472,8 @@ private:
   boost::synchronized_value<RsResourceConfig> config_;
   boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>> device_;
   boost::synchronized_value<std::shared_ptr<rs2::frameset>> latest_frameset_;
-  boost::synchronized_value<std::unordered_set<std::string>> &assigned_serials_;
+  std::shared_ptr<boost::synchronized_value<std::unordered_set<std::string>>>
+      assigned_serials_;
   boost::synchronized_value<bool> camera_assigned_;
 
   DeviceFunctions device_funcs_;
@@ -479,7 +488,10 @@ private:
       if (current_device and info.was_removed(*current_device->device)) {
         std::cerr << "[deviceChangedCallback] Device removed: "
                   << current_device->serial_number << std::endl;
-        assigned_serials_->erase(current_device->serial_number);
+        {
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(current_device->serial_number);
+        }
         device_ = nullptr;
         camera_assigned_ = false;
       }
@@ -524,7 +536,7 @@ private:
 
       // Atomically check and insert serial number
       {
-        auto serials_guard = assigned_serials_.synchronize();
+        auto serials_guard = assigned_serials_->synchronize();
         if ((requested_serial_number.empty() &&
              serials_guard->count(connected_device_serial_number) == 0) ||
             (requested_serial_number == connected_device_serial_number)) {
