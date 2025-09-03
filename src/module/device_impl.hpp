@@ -113,22 +113,22 @@ template <typename DeviceT> void printDeviceInfo(DeviceT const &dev) {
 template <typename FrameT, typename FrameSetT>
 void frameCallback(
     FrameT const &frame, std::uint64_t const maxFrameAgeMs,
-    boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_) {
+    std::shared_ptr<boost::synchronized_value<FrameSetT>> &frame_set_) {
   // With callbacks, all synchronized stream will arrive in a single
   // frameset
-  auto frameset = std::make_shared<FrameSetT>(frame.template as<FrameSetT>());
-  if (not frameset or frameset->size() != 2) {
-    std::cerr << "[frame_callback] got count other than 2: " << frameset->size()
+  auto frameset = frame.template as<FrameSetT>();
+  if (not frameset or frameset.size() != 2) {
+    std::cerr << "[frame_callback] got count other than 2: " << frameset.size()
               << std::endl;
     return;
   }
-  auto color_frame = frameset->get_color_frame();
+  auto color_frame = frameset.get_color_frame();
   if (not color_frame) {
     std::cerr << "[frame_callback] no color frame" << std::endl;
     return;
   }
 
-  auto depth_frame = frameset->get_depth_frame();
+  auto depth_frame = frameset.get_depth_frame();
   if (not depth_frame) {
     std::cerr << "[frame_callback] no depth frame" << std::endl;
     return;
@@ -148,7 +148,7 @@ void frameCallback(
               << depthAge << "ms" << std::endl;
   }
 
-  frame_set_ = frameset;
+  frame_set_ = std::make_shared<boost::synchronized_value<FrameSetT>>(frameset);
 }
 
 /************************ STREAM PROFILES ************************/
@@ -219,11 +219,14 @@ std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev) {
 /********************** DEVICE LIFECYCLE ************************/
 template <typename ViamDeviceT>
 bool destroyDevice(
-    boost::synchronized_value<std::shared_ptr<ViamDeviceT>> &dev) noexcept {
+    std::shared_ptr<boost::synchronized_value<ViamDeviceT>> &dev) noexcept {
   try {
-    std::shared_ptr<ViamDeviceT> device = *dev;
-    if (!device)
+    if (not dev) {
+      VIAM_SDK_LOG(error)
+          << "[destroyDevice] trying to destroy an unexistent device";
       return false;
+    }
+    auto device = dev->synchronize();
     VIAM_SDK_LOG(info) << "[destroyDevice] destroying device "
                        << device->serial_number;
 
@@ -263,7 +266,7 @@ bool destroyDevice(
 template <typename ViamDeviceT, typename DeviceT, typename ConfigT,
           typename ColorSensorT, typename DepthSensorT,
           typename VideoStreamProfileT>
-boost::synchronized_value<std::shared_ptr<ViamDeviceT>>
+std::shared_ptr<boost::synchronized_value<ViamDeviceT>>
 createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
              std::unordered_set<std::string> const &supported_camera_models) {
   VIAM_SDK_LOG(info) << "[createDevice] creating device serial number: "
@@ -273,7 +276,7 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
     VIAM_SDK_LOG(error)
         << "[createDevice] Failed to register camera serial number: "
         << serial_number << " since no camera model found";
-    return boost::synchronized_value<std::shared_ptr<ViamDeviceT>>(nullptr);
+    return nullptr;
   }
   VIAM_SDK_LOG(info) << "[createDevice] Found camera model: " << *camera_model;
   if (supported_camera_models.count(*camera_model) == 0) {
@@ -282,7 +285,7 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
         << serial_number
         << " since camera model is not D435 or D435i, camera model: "
         << *camera_model;
-    return boost::synchronized_value<std::shared_ptr<ViamDeviceT>>(nullptr);
+    return nullptr;
   } else {
     VIAM_SDK_LOG(info) << "[createDevice] Camera model is supported: "
                        << *camera_model;
@@ -294,9 +297,9 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
     VIAM_SDK_LOG(error) << "[createDevice] Current device does not support "
                            "software depth-to-color "
                            "alignment.";
-    return boost::synchronized_value<std::shared_ptr<ViamDeviceT>>(nullptr);
+    return nullptr;
   }
-  std::shared_ptr<ViamDeviceT> my_dev = std::make_shared<ViamDeviceT>();
+  auto my_dev = boost::synchronized_value<ViamDeviceT>();
   my_dev->pipe = std::make_shared<std::decay_t<decltype(*my_dev->pipe)>>();
   my_dev->device = dev;
   my_dev->serial_number = serial_number;
@@ -306,18 +309,23 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
   my_dev->config = config;
 
   VIAM_SDK_LOG(info) << "[createDevice] created " << serial_number;
-  return my_dev;
+  return std::make_shared<boost::synchronized_value<ViamDeviceT>>(my_dev);
 }
 
 /********************** STREAMING LIFECYCLE ************************/
 template <typename ViamDeviceT, typename FrameSetT>
 void startDevice(
     std::string const &serialNumber,
-    boost::synchronized_value<std::shared_ptr<ViamDeviceT>> dev,
-    boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_storage,
+    std::shared_ptr<boost::synchronized_value<ViamDeviceT>> dev,
+    std::shared_ptr<boost::synchronized_value<FrameSetT>> &frame_set_storage,
     std::uint64_t const maxFrameAgeMs) {
   VIAM_SDK_LOG(info) << "[startDevice] starting device " << serialNumber;
-  std::shared_ptr<ViamRSDevice> dev_ptr = *dev;
+  if (not dev) {
+    std::ostringstream buffer;
+    buffer << "[startDevice] unable to start device " << serialNumber;
+    throw std::runtime_error(buffer.str());
+  }
+  auto dev_ptr = dev->synchronize();
   if (dev_ptr->started) {
     std::ostringstream buffer;
     buffer << "[startDevice] unable to start already started device "
@@ -336,14 +344,14 @@ void startDevice(
 
 template <typename ViamDeviceT>
 bool stopDevice(
-    boost::synchronized_value<std::shared_ptr<ViamDeviceT>> &dev) noexcept {
+    std::shared_ptr<boost::synchronized_value<ViamDeviceT>> &dev) noexcept {
   try {
-    std::shared_ptr<ViamDeviceT> dev_ptr = *dev;
-    if (not dev_ptr) {
+    if (not dev) {
       VIAM_SDK_LOG(error)
           << "[stopDevice] trying to stop a device that does not exist";
       return false;
     }
+    auto dev_ptr = dev->synchronize();
     if (not dev_ptr->started) {
       VIAM_SDK_LOG(error)
           << "[stopDevice] unable to stop device that is not currently running "

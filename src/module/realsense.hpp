@@ -87,21 +87,21 @@ struct RsResourceConfig {
 
 struct DeviceFunctions {
   std::function<bool(
-      boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>> &)>
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &)>
       stopDevice;
   std::function<bool(
-      boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>> &)>
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &)>
       destroyDevice;
   std::function<void(const rs2::device &)> printDeviceInfo;
   std::function<
-      boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>>(
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>(
           const std::string &, std::shared_ptr<rs2::device>,
           const std::unordered_set<std::string> &)>
       createDevice;
   std::function<void(
       const std::string &,
-      boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>> &,
-      boost::synchronized_value<std::shared_ptr<rs2::frameset>> &,
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &,
+      std::shared_ptr<boost::synchronized_value<rs2::frameset>> &,
       std::uint64_t)>
       startDevice;
 };
@@ -153,18 +153,15 @@ public:
                        << requested_serial_number;
   }
   ~Realsense() {
-    {
-      auto device_guard = device_.synchronize();
-      auto dev_ptr = *device_guard;
-      if (dev_ptr) {
-        VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
-                           << dev_ptr->serial_number;
-        {
-          auto serials_guard = assigned_serials_->synchronize();
-          serials_guard->erase(dev_ptr->serial_number);
-        }
-        realsense_ctx_->removeInstance(this);
+    if (device_) {
+      auto device_guard = device_->synchronize();
+      VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
+                         << device_guard->serial_number;
+      {
+        auto serials_guard = assigned_serials_->synchronize();
+        serials_guard->erase(device_guard->serial_number);
       }
+      realsense_ctx_->removeInstance(this);
     }
 
     // Now call stopDevice and destroyDevice (these will lock internally)
@@ -175,18 +172,18 @@ public:
   void reconfigure(const viam::sdk::Dependencies &deps,
                    const viam::sdk::ResourceConfig &cfg) override {
     VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
-    auto device_guard = device_.synchronize();
-    auto dev_ptr = *device_guard;
     std::string prev_serial_number;
-    if (dev_ptr) {
+    auto device_guard = device_->synchronize();
+    if (device_) {
       VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
-                         << dev_ptr->serial_number;
+                         << device_guard->serial_number;
       {
         auto serials_guard = assigned_serials_->synchronize();
-        serials_guard->erase(dev_ptr->serial_number);
+        serials_guard->erase(device_guard->serial_number);
       }
-      prev_serial_number = dev_ptr->serial_number;
+      prev_serial_number = device_guard->serial_number;
     }
+
     if (not device_funcs_.stopDevice(device_)) {
       VIAM_SDK_LOG(error) << "[reconfigure] failed to stop device "
                           << prev_serial_number;
@@ -231,20 +228,19 @@ public:
       VIAM_SDK_LOG(debug) << "[get_image] start";
       std::string serial_number;
       serial_number = config_->serial_number;
-      std::shared_ptr<rs2::frameset> fs = *latest_frameset_;
-      if (not fs) {
+      if (not latest_frameset_) {
         VIAM_SDK_LOG(error) << "[get_image] no frameset available";
         throw std::runtime_error("no frameset available");
       }
-
+      auto fs = latest_frameset_->get();
       BOOST_ASSERT_MSG(fs->get_color_frame(),
                        "[get_image] color frame is invalid");
       time::throwIfTooOld(time::getNowMs(),
-                          fs->get_color_frame().get_timestamp(), maxFrameAgeMs,
+                          fs.get_color_frame().get_timestamp(), maxFrameAgeMs,
                           "no recent color frame: check USB connection");
 
       VIAM_SDK_LOG(debug) << "[get_image] end";
-      return encoding::encodeVideoFrameToResponse(fs->get_color_frame());
+      return encoding::encodeVideoFrameToResponse(fs.get_color_frame());
     } catch (const std::exception &e) {
       VIAM_SDK_LOG(error) << "[get_image] error: " << e.what();
       throw std::runtime_error("failed to create image: " +
@@ -253,16 +249,16 @@ public:
   }
   viam::sdk::Camera::image_collection get_images() override {
     try {
-      VIAM_SDK_LOG(info) << "[get_images] start";
-      std::string serial_number = config_->serial_number;
-      std::shared_ptr<rs2::frameset> fs = *latest_frameset_;
-      if (not fs) {
+      if (not latest_frameset_) {
         VIAM_SDK_LOG(error) << "[get_images] no frameset available";
         throw std::runtime_error("no frameset available");
       }
+      VIAM_SDK_LOG(info) << "[get_images] start";
+      std::string serial_number = config_->serial_number;
+      auto fs = latest_frameset_->get();
 
-      auto color = fs->get_color_frame();
-      auto depth = fs->get_depth_frame();
+      auto color = fs.get_color_frame();
+      auto depth = fs.get_depth_frame();
 
       viam::sdk::Camera::image_collection response;
       response.images.emplace_back(encoding::encodeVideoFrameToResponse(color));
@@ -297,16 +293,16 @@ public:
   get_point_cloud(std::string mime_type,
                   const viam::sdk::ProtoStruct &extra) override {
     try {
-      VIAM_SDK_LOG(debug) << "[get_point_cloud] start";
-      std::shared_ptr<rs2::frameset> fs = *latest_frameset_;
-      if (not fs) {
+      if (not latest_frameset_) {
         VIAM_SDK_LOG(error) << "[get_point_cloud] no frameset available";
         throw std::runtime_error("no frameset available");
       }
+      VIAM_SDK_LOG(debug) << "[get_point_cloud] start";
+      auto fs = latest_frameset_->get();
 
       double nowMs = time::getNowMs();
 
-      rs2::video_frame color_frame = fs->get_color_frame();
+      rs2::video_frame color_frame = fs.get_color_frame();
       if (not color_frame) {
         throw std::invalid_argument("no color frame");
       }
@@ -314,7 +310,7 @@ public:
       time::throwIfTooOld(nowMs, color_frame.get_timestamp(), maxFrameAgeMs,
                           "no recent color frame: check USB connection");
 
-      rs2::depth_frame depth_frame = fs->get_depth_frame();
+      rs2::depth_frame depth_frame = fs.get_depth_frame();
       if (not depth_frame) {
         throw std::invalid_argument("no depth frame");
       }
@@ -333,25 +329,29 @@ public:
         throw std::runtime_error("[get_point_cloud] depth data is null");
       }
 
-      std::shared_ptr<device::ViamRSDevice> my_dev = *device_;
-      if (not my_dev) {
+      if (not device_) {
         VIAM_SDK_LOG(error) << "[get_point_cloud] no device available";
         throw std::runtime_error("no device available");
       }
+      std::vector<std::uint8_t> data;
+      {
+        auto my_dev = device_->synchronize();
 
-      if (not my_dev->started) {
-        throw std::runtime_error("device is not started");
+        if (not my_dev->started) {
+          throw std::runtime_error("device is not started");
+        }
+
+        data = encoding::encodeRGBPointsToPCD(
+            my_dev->point_cloud_filter->process(my_dev->align->process(fs)));
+
+        if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
+          VIAM_SDK_LOG(error)
+              << "[get_point_cloud] data size exceeds gRPC message size limit";
+          return viam::sdk::Camera::point_cloud{};
+        }
       }
-
-      std::vector<std::uint8_t> data = encoding::encodeRGBPointsToPCD(
-          my_dev->point_cloud_filter->process(my_dev->align->process(*fs)));
 
       VIAM_SDK_LOG(debug) << "[get_point_cloud] end";
-      if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
-        VIAM_SDK_LOG(error)
-            << "[get_point_cloud] data size exceeds gRPC message size limit";
-        return viam::sdk::Camera::point_cloud{};
-      }
       return viam::sdk::Camera::point_cloud{kPcdMimeType, data};
     } catch (const std::exception &e) {
       VIAM_SDK_LOG(error) << "[get_point_cloud] error: " << e.what();
@@ -362,26 +362,28 @@ public:
   viam::sdk::Camera::properties get_properties() override {
     try {
       VIAM_SDK_LOG(debug) << "[get_properties] start";
-      std::string serial_number = config_->serial_number;
-      rs2_intrinsics props;
-      std::shared_ptr<device::ViamRSDevice> my_dev = *device_;
-      if (not my_dev) {
+      if (not device_) {
         VIAM_SDK_LOG(error) << "[get_point_cloud] no device available";
         throw std::runtime_error("no device available");
       }
-      if (not my_dev->started or not my_dev->pipe) {
-        std::ostringstream buffer;
-        buffer << service_name << ": device with serial number "
-               << serial_number << " is not longer started";
-        throw std::invalid_argument(buffer.str());
+      rs2_intrinsics props;
+      {
+        auto my_dev = device_->synchronize();
+        std::string serial_number = my_dev->serial_number;
+        if (not my_dev->started or not my_dev->pipe) {
+          std::ostringstream buffer;
+          buffer << service_name << ": device with serial number "
+                 << serial_number << " is not longer started";
+          throw std::invalid_argument(buffer.str());
+        }
+        auto color_stream = my_dev->pipe->get_active_profile()
+                                .get_stream(RS2_STREAM_COLOR)
+                                .as<rs2::video_stream_profile>();
+        if (not color_stream) {
+          throw std::runtime_error("color stream is not available");
+        }
+        props = color_stream.get_intrinsics();
       }
-      auto color_stream = my_dev->pipe->get_active_profile()
-                              .get_stream(RS2_STREAM_COLOR)
-                              .as<rs2::video_stream_profile>();
-      if (not color_stream) {
-        throw std::runtime_error("color stream is not available");
-      }
-      props = color_stream.get_intrinsics();
 
       viam::sdk::Camera::properties p{};
       p.supports_pcd = true;
@@ -470,8 +472,8 @@ public:
 
 private:
   boost::synchronized_value<RsResourceConfig> config_;
-  boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>> device_;
-  boost::synchronized_value<std::shared_ptr<rs2::frameset>> latest_frameset_;
+  std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> device_;
+  std::shared_ptr<boost::synchronized_value<rs2::frameset>> latest_frameset_;
   std::shared_ptr<boost::synchronized_value<std::unordered_set<std::string>>>
       assigned_serials_;
   boost::synchronized_value<bool> camera_assigned_;
@@ -484,8 +486,8 @@ private:
               << std::endl;
     try {
       std::string const required_serial_number = config_->serial_number;
-      std::shared_ptr<device::ViamRSDevice> current_device = *device_;
-      if (current_device and info.was_removed(*current_device->device)) {
+      auto current_device = device_->synchronize();
+      if (device_ and info.was_removed(*current_device->device)) {
         std::cerr << "[deviceChangedCallback] Device removed: "
                   << current_device->serial_number << std::endl;
         {
@@ -580,10 +582,10 @@ private:
   static DeviceFunctions createDefaultDeviceFunctions() {
     return DeviceFunctions{
         .stopDevice =
-            [](boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>>
+            [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
                    &device) { return device::stopDevice(device); },
         .destroyDevice =
-            [](boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>>
+            [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
                    &device) { return device::destroyDevice(device); },
         .printDeviceInfo =
             [](const rs2::device &dev) { device::printDeviceInfo(dev); },
@@ -595,9 +597,9 @@ private:
             },
         .startDevice =
             [](const std::string &serial,
-               boost::synchronized_value<std::shared_ptr<device::ViamRSDevice>>
+               std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
                    &device,
-               boost::synchronized_value<std::shared_ptr<rs2::frameset>>
+               std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                    &latest_frameset,
                std::uint64_t maxFrameAgeMs) {
               return device::startDevice(serial, device, latest_frameset,
