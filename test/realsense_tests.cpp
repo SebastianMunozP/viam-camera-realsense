@@ -358,14 +358,26 @@ TEST_F(RealsenseTest, ReconfigureWithSameSerialNumber_StrictOrdering) {
 
   auto mock_device_funcs = std::make_shared<MockDeviceFunctions>();
 
-      {
+  // Create mock devices that the mocks will return
+  auto mock_device_1 = std::make_shared<device::ViamRSDevice>();
+  mock_device_1->serial_number = "test_device_123456";
+  mock_device_1->started = false;
+  mock_device_1->device = nullptr;
+
+  auto mock_device_2 = std::make_shared<device::ViamRSDevice>();
+  mock_device_2->serial_number = "test_device_123456";
+  mock_device_2->started = false;
+  mock_device_2->device = nullptr;
+
+  {
     InSequence seq;
 
     // Constructor sequence
     EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_)).Times(1);
-    EXPECT_CALL(*mock_device_funcs, createDevice("test_device_123456", _, _, _))  // 4 parameters now
-        .Times(1);
-    EXPECT_CALL(*mock_device_funcs, startDevice("test_device_123456", _, _, _, _))  // 5 parameters now
+    EXPECT_CALL(*mock_device_funcs, createDevice("test_device_123456", _, _, _))
+        .Times(1)
+        .WillOnce(Return(mock_device_1));  // Return a valid mock device
+    EXPECT_CALL(*mock_device_funcs, startDevice("test_device_123456", _, _, _, _))
         .Times(1);
 
     // Reconfigure sequence
@@ -377,9 +389,10 @@ TEST_F(RealsenseTest, ReconfigureWithSameSerialNumber_StrictOrdering) {
         .WillOnce(Return(true));
     EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_))
         .Times(1);
-    EXPECT_CALL(*mock_device_funcs, createDevice("test_device_123456", _, _, _))  // 4 parameters now
-        .Times(1);
-    EXPECT_CALL(*mock_device_funcs, startDevice("test_device_123456", _, _, _, _))  // 5 parameters now
+    EXPECT_CALL(*mock_device_funcs, createDevice("test_device_123456", _, _, _))
+        .Times(1)
+        .WillOnce(Return(mock_device_2));  // Return a valid mock device
+    EXPECT_CALL(*mock_device_funcs, startDevice("test_device_123456", _, _, _, _))
         .Times(1);
 
     EXPECT_CALL(*mock_device_funcs, stopDevice(_))
@@ -412,15 +425,26 @@ TEST_F(RealsenseTest, ReconfigureWithNewSerialNumber_StrictOrdering) {
 
   auto mock_device_funcs = std::make_shared<MockDeviceFunctions>();
 
+  // Create mock devices that the mocks will return
+  auto mock_device_1 = std::make_shared<device::ViamRSDevice>();
+  mock_device_1->serial_number = "test_device_123456";
+  mock_device_1->started = false;
+  mock_device_1->device = nullptr;
 
-    {
+  auto mock_device_2 = std::make_shared<device::ViamRSDevice>();
+  mock_device_2->serial_number = "new_device_789";
+  mock_device_2->started = false;
+  mock_device_2->device = nullptr;
+
+  {
     InSequence seq;
 
     // Constructor sequence
     EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_)).Times(1);
-    EXPECT_CALL(*mock_device_funcs, createDevice("test_device_123456", _, _, _))  // 4 parameters now
-        .Times(1);
-    EXPECT_CALL(*mock_device_funcs, startDevice("test_device_123456", _, _, _, _))  // 5 parameters now
+    EXPECT_CALL(*mock_device_funcs, createDevice("test_device_123456", _, _, _))
+        .Times(1)
+        .WillOnce(Return(mock_device_1));  // Return a valid mock device
+    EXPECT_CALL(*mock_device_funcs, startDevice("test_device_123456", _, _, _, _))
         .Times(1);
 
     // Reconfigure sequence
@@ -432,9 +456,10 @@ TEST_F(RealsenseTest, ReconfigureWithNewSerialNumber_StrictOrdering) {
         .WillOnce(Return(true));
     EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_))
         .Times(1);
-    EXPECT_CALL(*mock_device_funcs, createDevice("new_device_789", _, _, _))  // 4 parameters now
-        .Times(1);
-    EXPECT_CALL(*mock_device_funcs, startDevice("new_device_789", _, _, _, _))  // 5 parameters now
+    EXPECT_CALL(*mock_device_funcs, createDevice("new_device_789", _, _, _))
+        .Times(1)
+        .WillOnce(Return(mock_device_2));  // Return a valid mock device
+    EXPECT_CALL(*mock_device_funcs, startDevice("new_device_789", _, _, _, _))
         .Times(1);
 
     EXPECT_CALL(*mock_device_funcs, stopDevice(_))
