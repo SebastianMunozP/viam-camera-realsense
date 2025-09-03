@@ -612,7 +612,8 @@ private:
     }
   }
 
-  bool assign_and_initialize_device(rs2::device_list const &device_list) {
+  template <typename DeviceListT>
+  bool assign_and_initialize_device(DeviceListT const &device_list) {
     if (camera_assigned_) {
       std::cerr << "[assign_and_initialize_device] Camera is already assigned"
                 << std::endl;
@@ -630,7 +631,7 @@ private:
     for (auto const &dev : device_list) {
       device_funcs_.printDeviceInfo(dev);
 
-      auto dev_ptr = std::make_shared<rs2::device>(dev);
+      auto dev_ptr = std::make_shared<std::decay_t<decltype(dev)>>(dev);
       std::string connected_device_serial_number =
           dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
@@ -711,9 +712,9 @@ private:
             [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
                    &device) { return device::destroyDevice(device); },
         .printDeviceInfo =
-            [](const rs2::device &dev) { device::printDeviceInfo(dev); },
+            [](const auto &dev) { device::printDeviceInfo(dev); },
         .createDevice =
-            [](std::string const &serial, std::shared_ptr<rs2::device> dev_ptr,
+            [](std::string const &serial, std::shared_ptr<auto> dev_ptr,
                std::unordered_set<std::string> const &supported_models,
                realsense::RsResourceConfig const &config) {
               return device::createDevice<realsense::RsResourceConfig>(
