@@ -59,32 +59,34 @@ void deviceChangedCallback(
     boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_storage,
     std::uint64_t maxFrameAgeMs);
 
-template <typename FrameT, typename FrameSetT>
+template <typename FrameT, typename FrameSetT, typename ViamConfigT>
 void frameCallback(
     FrameT const &frame, std::uint64_t const maxFrameAgeMs,
-    boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_);
+    boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_,
+    ViamConfigT const &viamConfig);
 
 /********************** DEVICE LIFECYCLE ************************/
-template <typename ViamDeviceT = ViamRSDevice, typename DeviceT = rs2::device,
-          typename ConfigT = rs2::config,
+template <typename ViamConfigT, typename ViamDeviceT = ViamRSDevice,
+          typename DeviceT = rs2::device, typename ConfigT = rs2::config,
           typename ColorSensorT = rs2::color_sensor,
           typename DepthSensorT = rs2::depth_sensor,
           typename VideoStreamProfileT = rs2::video_stream_profile>
 std::shared_ptr<boost::synchronized_value<ViamDeviceT>>
 createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
-             std::unordered_set<std::string> const &supported_camera_models);
+             std::unordered_set<std::string> const &supported_camera_models,
+             ViamConfigT const &viamConfig);
 
 template <typename ViamDeviceT>
 bool destroyDevice(
     std::shared_ptr<boost::synchronized_value<ViamDeviceT>> &dev) noexcept;
 
 /********************** STREAMING LIFECYCLE ************************/
-template <typename ViamDeviceT, typename FrameSetT>
+template <typename ViamDeviceT, typename FrameSetT, typename ViamConfigT>
 void startDevice(
     std::string const &serialNumber,
     std::shared_ptr<boost::synchronized_value<ViamDeviceT>> dev,
     std::shared_ptr<boost::synchronized_value<FrameSetT>> &frame_set_storage,
-    std::uint64_t const maxFrameAgeMs);
+    std::uint64_t const maxFrameAgeMs, ViamConfigT const &viamConfig);
 
 template <typename ViamDeviceT>
 bool stopDevice(

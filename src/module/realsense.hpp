@@ -79,10 +79,17 @@ private:
 struct RsResourceConfig {
   std::string resource_name;
   std::string serial_number;
+  std::unordered_set<std::string> sensors;
+  std::optional<int> width;
+  std::optional<int> height;
 
   explicit RsResourceConfig(std::string const &serial_number,
-                            std::string const &resource_name)
-      : serial_number(serial_number), resource_name(resource_name) {}
+                            std::string const &resource_name,
+                            std::unordered_set<std::string> const &sensors,
+                            std::optional<int> width = std::nullopt,
+                            std::optional<int> height = std::nullopt)
+      : serial_number(serial_number), resource_name(resource_name),
+        sensors(sensors), width(width), height(height) {}
 };
 
 struct DeviceFunctions {
@@ -95,14 +102,15 @@ struct DeviceFunctions {
   std::function<void(const rs2::device &)> printDeviceInfo;
   std::function<
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>(
-          const std::string &, std::shared_ptr<rs2::device>,
-          const std::unordered_set<std::string> &)>
+          std::string const &, std::shared_ptr<rs2::device>,
+          std::unordered_set<std::string> const &,
+          realsense::RsResourceConfig const &)>
       createDevice;
   std::function<void(
-      const std::string &,
+      std::string const &,
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &,
       std::shared_ptr<boost::synchronized_value<rs2::frameset>> &,
-      std::uint64_t)>
+      std::uint64_t, realsense::RsResourceConfig const &)>
       startDevice;
 };
 
@@ -173,9 +181,9 @@ public:
                    const viam::sdk::ResourceConfig &cfg) override {
     VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
     std::string prev_serial_number;
-    auto device_guard = device_->synchronize();
     if (device_) {
-      VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
+      auto device_guard = device_->synchronize();
+      VIAM_SDK_LOG(info) << "[reconfigure] Realsense destructor start "
                          << device_guard->serial_number;
       {
         auto serials_guard = assigned_serials_->synchronize();
@@ -184,11 +192,15 @@ public:
       prev_serial_number = device_guard->serial_number;
     }
 
+    VIAM_SDK_LOG(error) << "[reconfigure] stopping device "
+                        << prev_serial_number;
     if (not device_funcs_.stopDevice(device_)) {
       VIAM_SDK_LOG(error) << "[reconfigure] failed to stop device "
                           << prev_serial_number;
       throw std::runtime_error("failed to stop device " + prev_serial_number);
     }
+    VIAM_SDK_LOG(error) << "[reconfigure] destroying device "
+                        << prev_serial_number;
     if (not device_funcs_.destroyDevice(device_)) {
       VIAM_SDK_LOG(error) << "[reconfigure] failed to destroy device "
                           << prev_serial_number;
@@ -216,6 +228,7 @@ public:
     camera_assigned_ = true;
     VIAM_SDK_LOG(info) << "[reconfigure] Realsense reconfigure end";
   }
+
   viam::sdk::ProtoStruct
   do_command(const viam::sdk::ProtoStruct &command) override {
     VIAM_SDK_LOG(error) << "do_command not implemented";
@@ -435,8 +448,61 @@ public:
   }
 
   static std::vector<std::string> validate(viam::sdk::ResourceConfig cfg) {
-    VIAM_SDK_LOG(info) << "[validate] Validating that serial_number is present";
     auto attrs = cfg.attributes();
+
+    VIAM_SDK_LOG(info) << "[validate] Validating that config contains sensors";
+    if (not attrs.count("sensors")) {
+      VIAM_SDK_LOG(error) << "[validate] sensors are not present";
+      throw std::invalid_argument("sensors must be present");
+    }
+    if (not attrs["sensors"].is_a<viam::sdk::ProtoList>()) {
+      VIAM_SDK_LOG(error) << "[validate] sensors is not a list";
+      throw std::invalid_argument("sensors must be a list");
+    }
+    auto sensors_proto = attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
+
+    if (sensors_proto.size() == 0 or sensors_proto.size() > 2) {
+      VIAM_SDK_LOG(error)
+          << "[validate] sensors field must contain 1 or 2 elements";
+      throw std::invalid_argument("sensors field must contain 1 or 2 elements");
+    }
+    if (sensors_proto.size() == 1) {
+      VIAM_SDK_LOG(info) << "[validate] Validating that sensors is a string";
+      if (not sensors_proto[0].is_a<std::string>()) {
+        VIAM_SDK_LOG(error) << "[validate] sensors is not a string";
+        throw std::invalid_argument("sensors must be a string");
+      }
+      std::string sensors_param = sensors_proto[0].get_unchecked<std::string>();
+      if (sensors_param != "color" and sensors_param != "depth") {
+        VIAM_SDK_LOG(error)
+            << "[validate] sensors must be either 'color' or 'depth'";
+        throw std::invalid_argument(
+            "sensors must be either 'color' or 'depth'");
+      }
+    }
+    if (sensors_proto.size() == 2) {
+      VIAM_SDK_LOG(info) << "[validate] Validating that sensors is a string";
+      if (not sensors_proto[0].is_a<std::string>() or
+          not sensors_proto[1].is_a<std::string>()) {
+        VIAM_SDK_LOG(error) << "[validate] sensors is not a string";
+        throw std::invalid_argument("sensors must be a string");
+      }
+      std::string sensors_param_1 =
+          sensors_proto[0].get_unchecked<std::string>();
+      std::string sensors_param_2 =
+          sensors_proto[1].get_unchecked<std::string>();
+      if ((sensors_param_1 != "color" and sensors_param_1 != "depth") or
+          (sensors_param_2 != "color" and sensors_param_2 != "depth")) {
+        VIAM_SDK_LOG(error)
+            << "[validate] sensors must be either 'color' or 'depth'";
+        throw std::invalid_argument(
+            "sensors must be either 'color' or 'depth'");
+      }
+      if (sensors_param_1 == sensors_param_2) {
+        VIAM_SDK_LOG(error) << "[validate] sensors cannot contain duplicates";
+        throw std::invalid_argument("sensors cannot contain duplicates");
+      }
+    }
 
     if (attrs.count("serial_number")) {
 
@@ -544,19 +610,31 @@ private:
             (requested_serial_number == connected_device_serial_number)) {
 
           serials_guard->insert(connected_device_serial_number);
-          device_ = device_funcs_.createDevice(
-              connected_device_serial_number, dev_ptr, SUPPORTED_CAMERA_MODELS);
-          BOOST_ASSERT(device_ != nullptr);
-
-          device_funcs_.startDevice(connected_device_serial_number, device_,
-                                    latest_frameset_, maxFrameAgeMs);
-          VIAM_SDK_LOG(info)
-              << "[assign_and_initialize_device] Device Registered: "
-              << requested_serial_number;
-          camera_assigned_ = true;
-          return true;
+        } else {
+          continue;
         }
       }
+      VIAM_SDK_LOG(info)
+          << "[assign_and_initialize_device] calling createDevice for: "
+          << connected_device_serial_number;
+      realsense::RsResourceConfig config_copy = config_.get();
+      device_ =
+          device_funcs_.createDevice(connected_device_serial_number, dev_ptr,
+                                     SUPPORTED_CAMERA_MODELS, config_copy);
+      BOOST_ASSERT(device_ != nullptr);
+
+      VIAM_SDK_LOG(info)
+          << "[assign_and_initialize_device] calling startDevice for: "
+          << connected_device_serial_number;
+      device_funcs_.startDevice(connected_device_serial_number, device_,
+                                latest_frameset_, maxFrameAgeMs, config_copy);
+      VIAM_SDK_LOG(info)
+          << "[assign_and_initialize_device] startDevice completed for: "
+          << connected_device_serial_number;
+      VIAM_SDK_LOG(info) << "[assign_and_initialize_device] Device Registered: "
+                         << requested_serial_number;
+      camera_assigned_ = true;
+      return true;
     }
     return false;
   }
@@ -574,8 +652,21 @@ private:
     if (attrs.count("serial_number")) {
       serial = attrs["serial_number"].get_unchecked<std::string>();
     }
-    auto native_config =
-        realsense::RsResourceConfig(serial, configuration.name());
+    auto sensors_list = attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
+    std::unordered_set<std::string> sensors;
+    for (const auto &sensor : sensors_list) {
+      sensors.insert(sensor.get_unchecked<std::string>());
+    }
+    std::optional<int> width;
+    if (attrs.count("width_px")) {
+      width = static_cast<int>(attrs["width_px"].get_unchecked<double>());
+    }
+    std::optional<int> height;
+    if (attrs.count("height_px")) {
+      height = static_cast<int>(attrs["height_px"].get_unchecked<double>());
+    }
+    auto native_config = realsense::RsResourceConfig(
+        serial, configuration.name(), sensors, width, height);
 
     return native_config;
   }
@@ -590,10 +681,11 @@ private:
         .printDeviceInfo =
             [](const rs2::device &dev) { device::printDeviceInfo(dev); },
         .createDevice =
-            [](const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
-               const std::unordered_set<std::string> &supported_models) {
-              return device::createDevice<device::ViamRSDevice>(
-                  serial, dev_ptr, supported_models);
+            [](std::string const &serial, std::shared_ptr<rs2::device> dev_ptr,
+               std::unordered_set<std::string> const &supported_models,
+               realsense::RsResourceConfig const &config) {
+              return device::createDevice<realsense::RsResourceConfig>(
+                  serial, dev_ptr, supported_models, config);
             },
         .startDevice =
             [](const std::string &serial,
@@ -601,9 +693,10 @@ private:
                    &device,
                std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                    &latest_frameset,
-               std::uint64_t maxFrameAgeMs) {
+               std::uint64_t maxFrameAgeMs,
+               realsense::RsResourceConfig const &viamConfig) {
               return device::startDevice(serial, device, latest_frameset,
-                                         maxFrameAgeMs);
+                                         maxFrameAgeMs, viamConfig);
             }};
   };
 };

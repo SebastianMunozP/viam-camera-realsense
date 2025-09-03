@@ -110,42 +110,56 @@ template <typename DeviceT> void printDeviceInfo(DeviceT const &dev) {
 
 /********************** CALLBACKS ************************/
 
-template <typename FrameT, typename FrameSetT>
+template <typename FrameT, typename FrameSetT, typename ViamConfigT>
 void frameCallback(
     FrameT const &frame, std::uint64_t const maxFrameAgeMs,
-    std::shared_ptr<boost::synchronized_value<FrameSetT>> &frame_set_) {
+    std::shared_ptr<boost::synchronized_value<FrameSetT>> &frame_set_,
+    ViamConfigT const &viamConfig) {
   // With callbacks, all synchronized stream will arrive in a single
   // frameset
+  int expected_frame_count = viamConfig.sensors.size();
   auto frameset = frame.template as<FrameSetT>();
-  if (not frameset or frameset.size() != 2) {
-    std::cerr << "[frame_callback] got count other than 2: " << frameset.size()
-              << std::endl;
+  if (not frameset or frameset.size() != expected_frame_count) {
+    std::cerr << "[frame_callback] got count other than "
+              << expected_frame_count << ": " << frameset.size() << std::endl;
     return;
   }
+  double nowMs = time::getNowMs();
   auto color_frame = frameset.get_color_frame();
-  if (not color_frame) {
+  if (not color_frame and viamConfig.sensors.count("color") == 1) {
     std::cerr << "[frame_callback] no color frame" << std::endl;
     return;
   }
-
-  auto depth_frame = frameset.get_depth_frame();
-  if (not depth_frame) {
-    std::cerr << "[frame_callback] no depth frame" << std::endl;
+  if (color_frame and viamConfig.sensors.count("color") == 0) {
+    std::cerr << "[frame_callback] received color frame when not expected"
+              << std::endl;
     return;
   }
 
-  double nowMs = time::getNowMs();
-  double colorAge = nowMs - color_frame.get_timestamp();
-  double depthAge = nowMs - depth_frame.get_timestamp();
-
-  if (colorAge > maxFrameAgeMs) {
-    std::cerr << "[frame_callback] received color frame is too stale, age: "
-              << colorAge << "ms" << std::endl;
+  if (color_frame) {
+    double colorAge = nowMs - color_frame.get_timestamp();
+    if (colorAge > maxFrameAgeMs) {
+      std::cerr << "[frame_callback] received color frame is too stale, age: "
+                << colorAge << "ms" << std::endl;
+    }
   }
 
-  if (depthAge > maxFrameAgeMs) {
-    std::cerr << "[frame_callback] received depth frame is too stale, age: "
-              << depthAge << "ms" << std::endl;
+  auto depth_frame = frameset.get_depth_frame();
+  if (not depth_frame and viamConfig.sensors.count("depth")) {
+    std::cerr << "[frame_callback] no depth frame" << std::endl;
+    return;
+  }
+  if (depth_frame and viamConfig.sensors.count("depth") == 0) {
+    std::cerr << "[frame_callback] received depth frame when not expected"
+              << std::endl;
+    return;
+  }
+  if (depth_frame) {
+    double depthAge = nowMs - depth_frame.get_timestamp();
+    if (depthAge > maxFrameAgeMs) {
+      std::cerr << "[frame_callback] received depth frame is too stale, age: "
+                << depthAge << "ms" << std::endl;
+    }
   }
 
   frame_set_ = std::make_shared<boost::synchronized_value<FrameSetT>>(frameset);
@@ -167,10 +181,49 @@ bool checkIfMatchingColorDepthProfiles(
   return false;
 }
 
+template <typename DeviceT, typename ConfigT, typename ColorSensorT,
+          typename VideoStreamProfileT, typename ViamConfigT>
+std::shared_ptr<ConfigT> createColorConfig(std::shared_ptr<DeviceT> dev,
+                                           ViamConfigT const &viamConfig) {
+  auto cfg = std::make_shared<ConfigT>();
+
+  // Query all sensors for the device
+  auto sensors = dev->query_sensors();
+
+  typename decltype(sensors)::value_type color_sensor;
+  for (auto &s : sensors) {
+    if (s.template is<ColorSensorT>())
+      color_sensor = s;
+  }
+
+  // Get stream profiles
+  auto color_profiles = color_sensor.get_stream_profiles();
+
+  // Find matching profiles
+  for (auto &cp : color_profiles) {
+    auto csp = cp.template as<VideoStreamProfileT>();
+    if (csp.format() != RS2_FORMAT_RGB8) {
+      continue;
+    }
+
+    if ((not viamConfig.width) or
+        (viamConfig.width == csp.width()) and
+            (not viamConfig.height or (viamConfig.height == csp.height()))) {
+      cfg->enable_stream(RS2_STREAM_COLOR, csp.stream_index(), csp.width(),
+                         csp.height(), csp.format(), csp.fps());
+      VIAM_SDK_LOG(info)
+          << "[createColorOnlyConfig] enabled color and depth streams";
+      return cfg;
+    }
+  }
+  return nullptr;
+}
 // create a config for software depth-to-color alignment
 template <typename DeviceT, typename ConfigT, typename ColorSensorT,
-          typename DepthSensorT, typename VideoStreamProfileT>
-std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev) {
+          typename DepthSensorT, typename VideoStreamProfileT,
+          typename ViamConfigT>
+std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev,
+                                                ViamConfigT const &viamConfig) {
   auto cfg = std::make_shared<ConfigT>();
 
   // Query all sensors for the device
@@ -200,7 +253,9 @@ std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev) {
       if (dsp.format() != RS2_FORMAT_Z16) {
         continue;
       }
-      if (checkIfMatchingColorDepthProfiles(csp, dsp)) {
+      if (checkIfMatchingColorDepthProfiles(csp, dsp) and
+          ((not viamConfig.width) or (viamConfig.width == csp.width())) and
+          ((not viamConfig.height) or (viamConfig.height == csp.height()))) {
         VIAM_SDK_LOG(info) << "[createSwD2CAlignConfig] Found matching color "
                               "and depth stream profiles";
         cfg->enable_stream(RS2_STREAM_COLOR, csp.stream_index(), csp.width(),
@@ -263,12 +318,13 @@ bool destroyDevice(
   return true;
 }
 
-template <typename ViamDeviceT, typename DeviceT, typename ConfigT,
-          typename ColorSensorT, typename DepthSensorT,
+template <typename ViamConfigT, typename ViamDeviceT, typename DeviceT,
+          typename ConfigT, typename ColorSensorT, typename DepthSensorT,
           typename VideoStreamProfileT>
 std::shared_ptr<boost::synchronized_value<ViamDeviceT>>
 createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
-             std::unordered_set<std::string> const &supported_camera_models) {
+             std::unordered_set<std::string> const &supported_camera_models,
+             ViamConfigT const &viamConfig) {
   VIAM_SDK_LOG(info) << "[createDevice] creating device serial number: "
                      << serial_number;
   auto camera_model = getCameraModel(dev);
@@ -291,14 +347,35 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
                        << *camera_model;
   }
 
-  auto config = createSwD2CAlignConfig<DeviceT, ConfigT, ColorSensorT,
-                                       DepthSensorT, VideoStreamProfileT>(dev);
+  // Lock viamConfig once and use it for all accesses
+  std::shared_ptr<ConfigT> config = nullptr;
+
+  if (viamConfig.sensors.count("color") && viamConfig.sensors.count("depth")) {
+    VIAM_SDK_LOG(info)
+        << "[createDevice] Creating config with color and depth sensors for: "
+        << serial_number;
+    config =
+        createSwD2CAlignConfig<DeviceT, ConfigT, ColorSensorT, DepthSensorT,
+                               VideoStreamProfileT, ViamConfigT>(dev,
+                                                                 viamConfig);
+
+  } else if (viamConfig.sensors.size() == 1 &&
+             viamConfig.sensors.count("color")) {
+    VIAM_SDK_LOG(info)
+        << "[createDevice] Creating config with color sensor for: "
+        << serial_number;
+    config =
+        createColorConfig<DeviceT, ConfigT, ColorSensorT, VideoStreamProfileT,
+                          ViamConfigT>(dev, viamConfig);
+  }
+  // We are not currently supporting only depth sensor
   if (config == nullptr) {
-    VIAM_SDK_LOG(error) << "[createDevice] Current device does not support "
-                           "software depth-to-color "
-                           "alignment.";
+    VIAM_SDK_LOG(error) << "[createDevice] Current device configuration not "
+                           "supported, serial number: "
+                        << serial_number;
     return nullptr;
   }
+  VIAM_SDK_LOG(info) << "[createDevice] Config created for: " << serial_number;
   auto my_dev = boost::synchronized_value<ViamDeviceT>();
   my_dev->pipe = std::make_shared<std::decay_t<decltype(*my_dev->pipe)>>();
   my_dev->device = dev;
@@ -313,12 +390,12 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
 }
 
 /********************** STREAMING LIFECYCLE ************************/
-template <typename ViamDeviceT, typename FrameSetT>
+template <typename ViamDeviceT, typename FrameSetT, typename ViamConfigT>
 void startDevice(
     std::string const &serialNumber,
     std::shared_ptr<boost::synchronized_value<ViamDeviceT>> dev,
-    std::shared_ptr<boost::synchronized_value<FrameSetT>> &frame_set_storage,
-    std::uint64_t const maxFrameAgeMs) {
+    std::shared_ptr<boost::synchronized_value<FrameSetT>> &frameSetStorage,
+    std::uint64_t const maxFrameAgeMs, ViamConfigT const &viamConfig) {
   VIAM_SDK_LOG(info) << "[startDevice] starting device " << serialNumber;
   if (not dev) {
     std::ostringstream buffer;
@@ -334,10 +411,10 @@ void startDevice(
   }
 
   dev_ptr->config->enable_device(serialNumber);
-  dev_ptr->pipe->start(*dev_ptr->config,
-                       [maxFrameAgeMs, &frame_set_storage](auto const &frame) {
-                         frameCallback(frame, maxFrameAgeMs, frame_set_storage);
-                       });
+  dev_ptr->pipe->start(*dev_ptr->config, [maxFrameAgeMs, &frameSetStorage,
+                                          viamConfig](auto const &frame) {
+    frameCallback(frame, maxFrameAgeMs, frameSetStorage, viamConfig);
+  });
   dev_ptr->started = true;
   VIAM_SDK_LOG(info) << "[startDevice]  device started " << serialNumber;
 }
