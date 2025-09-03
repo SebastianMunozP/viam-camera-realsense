@@ -145,7 +145,9 @@ public:
       auto dev_ptr = std::make_shared<rs2::device>(dev);
       std::string connected_device_serial_number =
           dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-      if (requested_serial_number == connected_device_serial_number) {
+      if (requested_serial_number.empty() or
+          requested_serial_number == connected_device_serial_number) {
+        config_->serial_number = connected_device_serial_number;
         device_ = device_funcs_.createDevice(connected_device_serial_number,
                                              dev_ptr, SUPPORTED_CAMERA_MODELS);
         BOOST_ASSERT(device_ != nullptr);
@@ -489,8 +491,10 @@ private:
      * Validation already checks that serial_number exists, it is a string and
      * it is not empty, so we can safely extract it without additional checks.
      */
-    std::string const serial =
-        attrs["serial_number"].get_unchecked<std::string>();
+    std::string serial;
+    if (attrs.count("serial_number")) {
+      serial = attrs["serial_number"].get_unchecked<std::string>();
+    }
     auto native_config =
         realsense::RsResourceConfig(serial, configuration.name());
 
