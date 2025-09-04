@@ -20,25 +20,47 @@ if command -v clang-format-19 &> /dev/null; then
 elif command -v clang-format &> /dev/null; then
     CLANG_FORMAT=clang-format
 else
-	# It's not yet installed, so let's get it!
-	echo "Installing clang-format as a linter..."
-	if [[ "$(uname)" == "Linux" ]]; then
-		sudo apt install -y clang-format-19
-	elif [[ "$(uname)" == "Darwin" ]]; then
-		brew install clang-format
-	else
-		echo "WARNING: installing the linter is not yet supported outside of Linux and Mac."
-	fi
-	
-	# Re-check after installation
-	if command -v clang-format-19 &> /dev/null; then
-		CLANG_FORMAT=clang-format-19
-	elif command -v clang-format &> /dev/null; then
-		CLANG_FORMAT=clang-format
-	else
-		echo "ERROR: clang-format installation failed"
-		exit 1
-	fi
+    # It's not yet installed, so let's get it!
+    echo "Installing clang-format as a linter..."
+    if [[ "$(uname)" == "Linux" ]]; then
+        sudo apt install -y clang-format-19
+    elif [[ "$(uname)" == "Darwin" ]]; then
+        brew install clang-format
+    else
+        echo "WARNING: installing the linter is not yet supported outside of Linux and Mac."
+    fi
+    
+    # Re-check after installation
+    if command -v clang-format-19 &> /dev/null; then
+        CLANG_FORMAT=clang-format-19
+    elif command -v clang-format &> /dev/null; then
+        CLANG_FORMAT=clang-format
+    else
+        echo "ERROR: clang-format installation failed"
+        exit 1
+    fi
 fi
 
-find ./src  -type f \( -name \*.cpp -o -name \*.hpp \)  | xargs "$CLANG_FORMAT" -i --style=file "$@"
+# Function to ensure file ends with newline
+ensure_final_newline() {
+    local file="$1"
+    # Check if file is non-empty and doesn't end with newline
+    if [[ -s "$file" ]] && [[ $(tail -c1 "$file" | wc -l) -eq 0 ]]; then
+        echo "" >> "$file"
+        echo "Added final newline to: $file"
+    fi
+}
+
+# Find and format files
+find ./src -type f \( -name \*.cpp -o -name \*.hpp \) | while read -r file; do
+    "$CLANG_FORMAT" -i --style=file "$@" "$file"
+    ensure_final_newline "$file"
+done
+
+# Also check test files if they exist
+if [[ -d "./test" ]]; then
+    find ./test -type f \( -name \*.cpp -o -name \*.hpp \) | while read -r file; do
+        "$CLANG_FORMAT" -i --style=file "$@" "$file"
+        ensure_final_newline "$file"
+    done
+fi
