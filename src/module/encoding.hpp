@@ -1,4 +1,3 @@
-
 #pragma once
 #include <viam/sdk/components/camera.hpp>
 

@@ -1,5 +1,5 @@
 module.tar.gz
 *.AppImage*
-viam-camera-realsense*
+viam-camera-realsense
 build
 .vscode
