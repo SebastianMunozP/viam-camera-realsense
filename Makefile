@@ -13,9 +13,6 @@ SANITIZE ?= OFF
 viam-camera-realsense: src/* *.cpp build/build.ninja
 	cd build && ninja viam-camera-realsense -j 4
 	cp build/viam-camera-realsense .
-viam-camera-realsense2: src/module/* build/build.ninja
-	cd build && ninja viam-camera-realsense2 -j 4
-	cp build/viam-camera-realsense2 .
 
 all: default
 
