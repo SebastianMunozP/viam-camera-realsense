@@ -59,20 +59,22 @@ private:
   }
 
   void notifyAllInstances(rs2::event_information &info) {
-    auto instances_guard = instances_.synchronize();
-    VIAM_SDK_LOG(info) << "[RealsenseContext] Notifying "
-                       << instances_guard->size() << " instances";
+    { // Begin scope for instances_guard lock
+      auto instances_guard = instances_.synchronize();
+      VIAM_SDK_LOG(info) << "[RealsenseContext] Notifying "
+                         << instances_guard->size() << " instances";
 
-    for (Realsense<ContextT> *instance : *instances_guard) {
-      if (instance != nullptr) {
-        try {
-          instance->handleDeviceChange(info);
-        } catch (const std::exception &e) {
-          VIAM_SDK_LOG(error)
-              << "[RealsenseContext] Error notifying instance: " << e.what();
+      for (Realsense<ContextT> *instance : *instances_guard) {
+        if (instance != nullptr) {
+          try {
+            instance->handleDeviceChange(info);
+          } catch (const std::exception &e) {
+            VIAM_SDK_LOG(error)
+                << "[RealsenseContext] Error notifying instance: " << e.what();
+          }
         }
       }
-    }
+    } // End scope for instances_guard lock
   }
 };
 
@@ -169,13 +171,15 @@ public:
   }
   ~Realsense() {
     if (device_) {
-      auto device_guard = device_->synchronize();
-      VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
-                         << device_guard->serial_number;
-      {
-        auto serials_guard = assigned_serials_->synchronize();
-        serials_guard->erase(device_guard->serial_number);
-      }
+      { // Begin scope for device_guard lock
+        auto device_guard = device_->synchronize();
+        VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
+                           << device_guard->serial_number;
+        { // Begin scope for serials_guard lock
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(device_guard->serial_number);
+        } // End scope for serials_guard lock
+      } // End scope for device_guard lock
       realsense_ctx_->removeInstance(this);
     }
 
@@ -189,14 +193,16 @@ public:
     VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
     std::string prev_serial_number;
     if (device_) {
-      auto device_guard = device_->synchronize();
-      VIAM_SDK_LOG(info) << "[reconfigure] Realsense destructor start "
-                         << device_guard->serial_number;
-      {
-        auto serials_guard = assigned_serials_->synchronize();
-        serials_guard->erase(device_guard->serial_number);
-      }
-      prev_serial_number = device_guard->serial_number;
+      { // Begin scope for device_guard lock
+        auto device_guard = device_->synchronize();
+        VIAM_SDK_LOG(info) << "[reconfigure] Realsense destructor start "
+                           << device_guard->serial_number;
+        { // Begin scope for serials_guard lock
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(device_guard->serial_number);
+        } // End scope for serials_guard lock
+        prev_serial_number = device_guard->serial_number;
+      } // End scope for device_guard lock
     }
 
     VIAM_SDK_LOG(error) << "[reconfigure] stopping device "
@@ -378,15 +384,13 @@ public:
       time::throwIfTooOld(nowMs, depth_frame.get_timestamp(), maxFrameAgeMs,
                           "no recent depth frame: check USB connection");
 
-      std::uint8_t *colorData = (std::uint8_t *)color_frame.get_data();
-      uint32_t colorDataSize = color_frame.get_data_size();
-      if (colorData == nullptr or colorDataSize == 0) {
+      if (color_frame.get_data() == nullptr or
+          color_frame.get_data_size() == 0) {
         throw std::runtime_error("[get_image] color data is null");
       }
 
-      std::uint8_t *depthData = (std::uint8_t *)depth_frame.get_data();
-      uint32_t depthDataSize = depth_frame.get_data_size();
-      if (depthData == nullptr or depthDataSize == 0) {
+      if (depth_frame.get_data() == nullptr or
+          depth_frame.get_data_size() == 0) {
         throw std::runtime_error("[get_point_cloud] depth data is null");
       }
 
@@ -395,7 +399,7 @@ public:
         throw std::runtime_error("no device available");
       }
       std::vector<std::uint8_t> data;
-      {
+      { // Begin scope for my_dev lock
         auto my_dev = device_->synchronize();
 
         if (not my_dev->started) {
@@ -404,16 +408,16 @@ public:
 
         data = encoding::encodeRGBPointsToPCD(
             my_dev->point_cloud_filter->process(my_dev->align->process(fs)));
+      } // End scope for my_dev lock
 
-        if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
-          VIAM_SDK_LOG(error)
-              << "[get_point_cloud] data size exceeds gRPC message size limit";
-          throw std::runtime_error(
-              "point cloud size " + std::to_string(data.size()) +
-              " exceeds gRPC message size limit of " +
-              std::to_string(MAX_GRPC_MESSAGE_SIZE) +
-              ". Consider reducing the resolution or frame rate.");
-        }
+      if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
+        VIAM_SDK_LOG(error)
+            << "[get_point_cloud] data size exceeds gRPC message size limit";
+        throw std::runtime_error(
+            "point cloud size " + std::to_string(data.size()) +
+            " exceeds gRPC message size limit of " +
+            std::to_string(MAX_GRPC_MESSAGE_SIZE) +
+            ". Consider reducing the resolution or frame rate.");
       }
 
       VIAM_SDK_LOG(debug) << "[get_point_cloud] end";
@@ -431,9 +435,40 @@ public:
         VIAM_SDK_LOG(error) << "[get_properties] no device available";
         throw std::runtime_error("no device available");
       }
+      auto fillResp = [](viam::sdk::Camera::properties &p,
+                         rs2_intrinsics const &props) {
+        p.supports_pcd = true;
+        p.intrinsic_parameters.width_px = props.width;
+        p.intrinsic_parameters.height_px = props.height;
+        p.intrinsic_parameters.focal_x_px = props.fx;
+        p.intrinsic_parameters.focal_y_px = props.fy;
+        p.intrinsic_parameters.center_x_px = props.ppx;
+        p.intrinsic_parameters.center_y_px = props.ppy;
+        p.distortion_parameters.model = rs2_distortion_to_string(props.model);
+        for (auto const &coeff : props.coeffs)
+          p.distortion_parameters.parameters.push_back(coeff);
+
+        std::stringstream coeffs_stream;
+        for (size_t i = 0; i < p.distortion_parameters.parameters.size(); ++i) {
+          if (i > 0)
+            coeffs_stream << ", ";
+          coeffs_stream << p.distortion_parameters.parameters[i];
+        }
+
+        VIAM_SDK_LOG(debug)
+            << "[get_properties] properties: ["
+            << "width: " << p.intrinsic_parameters.width_px << ", "
+            << "height: " << p.intrinsic_parameters.height_px << ", "
+            << "focal_x: " << p.intrinsic_parameters.focal_x_px << ", "
+            << "focal_y: " << p.intrinsic_parameters.focal_y_px << ", "
+            << "center_x: " << p.intrinsic_parameters.center_x_px << ", "
+            << "center_y: " << p.intrinsic_parameters.center_y_px << ", "
+            << "distortion_model: " << p.distortion_parameters.model << ", "
+            << "distortion_coeffs: [" << coeffs_stream.str() << "]" << "]";
+      };
       rs2_intrinsics props;
       viam::sdk::Camera::properties response{};
-      {
+      { // Begin scope for my_dev lock
         auto my_dev = device_->synchronize();
         std::string serial_number = my_dev->serial_number;
         if (not my_dev->started or not my_dev->pipe) {
@@ -442,38 +477,6 @@ public:
                  << serial_number << " is not longer started";
           throw std::invalid_argument(buffer.str());
         }
-        auto fillResp = [](viam::sdk::Camera::properties &p,
-                           rs2_intrinsics const &props) {
-          p.supports_pcd = true;
-          p.intrinsic_parameters.width_px = props.width;
-          p.intrinsic_parameters.height_px = props.height;
-          p.intrinsic_parameters.focal_x_px = props.fx;
-          p.intrinsic_parameters.focal_y_px = props.fy;
-          p.intrinsic_parameters.center_x_px = props.ppx;
-          p.intrinsic_parameters.center_y_px = props.ppy;
-          p.distortion_parameters.model = rs2_distortion_to_string(props.model);
-          for (auto const &coeff : props.coeffs)
-            p.distortion_parameters.parameters.push_back(coeff);
-
-          std::stringstream coeffs_stream;
-          for (size_t i = 0; i < p.distortion_parameters.parameters.size();
-               ++i) {
-            if (i > 0)
-              coeffs_stream << ", ";
-            coeffs_stream << p.distortion_parameters.parameters[i];
-          }
-
-          VIAM_SDK_LOG(debug)
-              << "[get_properties] properties: ["
-              << "width: " << p.intrinsic_parameters.width_px << ", "
-              << "height: " << p.intrinsic_parameters.height_px << ", "
-              << "focal_x: " << p.intrinsic_parameters.focal_x_px << ", "
-              << "focal_y: " << p.intrinsic_parameters.focal_y_px << ", "
-              << "center_x: " << p.intrinsic_parameters.center_x_px << ", "
-              << "center_y: " << p.intrinsic_parameters.center_y_px << ", "
-              << "distortion_model: " << p.distortion_parameters.model << ", "
-              << "distortion_coeffs: [" << coeffs_stream.str() << "]" << "]";
-        };
 
         if (config_->getMainSensor() == "color") {
           auto color_stream = my_dev->pipe->get_active_profile()
@@ -494,7 +497,7 @@ public:
           auto props = depth_stream.get_intrinsics();
           fillResp(response, props);
         }
-      }
+      } // End scope for my_dev lock
 
       VIAM_SDK_LOG(debug) << "[get_properties] end";
       return response;
@@ -651,17 +654,19 @@ private:
               << std::endl;
     try {
       std::string const required_serial_number = config_->serial_number;
-      auto current_device = device_->synchronize();
-      if (device_ and info.was_removed(*current_device->device)) {
-        std::cerr << "[deviceChangedCallback] Device removed: "
-                  << current_device->serial_number << std::endl;
-        {
-          auto serials_guard = assigned_serials_->synchronize();
-          serials_guard->erase(current_device->serial_number);
+      { // Begin scope for current_device lock
+        auto current_device = device_->synchronize();
+        if (device_ and info.was_removed(*current_device->device)) {
+          std::cerr << "[deviceChangedCallback] Device removed: "
+                    << current_device->serial_number << std::endl;
+          { // Begin scope for serials_guard lock
+            auto serials_guard = assigned_serials_->synchronize();
+            serials_guard->erase(current_device->serial_number);
+          } // End scope for serials_guard lock
+          device_ = nullptr;
+          physical_camera_assigned_ = false;
         }
-        device_ = nullptr;
-        physical_camera_assigned_ = false;
-      }
+      } // End scope for current_device lock
 
       // Handling added devices, if any
       auto added_devices = info.get_new_devices();
@@ -703,7 +708,7 @@ private:
           dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
       // Atomically check and insert serial number
-      {
+      { // Begin scope for serials_guard lock
         auto serials_guard = assigned_serials_->synchronize();
         if ((requested_serial_number.empty() &&
              serials_guard->count(connected_device_serial_number) == 0) ||
@@ -713,7 +718,7 @@ private:
         } else {
           continue;
         }
-      }
+      } // End scope for serials_guard lock
       VIAM_SDK_LOG(info)
           << "[assign_and_initialize_device] calling createDevice for: "
           << connected_device_serial_number;

@@ -304,29 +304,31 @@ bool destroyDevice(
           << "[destroyDevice] trying to destroy an unexistent device";
       return false;
     }
-    auto device = dev->synchronize();
-    VIAM_SDK_LOG(info) << "[destroyDevice] destroying device "
-                       << device->serial_number;
-
-    // Stop streaming if still running
-    if (device->started) {
-      VIAM_SDK_LOG(info) << "[destroyDevice] stopping pipe "
+    { // Begin scope for device lock
+      auto device = dev->synchronize();
+      VIAM_SDK_LOG(info) << "[destroyDevice] destroying device "
                          << device->serial_number;
-      device->pipe->stop();
-      device->started = false;
-    }
 
-    // Clear all resources
-    VIAM_SDK_LOG(info) << "[destroyDevice] clearing resources "
-                       << device->serial_number;
-    device->pipe.reset();
-    device->device.reset();
-    device->config.reset();
-    device->align.reset();
-    device->point_cloud_filter.reset();
+      // Stop streaming if still running
+      if (device->started) {
+        VIAM_SDK_LOG(info) << "[destroyDevice] stopping pipe "
+                           << device->serial_number;
+        device->pipe->stop();
+        device->started = false;
+      }
 
-    VIAM_SDK_LOG(info) << "[destroyDevice] device destroyed: "
-                       << device->serial_number;
+      // Clear all resources
+      VIAM_SDK_LOG(info) << "[destroyDevice] clearing resources "
+                         << device->serial_number;
+      device->pipe.reset();
+      device->device.reset();
+      device->config.reset();
+      device->align.reset();
+      device->point_cloud_filter.reset();
+
+      VIAM_SDK_LOG(info) << "[destroyDevice] device destroyed: "
+                         << device->serial_number;
+    } // End scope for device lock
     dev = nullptr;
   } catch (const std::exception &e) {
     VIAM_SDK_LOG(error)
@@ -440,20 +442,22 @@ void startDevice(
     buffer << "[startDevice] unable to start device " << serialNumber;
     throw std::runtime_error(buffer.str());
   }
-  auto dev_ptr = dev->synchronize();
-  if (dev_ptr->started) {
-    std::ostringstream buffer;
-    buffer << "[startDevice] unable to start already started device "
-           << serialNumber;
-    throw std::invalid_argument(buffer.str());
-  }
+  { // Begin scope for dev_ptr lock
+    auto dev_ptr = dev->synchronize();
+    if (dev_ptr->started) {
+      std::ostringstream buffer;
+      buffer << "[startDevice] unable to start already started device "
+             << serialNumber;
+      throw std::invalid_argument(buffer.str());
+    }
 
-  dev_ptr->config->enable_device(serialNumber);
-  dev_ptr->pipe->start(*dev_ptr->config, [maxFrameAgeMs, &frameSetStorage,
-                                          viamConfig](auto const &frame) {
-    frameCallback(frame, maxFrameAgeMs, frameSetStorage, viamConfig);
-  });
-  dev_ptr->started = true;
+    dev_ptr->config->enable_device(serialNumber);
+    dev_ptr->pipe->start(*dev_ptr->config, [maxFrameAgeMs, &frameSetStorage,
+                                            viamConfig](auto const &frame) {
+      frameCallback(frame, maxFrameAgeMs, frameSetStorage, viamConfig);
+    });
+    dev_ptr->started = true;
+  } // End scope for dev_ptr lock
   VIAM_SDK_LOG(info) << "[startDevice]  device started " << serialNumber;
 }
 
@@ -466,16 +470,19 @@ bool stopDevice(
           << "[stopDevice] trying to stop a device that does not exist";
       return false;
     }
-    auto dev_ptr = dev->synchronize();
-    if (not dev_ptr->started) {
-      VIAM_SDK_LOG(error)
-          << "[stopDevice] unable to stop device that is not currently running "
-          << dev_ptr->serial_number;
-      return false;
-    }
+    { // Begin scope for dev_ptr lock
+      auto dev_ptr = dev->synchronize();
+      if (not dev_ptr->started) {
+        VIAM_SDK_LOG(error) << "[stopDevice] unable to stop device that is not "
+                               "currently running "
+                            << dev_ptr->serial_number;
+        return false;
+      }
 
-    dev_ptr->pipe->stop();
-    dev_ptr->started = false;
+      dev_ptr->pipe->stop();
+      dev_ptr->started = false;
+
+    } // End scope for dev_ptr lock
     return true;
   } catch (const std::exception &e) {
     VIAM_SDK_LOG(error)
