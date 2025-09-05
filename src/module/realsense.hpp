@@ -2,6 +2,7 @@
 #include "device.hpp"
 #include "encoding.hpp"
 #include "time.hpp"
+#include "utils.hpp"
 #include <viam/sdk/components/camera.hpp>
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
@@ -79,17 +80,23 @@ private:
 struct RsResourceConfig {
   std::string resource_name;
   std::string serial_number;
-  std::unordered_set<std::string> sensors;
+  std::vector<std::string> sensors;
   std::optional<int> width;
   std::optional<int> height;
 
   explicit RsResourceConfig(std::string const &serial_number,
                             std::string const &resource_name,
-                            std::unordered_set<std::string> const &sensors,
+                            std::vector<std::string> const &sensors,
                             std::optional<int> width = std::nullopt,
                             std::optional<int> height = std::nullopt)
       : serial_number(serial_number), resource_name(resource_name),
         sensors(sensors), width(width), height(height) {}
+  std::string getMainSensor() const {
+    if (sensors.empty()) {
+      throw std::invalid_argument("sensors list is empty");
+    }
+    return sensors[0];
+  }
 };
 
 struct DeviceFunctions {
@@ -155,7 +162,7 @@ public:
         throw std::runtime_error("failed to start a device");
       }
     }
-    camera_assigned_ = true;
+    physical_camera_assigned_ = true;
 
     VIAM_SDK_LOG(info) << "Realsense constructor end "
                        << requested_serial_number;
@@ -207,7 +214,7 @@ public:
       throw std::runtime_error("failed to destroy device " +
                                prev_serial_number);
     }
-    camera_assigned_ = false;
+    physical_camera_assigned_ = false;
 
     // Before modifying config and starting the new device, let's make sure the
     // new device is actually connected
@@ -225,7 +232,7 @@ public:
         throw std::runtime_error("failed to start a device");
       }
     }
-    camera_assigned_ = true;
+    physical_camera_assigned_ = true;
     VIAM_SDK_LOG(info) << "[reconfigure] Realsense reconfigure end";
   }
 
@@ -240,26 +247,34 @@ public:
             const viam::sdk::ProtoStruct &extra) override {
     try {
       VIAM_SDK_LOG(debug) << "[get_image] start";
-      std::string serial_number;
-      serial_number = config_->serial_number;
       if (not latest_frameset_) {
         VIAM_SDK_LOG(error) << "[get_image] no frameset available";
         throw std::runtime_error("no frameset available");
       }
-      auto fs = latest_frameset_->get();
-      BOOST_ASSERT_MSG(fs->get_color_frame(),
-                       "[get_image] color frame is invalid");
-      time::throwIfTooOld(time::getNowMs(),
-                          fs.get_color_frame().get_timestamp(), maxFrameAgeMs,
-                          "no recent color frame: check USB connection");
+      if (config_->getMainSensor() == "color") {
+        auto fs = latest_frameset_->get();
+        time::throwIfTooOld(time::getNowMs(),
+                            fs.get_color_frame().get_timestamp(), maxFrameAgeMs,
+                            "no recent color frame: check USB connection");
+        VIAM_SDK_LOG(debug) << "[get_image] end";
+        return encoding::encodeVideoFrameToResponse(fs.get_color_frame());
+      } else if (config_->getMainSensor() == "depth") {
+        auto fs = latest_frameset_->get();
+        time::throwIfTooOld(time::getNowMs(),
+                            fs.get_depth_frame().get_timestamp(), maxFrameAgeMs,
+                            "no recent depth frame: check USB connection");
+        return encoding::encodeDepthFrameToResponse(fs.get_depth_frame());
+      } else {
+        throw std::invalid_argument("unknown main sensor: " +
+                                    config_->getMainSensor());
+      }
 
-      VIAM_SDK_LOG(debug) << "[get_image] end";
-      return encoding::encodeVideoFrameToResponse(fs.get_color_frame());
     } catch (const std::exception &e) {
       VIAM_SDK_LOG(error) << "[get_image] error: " << e.what();
       throw std::runtime_error("failed to create image: " +
                                std::string(e.what()));
     }
+    return viam::sdk::Camera::raw_image{}; // should never reach here
   }
   viam::sdk::Camera::image_collection get_images() override {
     try {
@@ -271,30 +286,62 @@ public:
       std::string serial_number = config_->serial_number;
       auto fs = latest_frameset_->get();
 
-      auto color = fs.get_color_frame();
-      auto depth = fs.get_depth_frame();
+      std::vector<std::string> sensors = config_->sensors;
 
       viam::sdk::Camera::image_collection response;
-      response.images.emplace_back(encoding::encodeVideoFrameToResponse(color));
-      response.images.emplace_back(encoding::encodeDepthFrameToResponse(depth));
+      for (auto const &sensor : sensors) {
+        if (sensor == "color") {
+          auto color = fs.get_color_frame();
+          response.images.emplace_back(
+              encoding::encodeVideoFrameToResponse(color));
+          std::uint64_t timestamp =
+              static_cast<std::uint64_t>(std::llround(color.get_timestamp()));
 
-      double colorTS = color.get_timestamp();
-      double depthTS = depth.get_timestamp();
-      if (colorTS != depthTS) {
-        VIAM_SDK_LOG(info)
-            << "color and depth timestamps differ, defaulting to "
-               "older of the two"
-            << "color timestamp was " << colorTS << " depth timestamp was "
-            << depthTS;
+          std::chrono::microseconds latestTimestamp(timestamp);
+          response.metadata.captured_at = viam::sdk::time_pt{
+              std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  latestTimestamp)};
+        } else if (sensor == "depth") {
+          auto depth = fs.get_depth_frame();
+          response.images.emplace_back(
+              encoding::encodeDepthFrameToResponse(depth));
+          std::uint64_t timestamp =
+              static_cast<std::uint64_t>(std::llround(depth.get_timestamp()));
+
+          std::chrono::microseconds latestTimestamp(timestamp);
+          response.metadata.captured_at = viam::sdk::time_pt{
+              std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  latestTimestamp)};
+        } else {
+          throw std::invalid_argument("unknown sensor: " + sensor);
+        }
       }
-      // use the older of the two timestamps
-      std::uint64_t timestamp =
-          static_cast<std::uint64_t>(std::llround(std::min(depthTS, colorTS)));
 
-      std::chrono::microseconds latestTimestamp(timestamp);
-      response.metadata.captured_at = viam::sdk::time_pt{
-          std::chrono::duration_cast<std::chrono::nanoseconds>(
-              latestTimestamp)};
+      // if both color and depth are requested, use the older timestamp of the
+      // two
+      if (utils::contains("color", sensors) and
+          utils::contains("depth", sensors)) {
+        auto color = fs.get_color_frame();
+        auto depth = fs.get_depth_frame();
+        double colorTS = color.get_timestamp();
+        double depthTS = depth.get_timestamp();
+        if (colorTS != depthTS) {
+          VIAM_SDK_LOG(info)
+              << "color and depth timestamps differ, defaulting to "
+                 "older of the two"
+              << "color timestamp was " << colorTS << " depth timestamp was "
+              << depthTS;
+        }
+        // use the older of the two timestamps
+        std::uint64_t timestamp = static_cast<std::uint64_t>(
+            std::llround(std::min(depthTS, colorTS)));
+
+        std::chrono::microseconds latestTimestamp(timestamp);
+        response.metadata.captured_at = viam::sdk::time_pt{
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                latestTimestamp)};
+      }
+
       VIAM_SDK_LOG(info) << "[get_images] end";
       return response;
     } catch (const std::exception &e) {
@@ -361,7 +408,11 @@ public:
         if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
           VIAM_SDK_LOG(error)
               << "[get_point_cloud] data size exceeds gRPC message size limit";
-          return viam::sdk::Camera::point_cloud{};
+          throw std::runtime_error(
+              "point cloud size " + std::to_string(data.size()) +
+              " exceeds gRPC message size limit of " +
+              std::to_string(MAX_GRPC_MESSAGE_SIZE) +
+              ". Consider reducing the resolution or frame rate.");
         }
       }
 
@@ -377,10 +428,11 @@ public:
     try {
       VIAM_SDK_LOG(debug) << "[get_properties] start";
       if (not device_) {
-        VIAM_SDK_LOG(error) << "[get_point_cloud] no device available";
+        VIAM_SDK_LOG(error) << "[get_properties] no device available";
         throw std::runtime_error("no device available");
       }
       rs2_intrinsics props;
+      viam::sdk::Camera::properties response{};
       {
         auto my_dev = device_->synchronize();
         std::string serial_number = my_dev->serial_number;
@@ -390,47 +442,62 @@ public:
                  << serial_number << " is not longer started";
           throw std::invalid_argument(buffer.str());
         }
-        auto color_stream = my_dev->pipe->get_active_profile()
-                                .get_stream(RS2_STREAM_COLOR)
-                                .as<rs2::video_stream_profile>();
-        if (not color_stream) {
-          throw std::runtime_error("color stream is not available");
+        auto fillResp = [](viam::sdk::Camera::properties &p,
+                           rs2_intrinsics const &props) {
+          p.supports_pcd = true;
+          p.intrinsic_parameters.width_px = props.width;
+          p.intrinsic_parameters.height_px = props.height;
+          p.intrinsic_parameters.focal_x_px = props.fx;
+          p.intrinsic_parameters.focal_y_px = props.fy;
+          p.intrinsic_parameters.center_x_px = props.ppx;
+          p.intrinsic_parameters.center_y_px = props.ppy;
+          p.distortion_parameters.model = rs2_distortion_to_string(props.model);
+          for (auto const &coeff : props.coeffs)
+            p.distortion_parameters.parameters.push_back(coeff);
+
+          std::stringstream coeffs_stream;
+          for (size_t i = 0; i < p.distortion_parameters.parameters.size();
+               ++i) {
+            if (i > 0)
+              coeffs_stream << ", ";
+            coeffs_stream << p.distortion_parameters.parameters[i];
+          }
+
+          VIAM_SDK_LOG(debug)
+              << "[get_properties] properties: ["
+              << "width: " << p.intrinsic_parameters.width_px << ", "
+              << "height: " << p.intrinsic_parameters.height_px << ", "
+              << "focal_x: " << p.intrinsic_parameters.focal_x_px << ", "
+              << "focal_y: " << p.intrinsic_parameters.focal_y_px << ", "
+              << "center_x: " << p.intrinsic_parameters.center_x_px << ", "
+              << "center_y: " << p.intrinsic_parameters.center_y_px << ", "
+              << "distortion_model: " << p.distortion_parameters.model << ", "
+              << "distortion_coeffs: [" << coeffs_stream.str() << "]" << "]";
+        };
+
+        if (config_->getMainSensor() == "color") {
+          auto color_stream = my_dev->pipe->get_active_profile()
+                                  .get_stream(RS2_STREAM_COLOR)
+                                  .as<rs2::video_stream_profile>();
+          if (not color_stream) {
+            throw std::runtime_error("color stream is not available");
+          }
+          auto props = color_stream.get_intrinsics();
+          fillResp(response, props);
+        } else if (config_->getMainSensor() == "depth") {
+          auto depth_stream = my_dev->pipe->get_active_profile()
+                                  .get_stream(RS2_STREAM_DEPTH)
+                                  .as<rs2::video_stream_profile>();
+          if (not depth_stream) {
+            throw std::runtime_error("depth stream is not available");
+          }
+          auto props = depth_stream.get_intrinsics();
+          fillResp(response, props);
         }
-        props = color_stream.get_intrinsics();
       }
-
-      viam::sdk::Camera::properties p{};
-      p.supports_pcd = true;
-      p.intrinsic_parameters.width_px = props.width;
-      p.intrinsic_parameters.height_px = props.height;
-      p.intrinsic_parameters.focal_x_px = props.fx;
-      p.intrinsic_parameters.focal_y_px = props.fy;
-      p.intrinsic_parameters.center_x_px = props.ppx;
-      p.intrinsic_parameters.center_y_px = props.ppy;
-      p.distortion_parameters.model = rs2_distortion_to_string(props.model);
-      for (auto const &coeff : props.coeffs)
-        p.distortion_parameters.parameters.push_back(coeff);
-
-      std::stringstream coeffs_stream;
-      for (size_t i = 0; i < p.distortion_parameters.parameters.size(); ++i) {
-        if (i > 0)
-          coeffs_stream << ", ";
-        coeffs_stream << p.distortion_parameters.parameters[i];
-      }
-
-      VIAM_SDK_LOG(debug)
-          << "[get_properties] properties: ["
-          << "width: " << p.intrinsic_parameters.width_px << ", "
-          << "height: " << p.intrinsic_parameters.height_px << ", "
-          << "focal_x: " << p.intrinsic_parameters.focal_x_px << ", "
-          << "focal_y: " << p.intrinsic_parameters.focal_y_px << ", "
-          << "center_x: " << p.intrinsic_parameters.center_x_px << ", "
-          << "center_y: " << p.intrinsic_parameters.center_y_px << ", "
-          << "distortion_model: " << p.distortion_parameters.model << ", "
-          << "distortion_coeffs: [" << coeffs_stream.str() << "]" << "]";
 
       VIAM_SDK_LOG(debug) << "[get_properties] end";
-      return p;
+      return response;
     } catch (const std::exception &e) {
       VIAM_SDK_LOG(error) << "[get_properties] error: " << e.what();
       throw std::runtime_error("failed to create properties: " +
@@ -574,7 +641,7 @@ private:
   std::shared_ptr<boost::synchronized_value<rs2::frameset>> latest_frameset_;
   std::shared_ptr<boost::synchronized_value<std::unordered_set<std::string>>>
       assigned_serials_;
-  boost::synchronized_value<bool> camera_assigned_;
+  boost::synchronized_value<bool> physical_camera_assigned_;
 
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<ContextT>> realsense_ctx_;
@@ -593,14 +660,14 @@ private:
           serials_guard->erase(current_device->serial_number);
         }
         device_ = nullptr;
-        camera_assigned_ = false;
+        physical_camera_assigned_ = false;
       }
 
       // Handling added devices, if any
       auto added_devices = info.get_new_devices();
-      if (not camera_assigned_) {
+      if (not physical_camera_assigned_) {
         if (assign_and_initialize_device(added_devices)) {
-          camera_assigned_ = true;
+          physical_camera_assigned_ = true;
           std::cout << "[deviceChangedCallback] Device assigned successfully";
         } else {
           std::cerr << "[deviceChangedCallback] No matching device found";
@@ -614,7 +681,7 @@ private:
 
   template <typename DeviceListT>
   bool assign_and_initialize_device(DeviceListT const &device_list) {
-    if (camera_assigned_) {
+    if (physical_camera_assigned_) {
       std::cerr << "[assign_and_initialize_device] Camera is already assigned"
                 << std::endl;
       return true;
@@ -666,7 +733,7 @@ private:
           << connected_device_serial_number;
       VIAM_SDK_LOG(info) << "[assign_and_initialize_device] Device Registered: "
                          << requested_serial_number;
-      camera_assigned_ = true;
+      physical_camera_assigned_ = true;
       return true;
     }
     return false;
@@ -686,9 +753,9 @@ private:
       serial = attrs["serial_number"].get_unchecked<std::string>();
     }
     auto sensors_list = attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
-    std::unordered_set<std::string> sensors;
+    std::vector<std::string> sensors;
     for (const auto &sensor : sensors_list) {
-      sensors.insert(sensor.get_unchecked<std::string>());
+      sensors.push_back(sensor.get_unchecked<std::string>());
     }
     std::optional<int> width;
     if (attrs.count("width_px")) {

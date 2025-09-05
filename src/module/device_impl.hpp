@@ -1,6 +1,7 @@
 #pragma once
 
 #include "time.hpp"
+#include "utils.hpp"
 
 #include <iostream>
 #include <memory>
@@ -126,11 +127,11 @@ void frameCallback(
   }
   double nowMs = time::getNowMs();
   auto color_frame = frameset.get_color_frame();
-  if (not color_frame and viamConfig.sensors.count("color") == 1) {
+  if (not color_frame and utils::contains("color", viamConfig.sensors)) {
     std::cerr << "[frame_callback] no color frame" << std::endl;
     return;
   }
-  if (color_frame and viamConfig.sensors.count("color") == 0) {
+  if (color_frame and not utils::contains("color", viamConfig.sensors)) {
     std::cerr << "[frame_callback] received color frame when not expected"
               << std::endl;
     return;
@@ -145,11 +146,11 @@ void frameCallback(
   }
 
   auto depth_frame = frameset.get_depth_frame();
-  if (not depth_frame and viamConfig.sensors.count("depth")) {
+  if (not depth_frame and utils::contains("depth", viamConfig.sensors)) {
     std::cerr << "[frame_callback] no depth frame" << std::endl;
     return;
   }
-  if (depth_frame and viamConfig.sensors.count("depth") == 0) {
+  if (depth_frame and not utils::contains("depth", viamConfig.sensors)) {
     std::cerr << "[frame_callback] received depth frame when not expected"
               << std::endl;
     return;
@@ -181,36 +182,56 @@ bool checkIfMatchingColorDepthProfiles(
   return false;
 }
 
-template <typename DeviceT, typename ConfigT, typename ColorSensorT,
+template <typename SensorT> class SensorTypeTraits {
+public:
+  static_assert(sizeof(SensorT) == -1,
+                "Specialize SensorTypeTraits for each sensor type");
+};
+
+template <> class SensorTypeTraits<rs2::color_sensor> {
+public:
+  static constexpr rs2_stream stream_type = RS2_STREAM_COLOR;
+  static constexpr rs2_format format_type = RS2_FORMAT_RGB8;
+};
+
+template <> class SensorTypeTraits<rs2::depth_sensor> {
+public:
+  static constexpr rs2_stream stream_type = RS2_STREAM_DEPTH;
+  static constexpr rs2_format format_type = RS2_FORMAT_Z16;
+};
+
+template <typename DeviceT, typename ConfigT, typename SensorT,
           typename VideoStreamProfileT, typename ViamConfigT>
-std::shared_ptr<ConfigT> createColorConfig(std::shared_ptr<DeviceT> dev,
-                                           ViamConfigT const &viamConfig) {
+std::shared_ptr<ConfigT>
+createSingleSensorConfig(std::shared_ptr<DeviceT> dev,
+                         ViamConfigT const &viamConfig) {
   auto cfg = std::make_shared<ConfigT>();
 
   // Query all sensors for the device
   auto sensors = dev->query_sensors();
 
-  typename decltype(sensors)::value_type color_sensor;
+  typename decltype(sensors)::value_type sensor;
   for (auto &s : sensors) {
-    if (s.template is<ColorSensorT>())
-      color_sensor = s;
+    if (s.template is<SensorT>())
+      sensor = s;
   }
 
   // Get stream profiles
-  auto color_profiles = color_sensor.get_stream_profiles();
+  auto profiles = sensor.get_stream_profiles();
 
   // Find matching profiles
-  for (auto &cp : color_profiles) {
+  for (auto &cp : profiles) {
     auto csp = cp.template as<VideoStreamProfileT>();
-    if (csp.format() != RS2_FORMAT_RGB8) {
+    if (csp.format() != SensorTypeTraits<SensorT>::format_type) {
       continue;
     }
 
     if ((not viamConfig.width) or
         (viamConfig.width == csp.width()) and
             (not viamConfig.height or (viamConfig.height == csp.height()))) {
-      cfg->enable_stream(RS2_STREAM_COLOR, csp.stream_index(), csp.width(),
-                         csp.height(), csp.format(), csp.fps());
+      cfg->enable_stream(SensorTypeTraits<SensorT>::stream_type,
+                         csp.stream_index(), csp.width(), csp.height(),
+                         csp.format(), csp.fps());
       VIAM_SDK_LOG(info)
           << "[createColorOnlyConfig] enabled color and depth streams";
       return cfg;
@@ -245,12 +266,12 @@ std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev,
   // Find matching profiles
   for (auto &cp : color_profiles) {
     auto csp = cp.template as<VideoStreamProfileT>();
-    if (csp.format() != RS2_FORMAT_RGB8) {
+    if (csp.format() != SensorTypeTraits<ColorSensorT>::format_type) {
       continue;
     }
     for (auto &dp : depth_profiles) {
       auto dsp = dp.template as<VideoStreamProfileT>();
-      if (dsp.format() != RS2_FORMAT_Z16) {
+      if (dsp.format() != SensorTypeTraits<DepthSensorT>::format_type) {
         continue;
       }
       if (checkIfMatchingColorDepthProfiles(csp, dsp) and
@@ -258,10 +279,12 @@ std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev,
           ((not viamConfig.height) or (viamConfig.height == csp.height()))) {
         VIAM_SDK_LOG(info) << "[createSwD2CAlignConfig] Found matching color "
                               "and depth stream profiles";
-        cfg->enable_stream(RS2_STREAM_COLOR, csp.stream_index(), csp.width(),
-                           csp.height(), csp.format(), csp.fps());
-        cfg->enable_stream(RS2_STREAM_DEPTH, dsp.stream_index(), dsp.width(),
-                           dsp.height(), dsp.format(), dsp.fps());
+        cfg->enable_stream(SensorTypeTraits<ColorSensorT>::stream_type,
+                           csp.stream_index(), csp.width(), csp.height(),
+                           csp.format(), csp.fps());
+        cfg->enable_stream(SensorTypeTraits<DepthSensorT>::stream_type,
+                           dsp.stream_index(), dsp.width(), dsp.height(),
+                           dsp.format(), dsp.fps());
         VIAM_SDK_LOG(info)
             << "[createSwD2CAlignConfig] enabled color and depth streams";
         return cfg;
@@ -350,7 +373,8 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
   // Lock viamConfig once and use it for all accesses
   std::shared_ptr<ConfigT> config = nullptr;
 
-  if (viamConfig.sensors.count("color") && viamConfig.sensors.count("depth")) {
+  if (utils::contains("color", viamConfig.sensors) and
+      utils::contains("depth", viamConfig.sensors)) {
     VIAM_SDK_LOG(info)
         << "[createDevice] Creating config with color and depth sensors for: "
         << serial_number;
@@ -360,13 +384,27 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
                                                                  viamConfig);
 
   } else if (viamConfig.sensors.size() == 1 &&
-             viamConfig.sensors.count("color")) {
+             utils::contains("color", viamConfig.sensors)) {
     VIAM_SDK_LOG(info)
         << "[createDevice] Creating config with color sensor for: "
         << serial_number;
-    config =
-        createColorConfig<DeviceT, ConfigT, ColorSensorT, VideoStreamProfileT,
-                          ViamConfigT>(dev, viamConfig);
+    config = createSingleSensorConfig<DeviceT, ConfigT, ColorSensorT,
+                                      VideoStreamProfileT, ViamConfigT>(
+        dev, viamConfig);
+  } else if (viamConfig.sensors.size() == 1 &&
+             utils::contains("depth", viamConfig.sensors)) {
+    VIAM_SDK_LOG(info)
+        << "[createDevice] Creating config with depth sensor for: "
+        << serial_number;
+    config = createSingleSensorConfig<DeviceT, ConfigT, DepthSensorT,
+                                      VideoStreamProfileT, ViamConfigT>(
+        dev, viamConfig);
+  } else {
+    VIAM_SDK_LOG(error)
+        << "[createDevice] Unsupported sensor configuration requested, only "
+           "'color', 'depth' or both are supported, serial number: "
+        << serial_number;
+    return nullptr;
   }
   // We are not currently supporting only depth sensor
   if (config == nullptr) {
