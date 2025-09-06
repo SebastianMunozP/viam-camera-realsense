@@ -8,6 +8,10 @@ project(viam-camera-realsense
 set(CMAKE_CXX_STANDARD 17)
 
 # Define an option for enabling build with AddressSanitizer
+option(ENABLE_SANITIZER "Enable AddressSanitizer" OFF)
+if(ENABLE_SANITIZER)
+    message(STATUS "Building with AddressSanitizer enabled")
+endif()
 option(CMAKE_BUILD_TYPE RelWithDebInfo)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -35,6 +39,40 @@ endif()
 
 add_executable(viam-camera-realsense src/module/main.cpp)
 target_link_libraries(viam-camera-realsense PRIVATE viamrealsense)
+
+if(ENABLE_SANITIZER)
+    add_compile_options(
+        -fsanitize=address
+        -fsanitize-address-use-after-scope
+        -fno-omit-frame-pointer
+    )
+    add_link_options(
+        -fsanitize=address
+        -fno-omit-frame-pointer
+    )
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static-libasan")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libasan -fno-omit-frame-pointer")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libasan")
+
+    target_compile_options(viamrealsense PRIVATE
+        -fsanitize=address
+        -fsanitize-address-use-after-scope
+        -fno-omit-frame-pointer
+    )
+    target_link_options(viamrealsense PRIVATE
+        -fsanitize=address
+        -fno-omit-frame-pointer
+    )
+    target_compile_options(viam-camera-realsense PRIVATE
+        -fsanitize=address
+        -fsanitize-address-use-after-scope
+        -fno-omit-frame-pointer
+    )
+    target_link_options(viam-camera-realsense PRIVATE
+        -fsanitize=address
+        -fno-omit-frame-pointer
+    )
+endif()
 
 # Add shared flags
 target_compile_features(viamrealsense PUBLIC
