@@ -24,8 +24,8 @@ create_all_model_registrations(
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(
       vsdk::API::get<vsdk::Camera>(), realsense::Realsense<rs2::context>::model,
-      [realsense_ctx, &assigned_serials](vsdk::Dependencies deps,
-                                         vsdk::ResourceConfig config) {
+      [realsense_ctx, assigned_serials](vsdk::Dependencies deps,
+                                        vsdk::ResourceConfig config) {
         return std::make_unique<realsense::Realsense<rs2::context>>(
             std::move(deps), std::move(config), realsense_ctx,
             assigned_serials);

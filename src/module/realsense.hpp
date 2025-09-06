@@ -121,6 +121,10 @@ struct DeviceFunctions {
       std::shared_ptr<boost::synchronized_value<rs2::frameset>> &,
       std::uint64_t, realsense::RsResourceConfig const &)>
       startDevice;
+  std::function<void(
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &,
+      realsense::RsResourceConfig const &)>
+      reconfigureDevice;
 };
 
 template <typename ContextT>
@@ -191,6 +195,12 @@ public:
   void reconfigure(const viam::sdk::Dependencies &deps,
                    const viam::sdk::ResourceConfig &cfg) override {
     VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
+    if (not physical_camera_assigned_) {
+      VIAM_SDK_LOG(error) << "[reconfigure] cannot reconfigure a device that "
+                             "does not have a physical device assigned";
+      throw std::runtime_error("cannot reconfigure a device that does not have "
+                               "a physical device assigned");
+    }
     std::string prev_serial_number;
     if (device_) {
       { // Begin scope for device_guard lock
@@ -212,33 +222,46 @@ public:
                           << prev_serial_number;
       throw std::runtime_error("failed to stop device " + prev_serial_number);
     }
-    VIAM_SDK_LOG(error) << "[reconfigure] destroying device "
-                        << prev_serial_number;
-    if (not device_funcs_.destroyDevice(device_)) {
-      VIAM_SDK_LOG(error) << "[reconfigure] failed to destroy device "
-                          << prev_serial_number;
-      throw std::runtime_error("failed to destroy device " +
-                               prev_serial_number);
-    }
-    physical_camera_assigned_ = false;
 
-    // Before modifying config and starting the new device, let's make sure the
-    // new device is actually connected
     config_ = configure(deps, cfg);
     auto rs_ctx = realsense_ctx_->getRsContext();
     auto device_list = rs_ctx->query_devices();
-    if (not assign_and_initialize_device(device_list)) {
-      if (not config_->serial_number.empty()) {
+
+    /*
+    If the user explicitly set a serial number, and it is different from the
+    serial number of our current physical device, we need to destroy the
+    previous device and create a new one.
+
+    In all other cases (same serial number, or no serial number set), we reuse
+    the existing device.
+    */
+    if (prev_serial_number != config_->serial_number) {
+      VIAM_SDK_LOG(error) << "[reconfigure] destroying device "
+                          << prev_serial_number;
+      if (not device_funcs_.destroyDevice(device_)) {
+        VIAM_SDK_LOG(error)
+            << "[reconfigure] failed to destroy device " << prev_serial_number;
+        throw std::runtime_error("failed to destroy device " +
+                                 prev_serial_number);
+      }
+      physical_camera_assigned_ = false;
+
+      if (not assign_and_initialize_device(device_list)) {
         VIAM_SDK_LOG(error) << "[reconfigure] failed to start device "
                             << config_->serial_number;
         throw std::runtime_error("failed to start device " +
                                  config_->serial_number);
-      } else {
-        VIAM_SDK_LOG(error) << "[reconfigure] failed to start a device";
-        throw std::runtime_error("failed to start a device");
       }
+      physical_camera_assigned_ = true;
+    } else {
+      realsense::RsResourceConfig config_copy = config_.get();
+      VIAM_SDK_LOG(info) << "[reconfigure] same serial number, reusing device "
+                         << prev_serial_number;
+      device_funcs_.reconfigureDevice(device_, config_copy);
+      device_funcs_.startDevice(config_copy.serial_number, device_,
+                                latest_frameset_, maxFrameAgeMs, config_copy);
     }
-    physical_camera_assigned_ = true;
+
     VIAM_SDK_LOG(info) << "[reconfigure] Realsense reconfigure end";
   }
 
@@ -802,6 +825,13 @@ private:
                realsense::RsResourceConfig const &viamConfig) {
               return device::startDevice(serial, device, latest_frameset,
                                          maxFrameAgeMs, viamConfig);
+            },
+        .reconfigureDevice =
+            [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+                   device,
+               realsense::RsResourceConfig const &viamConfig) {
+              device::reconfigureDevice<realsense::RsResourceConfig>(
+                  device, viamConfig);
             }};
   };
 };

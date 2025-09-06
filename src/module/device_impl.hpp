@@ -182,11 +182,7 @@ bool checkIfMatchingColorDepthProfiles(
   return false;
 }
 
-template <typename SensorT> class SensorTypeTraits {
-public:
-  static_assert(sizeof(SensorT) == -1,
-                "Specialize SensorTypeTraits for each sensor type");
-};
+template <typename SensorT> class SensorTypeTraits;
 
 template <> class SensorTypeTraits<rs2::color_sensor> {
 public:
@@ -205,8 +201,13 @@ template <typename DeviceT, typename ConfigT, typename SensorT,
 std::shared_ptr<ConfigT>
 createSingleSensorConfig(std::shared_ptr<DeviceT> dev,
                          ViamConfigT const &viamConfig) {
+
+  VIAM_SDK_LOG(info) << "[createSingleSensorConfig] Creating config for single "
+                        "sensor: "
+                     << SensorTypeTraits<SensorT>::stream_type;
   auto cfg = std::make_shared<ConfigT>();
 
+  VIAM_SDK_LOG(info) << "[createSingleSensorConfig] Querying sensors";
   // Query all sensors for the device
   auto sensors = dev->query_sensors();
 
@@ -216,9 +217,13 @@ createSingleSensorConfig(std::shared_ptr<DeviceT> dev,
       sensor = s;
   }
 
+  VIAM_SDK_LOG(info)
+      << "[createSingleSensorConfig] Got sensor, getting stream profiles";
   // Get stream profiles
   auto profiles = sensor.get_stream_profiles();
 
+  VIAM_SDK_LOG(info) << "[createSingleSensorConfig] Got " << profiles.size()
+                     << " stream profiles, looking for matches";
   // Find matching profiles
   for (auto &cp : profiles) {
     auto csp = cp.template as<VideoStreamProfileT>();
@@ -229,11 +234,12 @@ createSingleSensorConfig(std::shared_ptr<DeviceT> dev,
     if ((not viamConfig.width) or
         (viamConfig.width == csp.width()) and
             (not viamConfig.height or (viamConfig.height == csp.height()))) {
+      VIAM_SDK_LOG(info) << "[createSingleSensorConfig] Found matching "
+                            "stream profile, enabling";
       cfg->enable_stream(SensorTypeTraits<SensorT>::stream_type,
                          csp.stream_index(), csp.width(), csp.height(),
                          csp.format(), csp.fps());
-      VIAM_SDK_LOG(info)
-          << "[createColorOnlyConfig] enabled color and depth streams";
+      VIAM_SDK_LOG(info) << "[createSingleSensorConfig] enabled stream";
       return cfg;
     }
   }
@@ -292,6 +298,54 @@ std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev,
     }
   }
   return nullptr;
+}
+template <typename DeviceT, typename ConfigT, typename ColorSensorT,
+          typename DepthSensorT, typename VideoStreamProfileT,
+          typename ViamConfigT>
+std::shared_ptr<ConfigT> createConfig(std::shared_ptr<DeviceT> device,
+                                      ViamConfigT const &viamConfig) {
+  std::shared_ptr<rs2::config> config = nullptr;
+  { // Begin scope for device_guard lock
+
+    if (utils::contains("color", viamConfig.sensors) and
+        utils::contains("depth", viamConfig.sensors)) {
+      VIAM_SDK_LOG(info) << "[createConfig] Creating config with color and "
+                            "depth sensors";
+      config =
+          createSwD2CAlignConfig<DeviceT, ConfigT, ColorSensorT, DepthSensorT,
+                                 VideoStreamProfileT, ViamConfigT>(device,
+                                                                   viamConfig);
+
+    } else if (viamConfig.sensors.size() == 1 &&
+               utils::contains("color", viamConfig.sensors)) {
+      VIAM_SDK_LOG(info) << "[createConfig] Creating config with color sensor";
+      config = createSingleSensorConfig<DeviceT, ConfigT, ColorSensorT,
+                                        VideoStreamProfileT, ViamConfigT>(
+          device, viamConfig);
+    } else if (viamConfig.sensors.size() == 1 &&
+               utils::contains("depth", viamConfig.sensors)) {
+      VIAM_SDK_LOG(info) << "[createConfig] Creating config with depth sensor";
+      config = createSingleSensorConfig<DeviceT, ConfigT, DepthSensorT,
+                                        VideoStreamProfileT, ViamConfigT>(
+          device, viamConfig);
+    } else {
+      VIAM_SDK_LOG(error)
+          << "[createConfig] Unsupported sensor configuration requested, "
+             "only "
+             "'color', 'depth' or both are supported";
+      throw std::runtime_error("Unsupported sensor configuration requested, "
+                               "only 'color', 'depth' or both are supported");
+    }
+    // We are not currently supporting only depth sensor
+    if (config == nullptr) {
+      VIAM_SDK_LOG(error) << "[createConfig] Current device configuration not "
+                             "supported";
+      throw std::runtime_error(
+          "Current device configuration not supported, check device logs");
+    }
+
+  } // End scope for device_guard lock
+  return config;
 }
 
 /********************** DEVICE LIFECYCLE ************************/
@@ -372,49 +426,15 @@ createDevice(std::string const &serial_number, std::shared_ptr<DeviceT> dev,
                        << *camera_model;
   }
 
-  // Lock viamConfig once and use it for all accesses
-  std::shared_ptr<ConfigT> config = nullptr;
-
-  if (utils::contains("color", viamConfig.sensors) and
-      utils::contains("depth", viamConfig.sensors)) {
-    VIAM_SDK_LOG(info)
-        << "[createDevice] Creating config with color and depth sensors for: "
-        << serial_number;
-    config =
-        createSwD2CAlignConfig<DeviceT, ConfigT, ColorSensorT, DepthSensorT,
-                               VideoStreamProfileT, ViamConfigT>(dev,
-                                                                 viamConfig);
-
-  } else if (viamConfig.sensors.size() == 1 &&
-             utils::contains("color", viamConfig.sensors)) {
-    VIAM_SDK_LOG(info)
-        << "[createDevice] Creating config with color sensor for: "
-        << serial_number;
-    config = createSingleSensorConfig<DeviceT, ConfigT, ColorSensorT,
-                                      VideoStreamProfileT, ViamConfigT>(
-        dev, viamConfig);
-  } else if (viamConfig.sensors.size() == 1 &&
-             utils::contains("depth", viamConfig.sensors)) {
-    VIAM_SDK_LOG(info)
-        << "[createDevice] Creating config with depth sensor for: "
-        << serial_number;
-    config = createSingleSensorConfig<DeviceT, ConfigT, DepthSensorT,
-                                      VideoStreamProfileT, ViamConfigT>(
-        dev, viamConfig);
-  } else {
-    VIAM_SDK_LOG(error)
-        << "[createDevice] Unsupported sensor configuration requested, only "
-           "'color', 'depth' or both are supported, serial number: "
-        << serial_number;
-    return nullptr;
-  }
-  // We are not currently supporting only depth sensor
+  std::shared_ptr<ConfigT> config =
+      createConfig<DeviceT, ConfigT, ColorSensorT, DepthSensorT,
+                   VideoStreamProfileT, ViamConfigT>(dev, viamConfig);
   if (config == nullptr) {
-    VIAM_SDK_LOG(error) << "[createDevice] Current device configuration not "
-                           "supported, serial number: "
+    VIAM_SDK_LOG(error) << "[createDevice] failed to create config for device: "
                         << serial_number;
     return nullptr;
   }
+
   VIAM_SDK_LOG(info) << "[createDevice] Config created for: " << serial_number;
   auto my_dev = boost::synchronized_value<ViamDeviceT>();
   my_dev->pipe = std::make_shared<std::decay_t<decltype(*my_dev->pipe)>>();
@@ -459,6 +479,39 @@ void startDevice(
     dev_ptr->started = true;
   } // End scope for dev_ptr lock
   VIAM_SDK_LOG(info) << "[startDevice]  device started " << serialNumber;
+}
+
+template <typename ViamConfigT, typename ViamDeviceT, typename DeviceT,
+          typename ConfigT, typename ColorSensorT, typename DepthSensorT,
+          typename VideoStreamProfileT>
+void reconfigureDevice(
+    std::shared_ptr<boost::synchronized_value<ViamDeviceT>> dev,
+    ViamConfigT const &viamConfig) {
+  if (dev == nullptr) {
+    VIAM_SDK_LOG(error) << "[reconfigureDevice] device is null";
+    throw std::runtime_error("device is null");
+  }
+
+  { // Begin scope for device_guard lock
+    auto device_guard = dev->synchronize();
+    auto new_config = createConfig<DeviceT, ConfigT, ColorSensorT, DepthSensorT,
+                                   VideoStreamProfileT, ViamConfigT>(
+        device_guard->device, viamConfig);
+    if (new_config == nullptr) {
+      VIAM_SDK_LOG(error) << "[reconfigureDevice] failed to create new config";
+      throw std::runtime_error("failed to create new config");
+    }
+
+    if (device_guard->started) {
+      VIAM_SDK_LOG(error) << "[reconfigureDevice] device is started, stop it "
+                             "before reconfiguring";
+      throw std::runtime_error(
+          "device is started, stop it before reconfiguring");
+    }
+
+    device_guard->config = new_config;
+    VIAM_SDK_LOG(info) << "[reconfigureDevice] device reconfigured";
+  } // End scope for device_guard lock
 }
 
 template <typename ViamDeviceT>
