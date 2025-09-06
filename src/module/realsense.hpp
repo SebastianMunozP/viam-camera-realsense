@@ -235,7 +235,9 @@ public:
     In all other cases (same serial number, or no serial number set), we reuse
     the existing device.
     */
-    if (prev_serial_number != config_->serial_number) {
+    std::string requested_serial_number = config_->serial_number;
+    if (not requested_serial_number.empty() and
+        prev_serial_number != requested_serial_number) {
       VIAM_SDK_LOG(error) << "[reconfigure] destroying device "
                           << prev_serial_number;
       if (not device_funcs_.destroyDevice(device_)) {
