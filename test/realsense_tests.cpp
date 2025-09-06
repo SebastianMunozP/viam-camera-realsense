@@ -51,16 +51,19 @@ public:
   MOCK_METHOD(std::shared_ptr<device::ViamRSDevice>, createDevice,
               (const std::string &, std::shared_ptr<rs2::device>,
                const std::unordered_set<std::string> &,
-               const realsense::RsResourceConfig &), // Add config parameter
+               const realsense::RsResourceConfig &),
               ());
   MOCK_METHOD(
       void, startDevice,
       (const std::string &,
        std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &,
        std::shared_ptr<boost::synchronized_value<rs2::frameset>> &,
-       std::uint64_t,
-       const realsense::RsResourceConfig &), // Add config parameter
+       std::uint64_t, const realsense::RsResourceConfig &),
       ());
+  MOCK_METHOD(void, reconfigureDevice,
+              (std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>,
+               realsense::RsResourceConfig const &),
+              ());
 };
 
 DeviceFunctions
@@ -95,10 +98,16 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
               std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                   &latest_frameset,
               std::uint64_t maxFrameAgeMs,
-              const realsense::RsResourceConfig
-                  &viamConfig) { // Add config parameter
+              const realsense::RsResourceConfig &viamConfig) {
             mock->startDevice(serial, device, latest_frameset, maxFrameAgeMs,
-                              viamConfig); // Pass config
+                              viamConfig);
+          },
+      .reconfigureDevice =
+          [mock](
+              std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+                  device,
+              realsense::RsResourceConfig const &viamConfig) {
+            mock->reconfigureDevice(device, viamConfig);
           }};
 }
 
@@ -143,8 +152,7 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
         mock_device->started = false;
 
         return std::make_shared<
-            boost::synchronized_value<device::ViamRSDevice>>(
-            *mock_device); // Dereference here
+            boost::synchronized_value<device::ViamRSDevice>>(*mock_device);
       },
       .startDevice =
           [](const std::string &serial,
@@ -159,6 +167,13 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
               auto locked_device = device->synchronize();
               locked_device->started = true;
             }
+          },
+      .reconfigureDevice =
+          [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+                 device,
+             realsense::RsResourceConfig const &viamConfig) {
+            std::cout << "Mock: reconfigureDevice called" << std::endl;
+            // No-op for mock
           }};
 }
 
@@ -338,7 +353,7 @@ TEST(RealsenseStaticTest, ModelExists) {
 TEST(RsResourceConfigTest, ConstructorSetsCorrectValues) {
   std::string serial = "test_serial_123";
   std::string name = "test_camera";
-  std::unordered_set<std::string> sensors = {"color", "depth"};
+  std::vector<std::string> sensors = {"color", "depth"};
   std::optional<int> width = 640;
   std::optional<int> height = 480;
 
@@ -394,13 +409,9 @@ TEST_F(RealsenseTest, ReconfigureWithSameSerialNumber_StrictOrdering) {
     EXPECT_CALL(*mock_device_funcs, stopDevice(_))
         .Times(1)
         .WillOnce(Return(true));
-    EXPECT_CALL(*mock_device_funcs, destroyDevice(_))
+    EXPECT_CALL(*mock_device_funcs, reconfigureDevice(_, _))
         .Times(1)
-        .WillOnce(Return(true));
-    EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_)).Times(1);
-    EXPECT_CALL(*mock_device_funcs, createDevice("test_device_123456", _, _, _))
-        .Times(1)
-        .WillOnce(Return(mock_device_2)); // Return a valid mock device
+        .WillOnce(Return());
     EXPECT_CALL(*mock_device_funcs,
                 startDevice("test_device_123456", _, _, _, _))
         .Times(1);
