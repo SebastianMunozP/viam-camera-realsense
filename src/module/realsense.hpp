@@ -26,59 +26,68 @@ static constexpr size_t MAX_GRPC_MESSAGE_SIZE =
 const std::string kPcdMimeType = "pointcloud/pcd";
 const std::string service_name = "viam_realsense";
 
-template <typename ContextT> class Realsense;
+template <typename SynchronizedContextT> class Realsense;
 
-template <typename ContextT> class RealsenseContext {
+template <typename SynchronizedContextT> class RealsenseContext {
 public:
-  RealsenseContext(std::shared_ptr<ContextT> ctx) : rs_context_(ctx) {
+  RealsenseContext(std::shared_ptr<SynchronizedContextT> ctx)
+      : rs_context_(ctx) {
     setupCallback();
   }
 
-  std::shared_ptr<ContextT> getRsContext() { return rs_context_; }
+  auto query_devices() const {
+    auto rs_context = rs_context_->synchronize();
+    return rs_context->query_devices();
+  }
 
-  void addInstance(Realsense<ContextT> *instance) {
+  void addInstance(Realsense<SynchronizedContextT> *instance) {
     instances_->insert(instance);
     VIAM_SDK_LOG(info) << "[RealsenseContext] Added instance (total: "
                        << instances_->size() << ")";
   }
 
-  void removeInstance(Realsense<ContextT> *instance) {
+  void removeInstance(Realsense<SynchronizedContextT> *instance) {
     instances_->erase(instance);
     VIAM_SDK_LOG(info) << "[RealsenseContext] Removed instance (total: "
                        << instances_->size() << ")";
   }
 
 private:
-  std::shared_ptr<ContextT> rs_context_;
-  boost::synchronized_value<std::unordered_set<Realsense<ContextT> *>>
-      instances_{std::unordered_set<Realsense<ContextT> *>{}};
+  std::shared_ptr<SynchronizedContextT> rs_context_;
+  boost::synchronized_value<
+      std::unordered_set<Realsense<SynchronizedContextT> *>>
+      instances_{std::unordered_set<Realsense<SynchronizedContextT> *>{}};
 
   void setupCallback() {
-    rs_context_->set_devices_changed_callback(
+    auto rs_context = rs_context_->synchronize();
+    // Set the callback to notify all instances when devices change
+    rs_context->set_devices_changed_callback(
         [this](rs2::event_information &info) { notifyAllInstances(info); });
   }
 
   void notifyAllInstances(rs2::event_information &info) {
-    { // Begin scope for instances_guard lock
-      auto instances_guard = instances_.synchronize();
-      VIAM_SDK_LOG(info) << "[RealsenseContext] Notifying "
-                         << instances_guard->size() << " instances";
+    auto instances_guard = instances_.synchronize();
+    std::vector<Realsense<SynchronizedContextT> *> failed_instances;
 
-      for (Realsense<ContextT> *instance : *instances_guard) {
-        if (instance != nullptr) {
-          try {
-            instance->handleDeviceChange(info);
-          } catch (const std::exception &e) {
-            VIAM_SDK_LOG(error)
-                << "[RealsenseContext] Error notifying instance: " << e.what();
-          }
+    for (Realsense<SynchronizedContextT> *instance : *instances_guard) {
+      if (instance != nullptr) {
+        try {
+          instance->handleDeviceChange(info);
+        } catch (const std::exception &e) {
+          VIAM_SDK_LOG(error)
+              << "[RealsenseContext] Error notifying instance: " << e.what();
+          // Consider whether to remove failed instances
+          failed_instances.push_back(instance);
         }
       }
-    } // End scope for instances_guard lock
+    }
+
+    for (auto *failed : failed_instances) {
+      instances_guard->erase(failed);
+    }
   }
 };
 
-// The native config struct for realsense resources.
 struct RsResourceConfig {
   std::string resource_name;
   std::string serial_number;
@@ -127,19 +136,19 @@ struct DeviceFunctions {
       reconfigureDevice;
 };
 
-template <typename ContextT>
+template <typename SynchronizedContextT>
 class Realsense final : public viam::sdk::Camera,
                         public viam::sdk::Reconfigurable {
 public:
   Realsense(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg,
-            std::shared_ptr<RealsenseContext<ContextT>> ctx,
+            std::shared_ptr<RealsenseContext<SynchronizedContextT>> ctx,
             std::shared_ptr<
                 boost::synchronized_value<std::unordered_set<std::string>>>
                 assigned_serials)
       : Realsense(deps, cfg, ctx, createDefaultDeviceFunctions(),
                   assigned_serials) {}
   Realsense(viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg,
-            std::shared_ptr<RealsenseContext<ContextT>> ctx,
+            std::shared_ptr<RealsenseContext<SynchronizedContextT>> ctx,
             DeviceFunctions device_funcs,
             std::shared_ptr<
                 boost::synchronized_value<std::unordered_set<std::string>>>
@@ -155,8 +164,7 @@ public:
     realsense_ctx_->addInstance(this);
     // This will the initial set of connected devices (i.e. the devices that
     // were connected before the callback was set)
-    auto rs_ctx = realsense_ctx_->getRsContext();
-    auto device_list = rs_ctx->query_devices();
+    auto device_list = realsense_ctx_->query_devices();
     if (not assign_and_initialize_device(device_list)) {
       if (not requested_serial_number.empty()) {
         VIAM_SDK_LOG(error) << "[constructor] failed to start device "
@@ -224,8 +232,7 @@ public:
     }
 
     config_ = configure(deps, cfg);
-    auto rs_ctx = realsense_ctx_->getRsContext();
-    auto device_list = rs_ctx->query_devices();
+    auto device_list = realsense_ctx_->query_devices();
 
     /*
     If the user explicitly set a serial number, and it is different from the
@@ -672,7 +679,7 @@ private:
   boost::synchronized_value<bool> physical_camera_assigned_;
 
   DeviceFunctions device_funcs_;
-  std::shared_ptr<RealsenseContext<ContextT>> realsense_ctx_;
+  std::shared_ptr<RealsenseContext<SynchronizedContextT>> realsense_ctx_;
 
   void deviceChangedCallback(rs2::event_information &info) {
     std::cout << "[deviceChangedCallback] Device connection status changed"

@@ -15,31 +15,35 @@ namespace vsdk = ::viam::sdk;
 
 std::vector<std::shared_ptr<vsdk::ModelRegistration>>
 create_all_model_registrations(
-    std::shared_ptr<rs2::context> ctx,
+    std::shared_ptr<
+        realsense::RealsenseContext<boost::synchronized_value<rs2::context>>>
+        realsense_ctx,
     std::shared_ptr<boost::synchronized_value<std::unordered_set<std::string>>>
         assigned_serials) {
   std::vector<std::shared_ptr<vsdk::ModelRegistration>> registrations;
-  auto realsense_ctx =
-      std::make_shared<realsense::RealsenseContext<rs2::context>>(ctx);
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(
-      vsdk::API::get<vsdk::Camera>(), realsense::Realsense<rs2::context>::model,
+      vsdk::API::get<vsdk::Camera>(),
+      realsense::Realsense<boost::synchronized_value<rs2::context>>::model,
       [realsense_ctx, assigned_serials](vsdk::Dependencies deps,
                                         vsdk::ResourceConfig config) {
-        return std::make_unique<realsense::Realsense<rs2::context>>(
+        return std::make_unique<
+            realsense::Realsense<boost::synchronized_value<rs2::context>>>(
             std::move(deps), std::move(config), realsense_ctx,
             assigned_serials);
       },
-      realsense::Realsense<
-          realsense::RealsenseContext<rs2::context>>::validate));
+      realsense::Realsense<realsense::RealsenseContext<
+          boost::synchronized_value<rs2::context>>>::validate));
 
   registrations.push_back(std::make_shared<vsdk::ModelRegistration>(
       vsdk::API::get<vsdk::Discovery>(),
-      realsense::discovery::RealsenseDiscovery<rs2::context>::model,
-      [ctx](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
-        return std::make_unique<
-            realsense::discovery::RealsenseDiscovery<rs2::context>>(
-            std::move(deps), std::move(config), ctx);
+      realsense::discovery::RealsenseDiscovery<
+          boost::synchronized_value<rs2::context>>::model,
+      [realsense_ctx](vsdk::Dependencies deps, vsdk::ResourceConfig config) {
+        return std::make_unique<realsense::discovery::RealsenseDiscovery<
+            realsense::RealsenseContext<
+                boost::synchronized_value<rs2::context>>>>(
+            std::move(deps), std::move(config), realsense_ctx);
       }));
 
   return registrations;
@@ -51,13 +55,25 @@ int serve(int argc, char **argv) try {
   // all Viam C++ SDK objects are destroyed.
   vsdk::Instance inst;
 
+  VIAM_SDK_LOG(info) << "[serve] Starting Realsense module";
+
   for (size_t i = 0; i < argc; i++) {
     if (std::string(argv[i]) == "--log-level=debug") {
       rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
     }
   }
 
-  auto rs_ctx = std::make_shared<rs2::context>();
+  auto ctx = std::make_shared<boost::synchronized_value<rs2::context>>();
+  // Wrap the context in a RealsenseContext, which will manage the callback for
+  // device changes and notify all Realsense instances.
+  // It also provides a thread-safe way to query connected devices.
+  auto rs_ctx = std::make_shared<
+      realsense::RealsenseContext<boost::synchronized_value<rs2::context>>>(
+      ctx);
+
+  // This keeps track of serial numbers that have already been assigned to
+  // Realsense instances, to avoid assigning the same physical camera to
+  // multiple instances.
   auto assigned_serials = std::make_shared<
       boost::synchronized_value<std::unordered_set<std::string>>>();
 

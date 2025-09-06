@@ -22,7 +22,7 @@ public:
   RealsenseDiscovery(viam::sdk::Dependencies dependencies,
                      viam::sdk::ResourceConfig configuration,
                      std::shared_ptr<ContextT> ctx)
-      : Discovery(configuration.name()), rs_ctx_(std::move(ctx)) {}
+      : Discovery(configuration.name()), rs_ctx_(ctx) {}
 
   std::vector<viam::sdk::ResourceConfig>
   discover_resources(const viam::sdk::ProtoStruct &extra) override {
