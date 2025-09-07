@@ -89,11 +89,13 @@ private:
 };
 
 struct RsResourceConfig {
-  std::string resource_name;
-  std::string serial_number;
-  std::vector<std::string> sensors;
-  std::optional<int> width;
-  std::optional<int> height;
+  std::string resource_name{};
+  std::string serial_number{};
+  std::vector<std::string> sensors{};
+  std::optional<int> width{};
+  std::optional<int> height{};
+
+  RsResourceConfig() = default;
 
   explicit RsResourceConfig(std::string const &serial_number,
                             std::string const &resource_name,

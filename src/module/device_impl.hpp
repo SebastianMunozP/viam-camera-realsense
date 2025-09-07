@@ -86,10 +86,6 @@ template <typename DeviceT> void printDeviceInfo(DeviceT const &dev) {
     info << "  Advanced Mode:   " << dev.get_info(RS2_CAMERA_INFO_ADVANCED_MODE)
          << std::endl;
   }
-  if (dev.supports(RS2_CAMERA_INFO_PRODUCT_ID)) {
-    info << "  Product ID:   " << dev.get_info(RS2_CAMERA_INFO_PRODUCT_ID)
-         << std::endl;
-  }
   if (dev.supports(RS2_CAMERA_INFO_CAMERA_LOCKED)) {
     info << "  Camera Locked:   " << dev.get_info(RS2_CAMERA_INFO_CAMERA_LOCKED)
          << std::endl;
