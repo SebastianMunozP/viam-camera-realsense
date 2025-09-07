@@ -20,10 +20,20 @@ using ::testing::StrictMock;
 
 namespace realsense {
 namespace device {
+std::ostream &operator<<(std::ostream &os, const ViamRSDevice &device) {
+  os << "ViamRSDevice{serial: " << device.serial_number
+     << ", started: " << device.started << "}";
+  return os;
+}
+} // namespace device
+} // namespace realsense
+
+namespace realsense {
+namespace device {
 namespace test {
 
 // Mock classes for testing
-class MockDevice {
+class MockDevice : public rs2::device {
 public:
   MOCK_METHOD(bool, supports, (rs2_camera_info), (const));
   MOCK_METHOD(const char *, get_info, (rs2_camera_info), (const));
@@ -239,6 +249,119 @@ TEST_F(DeviceTest, PrintDeviceInfo_ValidDevice_LogsInfo) {
 
   // This test mainly ensures no exceptions are thrown
   EXPECT_NO_THROW(printDeviceInfo(*mock_device_));
+}
+
+// Test SensorTypeTraits
+TEST_F(DeviceTest, SensorTypeTraits_ColorSensor_CorrectValues) {
+  EXPECT_EQ(SensorTypeTraits<rs2::color_sensor>::stream_type, RS2_STREAM_COLOR);
+  EXPECT_EQ(SensorTypeTraits<rs2::color_sensor>::format_type, RS2_FORMAT_RGB8);
+}
+
+TEST_F(DeviceTest, SensorTypeTraits_DepthSensor_CorrectValues) {
+  EXPECT_EQ(SensorTypeTraits<rs2::depth_sensor>::stream_type, RS2_STREAM_DEPTH);
+  EXPECT_EQ(SensorTypeTraits<rs2::depth_sensor>::format_type, RS2_FORMAT_Z16);
+}
+
+// Test checkIfMatchingColorDepthProfiles
+TEST_F(DeviceTest,
+       CheckIfMatchingColorDepthProfiles_MatchingProfiles_ReturnsTrue) {
+  MockVideoStreamProfile color_profile;
+  MockVideoStreamProfile depth_profile;
+
+  // Setup matching profiles
+  EXPECT_CALL(color_profile, width()).WillRepeatedly(Return(640));
+  EXPECT_CALL(color_profile, height()).WillRepeatedly(Return(480));
+  EXPECT_CALL(color_profile, fps()).WillRepeatedly(Return(30));
+
+  EXPECT_CALL(depth_profile, width()).WillRepeatedly(Return(640));
+  EXPECT_CALL(depth_profile, height()).WillRepeatedly(Return(480));
+  EXPECT_CALL(depth_profile, fps()).WillRepeatedly(Return(30));
+
+  // Execute
+  bool result = checkIfMatchingColorDepthProfiles(color_profile, depth_profile);
+
+  // Verify
+  EXPECT_TRUE(result);
+}
+
+TEST_F(DeviceTest,
+       CheckIfMatchingColorDepthProfiles_DifferentResolution_ReturnsFalse) {
+  MockVideoStreamProfile color_profile;
+  MockVideoStreamProfile depth_profile;
+
+  // Setup non-matching profiles
+  EXPECT_CALL(color_profile, width()).WillRepeatedly(Return(640));
+  EXPECT_CALL(color_profile, height()).WillRepeatedly(Return(480));
+  EXPECT_CALL(color_profile, fps()).WillRepeatedly(Return(30));
+
+  EXPECT_CALL(depth_profile, width()).WillRepeatedly(Return(1280));
+  EXPECT_CALL(depth_profile, height()).WillRepeatedly(Return(720));
+  EXPECT_CALL(depth_profile, fps()).WillRepeatedly(Return(30));
+
+  // Execute
+  bool result = checkIfMatchingColorDepthProfiles(color_profile, depth_profile);
+
+  // Verify
+  EXPECT_FALSE(result);
+}
+
+// Test ViamRSDevice structure
+TEST_F(DeviceTest, ViamRSDevice_DefaultConstruction_ValidState) {
+  ViamRSDevice device;
+
+  // Default values should be reasonable
+  EXPECT_TRUE(device.serial_number.empty());
+  EXPECT_FALSE(device.started);
+  EXPECT_EQ(device.device, nullptr);
+  EXPECT_EQ(device.pipe, nullptr);
+  EXPECT_EQ(device.point_cloud_filter, nullptr);
+  EXPECT_EQ(device.align, nullptr);
+  EXPECT_EQ(device.config, nullptr);
+}
+
+TEST_F(DeviceTest, ViamRSDevice_SetValues_StateUpdated) {
+  ViamRSDevice device;
+
+  device.serial_number = "test123";
+  device.started = true;
+  device.device = mock_device_;
+
+  EXPECT_EQ(device.serial_number, "test123");
+  EXPECT_TRUE(device.started);
+  EXPECT_EQ(device.device, mock_device_);
+}
+
+// Test destroyDevice function
+TEST_F(DeviceTest, DestroyDevice_ValidDevice_ReturnsTrue) {
+  // Create a test device
+  auto device = std::make_shared<boost::synchronized_value<ViamRSDevice>>();
+  {
+    auto dev_guard = device->synchronize();
+    dev_guard->serial_number = "test123";
+    dev_guard->started = false;
+    dev_guard->pipe = std::make_shared<rs2::pipeline>();
+    dev_guard->device = std::make_shared<rs2::device>();
+    dev_guard->config = std::make_shared<rs2::config>();
+    dev_guard->align = std::make_shared<rs2::align>(RS2_STREAM_COLOR);
+    dev_guard->point_cloud_filter = std::make_shared<PointCloudFilter>();
+  }
+
+  // Execute
+  bool result = destroyDevice(device);
+
+  // Verify
+  EXPECT_TRUE(result);
+  EXPECT_EQ(device, nullptr);
+}
+
+TEST_F(DeviceTest, DestroyDevice_NullDevice_ReturnsFalse) {
+  std::shared_ptr<boost::synchronized_value<ViamRSDevice>> device = nullptr;
+
+  // Execute
+  bool result = destroyDevice(device);
+
+  // Verify
+  EXPECT_FALSE(result);
 }
 
 } // namespace test
