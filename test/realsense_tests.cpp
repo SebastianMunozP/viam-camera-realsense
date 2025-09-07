@@ -251,11 +251,16 @@ protected:
 
     test_deps_ = Dependencies{};
 
-    mock_context_ = std::make_shared<SimpleMockContext>();
-    mock_context_->add_device(test_serial_);
+    mock_context_ =
+        std::make_shared<boost::synchronized_value<SimpleMockContext>>();
+    {
+      auto locked_context = mock_context_->synchronize();
+      locked_context->add_device(test_serial_);
+    }
 
-    mock_realsense_context_ =
-        std::make_shared<RealsenseContext<SimpleMockContext>>(mock_context_);
+    mock_realsense_context_ = std::make_shared<
+        RealsenseContext<boost::synchronized_value<SimpleMockContext>>>(
+        mock_context_);
     assigned_serials_ = std::make_shared<
         boost::synchronized_value<std::unordered_set<std::string>>>();
   }
@@ -268,8 +273,10 @@ protected:
   std::string test_name_;
   std::unique_ptr<ResourceConfig> test_config_;
   Dependencies test_deps_;
-  std::shared_ptr<SimpleMockContext> mock_context_;
-  std::shared_ptr<RealsenseContext<SimpleMockContext>> mock_realsense_context_;
+  std::shared_ptr<boost::synchronized_value<SimpleMockContext>> mock_context_;
+  std::shared_ptr<
+      RealsenseContext<boost::synchronized_value<SimpleMockContext>>>
+      mock_realsense_context_;
   std::shared_ptr<boost::synchronized_value<std::unordered_set<std::string>>>
       assigned_serials_; // Add this
 };
@@ -314,7 +321,7 @@ TEST_F(RealsenseTest, ValidateWithInvalidConfig_EmptySerialNumber) {
 }
 
 TEST_F(RealsenseTest, DoCommandReturnsEmptyStruct) {
-  Realsense<SimpleMockContext> camera(
+  Realsense<boost::synchronized_value<SimpleMockContext>> camera(
       test_deps_, *test_config_, mock_realsense_context_,
       createFullyMockedDeviceFunctions(), assigned_serials_);
 
@@ -326,7 +333,7 @@ TEST_F(RealsenseTest, DoCommandReturnsEmptyStruct) {
 }
 
 TEST_F(RealsenseTest, GetGeometriesReturnsExpectedGeometry) {
-  Realsense<SimpleMockContext> camera(
+  Realsense<boost::synchronized_value<SimpleMockContext>> camera(
       test_deps_, *test_config_, mock_realsense_context_,
       createFullyMockedDeviceFunctions(), assigned_serials_);
 
@@ -424,15 +431,20 @@ TEST_F(RealsenseTest, ReconfigureWithSameSerialNumber_StrictOrdering) {
         .WillOnce(Return(true));
   }
 
-  auto isolated_context = std::make_shared<SimpleMockContext>();
-  isolated_context->add_device("test_device_123456");
-  auto isolated_realsense_context =
-      std::make_shared<RealsenseContext<SimpleMockContext>>(isolated_context);
+  auto isolated_context =
+      std::make_shared<boost::synchronized_value<SimpleMockContext>>();
+  {
+    auto locked_context = isolated_context->synchronize();
+    locked_context->add_device("test_device_123456");
+  }
+  auto isolated_realsense_context = std::make_shared<
+      RealsenseContext<boost::synchronized_value<SimpleMockContext>>>(
+      isolated_context);
 
   auto assigned_serials = std::make_shared<
       boost::synchronized_value<std::unordered_set<std::string>>>();
 
-  Realsense<SimpleMockContext> camera(
+  Realsense<boost::synchronized_value<SimpleMockContext>> camera(
       test_deps_, *test_config_, isolated_realsense_context,
       createMockDeviceFunctionsWithOrder(mock_device_funcs), assigned_serials);
 
@@ -491,19 +503,27 @@ TEST_F(RealsenseTest, ReconfigureWithNewSerialNumber_StrictOrdering) {
         .WillOnce(Return(true));
   }
 
-  auto isolated_context = std::make_shared<SimpleMockContext>();
-  isolated_context->add_device("test_device_123456");
-  auto isolated_realsense_context =
-      std::make_shared<RealsenseContext<SimpleMockContext>>(isolated_context);
+  auto isolated_context =
+      std::make_shared<boost::synchronized_value<SimpleMockContext>>();
+  {
+    auto locked_context = isolated_context->synchronize();
+    locked_context->add_device("test_device_123456");
+  }
+  auto isolated_realsense_context = std::make_shared<
+      RealsenseContext<boost::synchronized_value<SimpleMockContext>>>(
+      isolated_context);
 
   auto assigned_serials = std::make_shared<
       boost::synchronized_value<std::unordered_set<std::string>>>();
 
-  Realsense<SimpleMockContext> camera(
+  Realsense<boost::synchronized_value<SimpleMockContext>> camera(
       test_deps_, *test_config_, isolated_realsense_context,
       createMockDeviceFunctionsWithOrder(mock_device_funcs), assigned_serials);
 
-  isolated_context->replace_device("test_device_123456", "new_device_789");
+  {
+    auto locked_context = isolated_context->synchronize();
+    locked_context->replace_device("test_device_123456", "new_device_789");
+  }
 
   auto new_attributes = ProtoStruct{};
   new_attributes["serial_number"] = "new_device_789";
