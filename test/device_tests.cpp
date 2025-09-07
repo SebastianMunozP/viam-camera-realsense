@@ -20,7 +20,10 @@ using ::testing::StrictMock;
 
 namespace realsense {
 namespace device {
-std::ostream &operator<<(std::ostream &os, const ViamRSDevice &device) {
+template <typename DeviceT, typename PipeT, typename AligntT, typename ConfigT>
+std::ostream &
+operator<<(std::ostream &os,
+           const ViamRSDevice<DeviceT, PipeT, AligntT, ConfigT> &device) {
   os << "ViamRSDevice{serial: " << device.serial_number
      << ", started: " << device.started << "}";
   return os;
@@ -307,7 +310,7 @@ TEST_F(DeviceTest,
 
 // Test ViamRSDevice structure
 TEST_F(DeviceTest, ViamRSDevice_DefaultConstruction_ValidState) {
-  ViamRSDevice device;
+  ViamRSDevice<> device;
 
   // Default values should be reasonable
   EXPECT_TRUE(device.serial_number.empty());
@@ -320,7 +323,7 @@ TEST_F(DeviceTest, ViamRSDevice_DefaultConstruction_ValidState) {
 }
 
 TEST_F(DeviceTest, ViamRSDevice_SetValues_StateUpdated) {
-  ViamRSDevice device;
+  ViamRSDevice<> device;
 
   device.serial_number = "test123";
   device.started = true;
@@ -334,7 +337,7 @@ TEST_F(DeviceTest, ViamRSDevice_SetValues_StateUpdated) {
 // Test destroyDevice function
 TEST_F(DeviceTest, DestroyDevice_ValidDevice_ReturnsTrue) {
   // Create a test device
-  auto device = std::make_shared<boost::synchronized_value<ViamRSDevice>>();
+  auto device = std::make_shared<boost::synchronized_value<ViamRSDevice<>>>();
   {
     auto dev_guard = device->synchronize();
     dev_guard->serial_number = "test123";
@@ -355,13 +358,36 @@ TEST_F(DeviceTest, DestroyDevice_ValidDevice_ReturnsTrue) {
 }
 
 TEST_F(DeviceTest, DestroyDevice_NullDevice_ReturnsFalse) {
-  std::shared_ptr<boost::synchronized_value<ViamRSDevice>> device = nullptr;
+  std::shared_ptr<boost::synchronized_value<ViamRSDevice<>>> device = nullptr;
 
   // Execute
   bool result = destroyDevice(device);
 
   // Verify
   EXPECT_FALSE(result);
+}
+
+TEST_F(DeviceTest, DestroyDevice_StartedDevice_StopsAndDestroys) {
+  // Create a test device that's started
+  auto device = std::make_shared<boost::synchronized_value<
+      ViamRSDevice<rs2::device, MockPipeline, MockAlign, MockConfig>>>();
+  {
+    auto dev_guard = device->synchronize();
+    dev_guard->serial_number = "test123";
+    dev_guard->started = true; // Device is started
+    dev_guard->pipe = std::make_shared<MockPipeline>();
+    dev_guard->device = std::make_shared<MockDevice>();
+    dev_guard->config = std::make_shared<MockConfig>();
+    dev_guard->align = std::make_shared<MockAlign>(RS2_STREAM_COLOR);
+    dev_guard->point_cloud_filter = std::make_shared<PointCloudFilter>();
+  }
+
+  // Execute
+  bool result = destroyDevice(device);
+
+  // Verify
+  EXPECT_TRUE(result);
+  EXPECT_EQ(device, nullptr);
 }
 
 } // namespace test

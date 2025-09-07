@@ -11,7 +11,7 @@
 
 namespace realsense {
 namespace device {
-std::ostream &operator<<(std::ostream &os, const ViamRSDevice &device) {
+std::ostream &operator<<(std::ostream &os, const ViamRSDevice<> &device) {
   os << "ViamRSDevice{serial: " << device.serial_number
      << ", started: " << device.started << "}";
   return os;
@@ -43,12 +43,14 @@ class MockDeviceFunctions {
 public:
   MOCK_METHOD(
       bool, stopDevice,
-      (std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &), ());
+      (std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &),
+      ());
   MOCK_METHOD(
       bool, destroyDevice,
-      (std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &), ());
+      (std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &),
+      ());
   MOCK_METHOD(void, printDeviceInfo, (const rs2::device &), ());
-  MOCK_METHOD(std::shared_ptr<device::ViamRSDevice>, createDevice,
+  MOCK_METHOD(std::shared_ptr<device::ViamRSDevice<>>, createDevice,
               (const std::string &, std::shared_ptr<rs2::device>,
                const std::unordered_set<std::string> &,
                const realsense::RsResourceConfig &),
@@ -56,14 +58,15 @@ public:
   MOCK_METHOD(
       void, startDevice,
       (const std::string &,
-       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &,
+       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
        std::shared_ptr<boost::synchronized_value<rs2::frameset>> &,
        std::uint64_t, const realsense::RsResourceConfig &),
       ());
-  MOCK_METHOD(void, reconfigureDevice,
-              (std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>,
-               realsense::RsResourceConfig const &),
-              ());
+  MOCK_METHOD(
+      void, reconfigureDevice,
+      (std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
+       realsense::RsResourceConfig const &),
+      ());
 };
 
 DeviceFunctions
@@ -71,11 +74,11 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
   return DeviceFunctions{
       .stopDevice =
           [mock](
-              std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+              std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                   &device) -> bool { return mock->stopDevice(device); },
       .destroyDevice =
           [mock](
-              std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+              std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                   &device) -> bool { return mock->destroyDevice(device); },
       .printDeviceInfo =
           [mock](const auto &dev) { mock->printDeviceInfo(dev); },
@@ -84,16 +87,16 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
               const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
               const std::unordered_set<std::string> &supported_models,
               const realsense::RsResourceConfig &config) // Add config parameter
-      -> std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> {
+      -> std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> {
         auto raw_device = mock->createDevice(serial, dev_ptr, supported_models,
                                              config); // Pass config
         return std::make_shared<
-            boost::synchronized_value<device::ViamRSDevice>>(*raw_device);
+            boost::synchronized_value<device::ViamRSDevice<>>>(*raw_device);
       },
       .startDevice =
           [mock](
               const std::string &serial,
-              std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+              std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                   &device,
               std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                   &latest_frameset,
@@ -104,7 +107,7 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
           },
       .reconfigureDevice =
           [mock](
-              std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+              std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                   device,
               realsense::RsResourceConfig const &viamConfig) {
             mock->reconfigureDevice(device, viamConfig);
@@ -114,7 +117,7 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
 DeviceFunctions createFullyMockedDeviceFunctions() {
   return DeviceFunctions{
       .stopDevice =
-          [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+          [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                  &device) -> bool {
         std::cout << "Mock: stopDevice called" << std::endl;
         if (device) {
@@ -124,7 +127,7 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
         return true;
       },
       .destroyDevice =
-          [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+          [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                  &device) -> bool {
         std::cout << "Mock: destroyDevice called" << std::endl;
         device = nullptr;
@@ -143,20 +146,21 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
           [](const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
              const std::unordered_set<std::string> &supported_models,
              const realsense::RsResourceConfig &config)
-          -> std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> {
+          -> std::shared_ptr<
+              boost::synchronized_value<device::ViamRSDevice<>>> {
         std::cout << "Mock: createDevice called for " << serial << std::endl;
 
-        auto mock_device = std::make_shared<device::ViamRSDevice>();
+        auto mock_device = std::make_shared<device::ViamRSDevice<>>();
         mock_device->serial_number = serial;
         mock_device->device = nullptr;
         mock_device->started = false;
 
         return std::make_shared<
-            boost::synchronized_value<device::ViamRSDevice>>(*mock_device);
+            boost::synchronized_value<device::ViamRSDevice<>>>(*mock_device);
       },
       .startDevice =
           [](const std::string &serial,
-             std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+             std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                  &device,
              std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                  &latest_frameset,
@@ -169,7 +173,7 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
             }
           },
       .reconfigureDevice =
-          [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+          [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                  device,
              realsense::RsResourceConfig const &viamConfig) {
             std::cout << "Mock: reconfigureDevice called" << std::endl;
@@ -390,12 +394,12 @@ TEST_F(RealsenseTest, ReconfigureWithSameSerialNumber_StrictOrdering) {
   auto mock_device_funcs = std::make_shared<MockDeviceFunctions>();
 
   // Create mock devices that the mocks will return
-  auto mock_device_1 = std::make_shared<device::ViamRSDevice>();
+  auto mock_device_1 = std::make_shared<device::ViamRSDevice<>>();
   mock_device_1->serial_number = "test_device_123456";
   mock_device_1->started = false;
   mock_device_1->device = nullptr;
 
-  auto mock_device_2 = std::make_shared<device::ViamRSDevice>();
+  auto mock_device_2 = std::make_shared<device::ViamRSDevice<>>();
   mock_device_2->serial_number = "test_device_123456";
   mock_device_2->started = false;
   mock_device_2->device = nullptr;
@@ -459,12 +463,12 @@ TEST_F(RealsenseTest, ReconfigureWithNewSerialNumber_StrictOrdering) {
   auto mock_device_funcs = std::make_shared<MockDeviceFunctions>();
 
   // Create mock devices that the mocks will return
-  auto mock_device_1 = std::make_shared<device::ViamRSDevice>();
+  auto mock_device_1 = std::make_shared<device::ViamRSDevice<>>();
   mock_device_1->serial_number = "test_device_123456";
   mock_device_1->started = false;
   mock_device_1->device = nullptr;
 
-  auto mock_device_2 = std::make_shared<device::ViamRSDevice>();
+  auto mock_device_2 = std::make_shared<device::ViamRSDevice<>>();
   mock_device_2->serial_number = "new_device_789";
   mock_device_2->started = false;
   mock_device_2->device = nullptr;

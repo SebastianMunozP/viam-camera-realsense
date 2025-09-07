@@ -114,26 +114,26 @@ struct RsResourceConfig {
 
 struct DeviceFunctions {
   std::function<bool(
-      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &)>
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &)>
       stopDevice;
   std::function<bool(
-      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &)>
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &)>
       destroyDevice;
   std::function<void(const rs2::device &)> printDeviceInfo;
   std::function<
-      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>(
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>(
           std::string const &, std::shared_ptr<rs2::device>,
           std::unordered_set<std::string> const &,
           realsense::RsResourceConfig const &)>
       createDevice;
   std::function<void(
       std::string const &,
-      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &,
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
       std::shared_ptr<boost::synchronized_value<rs2::frameset>> &,
       std::uint64_t, realsense::RsResourceConfig const &)>
       startDevice;
   std::function<void(
-      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> &,
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
       realsense::RsResourceConfig const &)>
       reconfigureDevice;
 };
@@ -674,7 +674,7 @@ public:
 
 private:
   boost::synchronized_value<RsResourceConfig> config_;
-  std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>> device_;
+  std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> device_;
   std::shared_ptr<boost::synchronized_value<rs2::frameset>> latest_frameset_;
   std::shared_ptr<boost::synchronized_value<std::unordered_set<std::string>>>
       assigned_serials_;
@@ -812,11 +812,15 @@ private:
   static DeviceFunctions createDefaultDeviceFunctions() {
     return DeviceFunctions{
         .stopDevice =
-            [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
-                   &device) { return device::stopDevice(device); },
+            [](std::shared_ptr<
+                boost::synchronized_value<device::ViamRSDevice<>>> &device) {
+              return device::stopDevice(device);
+            },
         .destroyDevice =
-            [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
-                   &device) { return device::destroyDevice(device); },
+            [](std::shared_ptr<
+                boost::synchronized_value<device::ViamRSDevice<>>> &device) {
+              return device::destroyDevice(device);
+            },
         .printDeviceInfo =
             [](const auto &dev) { device::printDeviceInfo(dev); },
         .createDevice =
@@ -828,8 +832,8 @@ private:
             },
         .startDevice =
             [](const std::string &serial,
-               std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
-                   &device,
+               std::shared_ptr<
+                   boost::synchronized_value<device::ViamRSDevice<>>> &device,
                std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                    &latest_frameset,
                std::uint64_t maxFrameAgeMs,
@@ -838,7 +842,8 @@ private:
                                          maxFrameAgeMs, viamConfig);
             },
         .reconfigureDevice =
-            [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice>>
+            [](std::shared_ptr<
+                   boost::synchronized_value<device::ViamRSDevice<>>>
                    device,
                realsense::RsResourceConfig const &viamConfig) {
               device::reconfigureDevice<realsense::RsResourceConfig>(

@@ -384,10 +384,12 @@ bool destroyDevice(
     VIAM_SDK_LOG(error)
         << "[destroyDevice] Exception caught while destroying device: "
         << e.what();
+    dev = nullptr;
     return false;
   } catch (...) {
     VIAM_SDK_LOG(error)
         << "[destroyDevice] Unknown exception caught while destroying device";
+    dev = nullptr;
     return false;
   }
   return true;

@@ -37,14 +37,16 @@ private:
   std::shared_ptr<rs2::pointcloud> pointcloud_;
 };
 
+template <typename DeviceT = rs2::device, typename PipeT = rs2::pipeline,
+          typename AligntT = rs2::align, typename ConfigT = rs2::config>
 struct ViamRSDevice {
   std::string serial_number;
-  std::shared_ptr<rs2::device> device;
+  std::shared_ptr<DeviceT> device;
   bool started;
-  std::shared_ptr<rs2::pipeline> pipe;
+  std::shared_ptr<PipeT> pipe;
   std::shared_ptr<PointCloudFilter> point_cloud_filter;
-  std::shared_ptr<rs2::align> align;
-  std::shared_ptr<rs2::config> config;
+  std::shared_ptr<AligntT> align;
+  std::shared_ptr<ConfigT> config;
 };
 /********************** UTILITIES ************************/
 template <typename DeviceT> void printDeviceInfo(DeviceT const &dev);
@@ -66,7 +68,7 @@ void frameCallback(
     ViamConfigT const &viamConfig);
 
 /********************** DEVICE LIFECYCLE ************************/
-template <typename ViamConfigT, typename ViamDeviceT = ViamRSDevice,
+template <typename ViamConfigT, typename ViamDeviceT = ViamRSDevice<>,
           typename DeviceT = rs2::device, typename ConfigT = rs2::config,
           typename ColorSensorT = rs2::color_sensor,
           typename DepthSensorT = rs2::depth_sensor,
@@ -81,7 +83,7 @@ bool destroyDevice(
     std::shared_ptr<boost::synchronized_value<ViamDeviceT>> &dev) noexcept;
 
 /********************** STREAMING LIFECYCLE ************************/
-template <typename ViamConfigT, typename ViamDeviceT = ViamRSDevice,
+template <typename ViamConfigT, typename ViamDeviceT = ViamRSDevice<>,
           typename DeviceT = rs2::device, typename ConfigT = rs2::config,
           typename ColorSensorT = rs2::color_sensor,
           typename DepthSensorT = rs2::depth_sensor,
