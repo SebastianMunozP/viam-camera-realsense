@@ -163,7 +163,6 @@ public:
                        << config_->resource_name << " with serial number "
                        << requested_serial_number;
 
-    realsense_ctx_->addInstance(this);
     // This will the initial set of connected devices (i.e. the devices that
     // were connected before the callback was set)
     auto device_list = realsense_ctx_->query_devices();
@@ -181,6 +180,7 @@ public:
         throw std::runtime_error("failed to start a device");
       }
     }
+    realsense_ctx_->addInstance(this);
     physical_camera_assigned_ = true;
 
     VIAM_SDK_LOG(info) << "Realsense constructor end "
@@ -407,7 +407,7 @@ public:
         VIAM_SDK_LOG(error) << "[get_point_cloud] no frameset available";
         throw std::runtime_error("no frameset available");
       }
-      VIAM_SDK_LOG(debug) << "[get_point_cloud] start";
+      VIAM_SDK_LOG(info) << "[get_point_cloud] start";
       auto fs = latest_frameset_->get();
 
       double nowMs = time::getNowMs();
@@ -462,7 +462,7 @@ public:
                                  std::to_string(MAX_GRPC_MESSAGE_SIZE));
       }
 
-      VIAM_SDK_LOG(debug) << "[get_point_cloud] end";
+      VIAM_SDK_LOG(info) << "[get_point_cloud] end";
       return viam::sdk::Camera::point_cloud{kPcdMimeType, data};
     } catch (const std::exception &e) {
       VIAM_SDK_LOG(error) << "[get_point_cloud] error: " << e.what();
