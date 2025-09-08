@@ -10,7 +10,7 @@ build/build.ninja: build CMakeLists.txt
 	cd build && cmake -G Ninja -DENABLE_SANITIZER=$(SANITIZE) -DCMAKE_BUILD_TYPE=RelWithDebInfo .. 
 
 SANITIZE ?= OFF
-viam-camera-realsense: src/* *.cpp build/build.ninja
+viam-camera-realsense: src/* build/build.ninja
 	cd build && ninja viam-camera-realsense -j 4
 	cp build/viam-camera-realsense .
 

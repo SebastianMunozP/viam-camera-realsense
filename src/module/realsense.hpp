@@ -167,6 +167,9 @@ public:
     // This will the initial set of connected devices (i.e. the devices that
     // were connected before the callback was set)
     auto device_list = realsense_ctx_->query_devices();
+    VIAM_SDK_LOG(info) << "[constructor] start for resource "
+                       << config_->resource_name
+                       << " number of devices found: " << device_list.size();
     if (not assign_and_initialize_device(device_list)) {
       if (not requested_serial_number.empty()) {
         VIAM_SDK_LOG(error) << "[constructor] failed to start device "
@@ -211,19 +214,16 @@ public:
       throw std::runtime_error("cannot reconfigure a device that does not have "
                                "a physical device assigned");
     }
-    std::string prev_serial_number;
-    if (device_) {
-      { // Begin scope for device_guard lock
-        auto device_guard = device_->synchronize();
-        VIAM_SDK_LOG(info) << "[reconfigure] Realsense destructor start "
-                           << device_guard->serial_number;
-        { // Begin scope for serials_guard lock
-          auto serials_guard = assigned_serials_->synchronize();
-          serials_guard->erase(device_guard->serial_number);
-        } // End scope for serials_guard lock
-        prev_serial_number = device_guard->serial_number;
-      } // End scope for device_guard lock
+    if (not device_) {
+      VIAM_SDK_LOG(error) << "[reconfigure] device is null";
+      throw std::runtime_error("device is null");
     }
+
+    std::string prev_serial_number;
+    { // Begin scope for device_guard lock
+      auto device_guard = device_->synchronize();
+      prev_serial_number = device_guard->serial_number;
+    } // End scope for device_guard lock
 
     VIAM_SDK_LOG(error) << "[reconfigure] stopping device "
                         << prev_serial_number;
@@ -247,6 +247,15 @@ public:
     std::string requested_serial_number = config_->serial_number;
     if (not requested_serial_number.empty() and
         prev_serial_number != requested_serial_number) {
+      if (device_) {
+        { // Begin scope for device_guard lock
+          auto device_guard = device_->synchronize();
+          { // Begin scope for serials_guard lock
+            auto serials_guard = assigned_serials_->synchronize();
+            serials_guard->erase(device_guard->serial_number);
+          } // End scope for serials_guard lock
+        } // End scope for device_guard lock
+      }
       VIAM_SDK_LOG(error) << "[reconfigure] destroying device "
                           << prev_serial_number;
       if (not device_funcs_.destroyDevice(device_)) {
@@ -322,7 +331,7 @@ public:
         VIAM_SDK_LOG(error) << "[get_images] no frameset available";
         throw std::runtime_error("no frameset available");
       }
-      VIAM_SDK_LOG(info) << "[get_images] start";
+      VIAM_SDK_LOG(debug) << "[get_images] start";
       std::string serial_number = config_->serial_number;
       auto fs = latest_frameset_->get();
 
@@ -366,7 +375,7 @@ public:
         double colorTS = color.get_timestamp();
         double depthTS = depth.get_timestamp();
         if (colorTS != depthTS) {
-          VIAM_SDK_LOG(info)
+          VIAM_SDK_LOG(error)
               << "color and depth timestamps differ, defaulting to "
                  "older of the two"
               << "color timestamp was " << colorTS << " depth timestamp was "
@@ -382,7 +391,7 @@ public:
                 latestTimestamp)};
       }
 
-      VIAM_SDK_LOG(info) << "[get_images] end";
+      VIAM_SDK_LOG(debug) << "[get_images] end";
       return response;
     } catch (const std::exception &e) {
       VIAM_SDK_LOG(error) << "[get_images] error: " << e.what();
@@ -447,11 +456,10 @@ public:
       if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
         VIAM_SDK_LOG(error)
             << "[get_point_cloud] data size exceeds gRPC message size limit";
-        throw std::runtime_error(
-            "point cloud size " + std::to_string(data.size()) +
-            " exceeds gRPC message size limit of " +
-            std::to_string(MAX_GRPC_MESSAGE_SIZE) +
-            ". Consider reducing the resolution or frame rate.");
+        throw std::runtime_error("point cloud size " +
+                                 std::to_string(data.size()) +
+                                 " exceeds gRPC message size limit of " +
+                                 std::to_string(MAX_GRPC_MESSAGE_SIZE));
       }
 
       VIAM_SDK_LOG(debug) << "[get_point_cloud] end";
@@ -741,15 +749,25 @@ private:
       std::string connected_device_serial_number =
           dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
+      VIAM_SDK_LOG(info)
+          << "[assign_and_initialize_device] trying connecting to device: "
+          << connected_device_serial_number;
+
       // Atomically check and insert serial number
       { // Begin scope for serials_guard lock
         auto serials_guard = assigned_serials_->synchronize();
         if ((requested_serial_number.empty() &&
              serials_guard->count(connected_device_serial_number) == 0) ||
             (requested_serial_number == connected_device_serial_number)) {
+          VIAM_SDK_LOG(info)
+              << "[assign_and_initialize_device] grabbing device: "
+              << connected_device_serial_number;
 
           serials_guard->insert(connected_device_serial_number);
         } else {
+          VIAM_SDK_LOG(info)
+              << "[assign_and_initialize_device] Could not grab device: "
+              << connected_device_serial_number;
           continue;
         }
       } // End scope for serials_guard lock

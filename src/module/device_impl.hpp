@@ -301,46 +301,44 @@ template <typename DeviceT, typename ConfigT, typename ColorSensorT,
 std::shared_ptr<ConfigT> createConfig(std::shared_ptr<DeviceT> device,
                                       ViamConfigT const &viamConfig) {
   std::shared_ptr<rs2::config> config = nullptr;
-  { // Begin scope for device_guard lock
 
-    if (utils::contains("color", viamConfig.sensors) and
-        utils::contains("depth", viamConfig.sensors)) {
-      VIAM_SDK_LOG(info) << "[createConfig] Creating config with color and "
-                            "depth sensors";
-      config =
-          createSwD2CAlignConfig<DeviceT, ConfigT, ColorSensorT, DepthSensorT,
-                                 VideoStreamProfileT, ViamConfigT>(device,
-                                                                   viamConfig);
+  if (utils::contains("color", viamConfig.sensors) and
+      utils::contains("depth", viamConfig.sensors)) {
+    VIAM_SDK_LOG(info) << "[createConfig] Creating config with color and "
+                          "depth sensors";
+    config =
+        createSwD2CAlignConfig<DeviceT, ConfigT, ColorSensorT, DepthSensorT,
+                               VideoStreamProfileT, ViamConfigT>(device,
+                                                                 viamConfig);
 
-    } else if (viamConfig.sensors.size() == 1 &&
-               utils::contains("color", viamConfig.sensors)) {
-      VIAM_SDK_LOG(info) << "[createConfig] Creating config with color sensor";
-      config = createSingleSensorConfig<DeviceT, ConfigT, ColorSensorT,
-                                        VideoStreamProfileT, ViamConfigT>(
-          device, viamConfig);
-    } else if (viamConfig.sensors.size() == 1 &&
-               utils::contains("depth", viamConfig.sensors)) {
-      VIAM_SDK_LOG(info) << "[createConfig] Creating config with depth sensor";
-      config = createSingleSensorConfig<DeviceT, ConfigT, DepthSensorT,
-                                        VideoStreamProfileT, ViamConfigT>(
-          device, viamConfig);
-    } else {
-      VIAM_SDK_LOG(error)
-          << "[createConfig] Unsupported sensor configuration requested, "
-             "only "
-             "'color', 'depth' or both are supported";
-      throw std::runtime_error("Unsupported sensor configuration requested, "
-                               "only 'color', 'depth' or both are supported");
-    }
-    // We are not currently supporting only depth sensor
-    if (config == nullptr) {
-      VIAM_SDK_LOG(error) << "[createConfig] Current device configuration not "
-                             "supported";
-      throw std::runtime_error(
-          "Current device configuration not supported, check device logs");
-    }
+  } else if (viamConfig.sensors.size() == 1 &&
+             utils::contains("color", viamConfig.sensors)) {
+    VIAM_SDK_LOG(info) << "[createConfig] Creating config with color sensor";
+    config = createSingleSensorConfig<DeviceT, ConfigT, ColorSensorT,
+                                      VideoStreamProfileT, ViamConfigT>(
+        device, viamConfig);
+  } else if (viamConfig.sensors.size() == 1 &&
+             utils::contains("depth", viamConfig.sensors)) {
+    VIAM_SDK_LOG(info) << "[createConfig] Creating config with depth sensor";
+    config = createSingleSensorConfig<DeviceT, ConfigT, DepthSensorT,
+                                      VideoStreamProfileT, ViamConfigT>(
+        device, viamConfig);
+  } else {
+    VIAM_SDK_LOG(error)
+        << "[createConfig] Unsupported sensor configuration requested, "
+           "only "
+           "'color', 'depth' or both are supported";
+    throw std::runtime_error("Unsupported sensor configuration requested, "
+                             "only 'color', 'depth' or both are supported");
+  }
+  // We are not currently supporting only depth sensor
+  if (config == nullptr) {
+    VIAM_SDK_LOG(error) << "[createConfig] Current device configuration not "
+                           "supported";
+    throw std::runtime_error(
+        "Current device configuration not supported, check device logs");
+  }
 
-  } // End scope for device_guard lock
   return config;
 }
 
@@ -457,7 +455,9 @@ void startDevice(
   VIAM_SDK_LOG(info) << "[startDevice] starting device " << serialNumber;
   if (not dev) {
     std::ostringstream buffer;
-    buffer << "[startDevice] unable to start device " << serialNumber;
+    buffer << "[startDevice] unable to start device " << serialNumber
+           << " since "
+           << "viam device wrapper does not exist";
     throw std::runtime_error(buffer.str());
   }
   { // Begin scope for dev_ptr lock
@@ -501,10 +501,9 @@ void reconfigureDevice(
     }
 
     if (device_guard->started) {
-      VIAM_SDK_LOG(error) << "[reconfigureDevice] device is started, stop it "
-                             "before reconfiguring";
-      throw std::runtime_error(
-          "device is started, stop it before reconfiguring");
+      VIAM_SDK_LOG(error)
+          << "[reconfigureDevice] cannot reconfigure a started device";
+      throw std::runtime_error("cannot reconfigure a started device");
     }
 
     device_guard->config = new_config;
