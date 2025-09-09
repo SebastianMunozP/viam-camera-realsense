@@ -15,6 +15,38 @@ script:
     cp /lib/x86_64-linux-gnu/libboost_* $TARGET_APPDIR/usr/lib/
     cp /lib/x86_64-linux-gnu/libicu* $TARGET_APPDIR/usr/lib/
   fi
+    if [ "${PROFILE}" = "ON" ]; then
+    echo "Setting up profiling libraries for AppImage..."
+    mkdir -p $TARGET_APPDIR/usr/lib
+    
+    # Find and copy profiling libraries with better error checking
+    echo "Looking for profiling libraries..."
+    find /usr/lib -name "*profiler*" 2>/dev/null || echo "No profiler libs found in /usr/lib"
+    find /usr/lib -name "*tcmalloc*" 2>/dev/null || echo "No tcmalloc libs found in /usr/lib"
+    find /usr/lib -name "*unwind*" 2>/dev/null || echo "No unwind libs found in /usr/lib"
+    
+    # Copy with more specific paths and error checking
+    for lib in /usr/lib/x86_64-linux-gnu/libprofiler.* /usr/lib/x86_64-linux-gnu/libtcmalloc*.* /usr/lib/x86_64-linux-gnu/libunwind.*; do
+      if [ -f "$lib" ]; then
+        echo "Copying profiling library: $lib"
+        cp "$lib" $TARGET_APPDIR/usr/lib/ || echo "Failed to copy $lib"
+      else
+        echo "Profiling library not found: $lib"
+      fi
+    done
+    
+    # Also check /lib directory
+    for lib in /lib/x86_64-linux-gnu/libprofiler.* /lib/x86_64-linux-gnu/libtcmalloc*.* /lib/x86_64-linux-gnu/libunwind.*; do
+      if [ -f "$lib" ]; then
+        echo "Copying profiling library from /lib: $lib"
+        cp "$lib" $TARGET_APPDIR/usr/lib/ || echo "Failed to copy $lib"
+      fi
+    done
+    
+    # List what was actually copied
+    echo "Profiling libraries in AppImage:"
+    ls -la $TARGET_APPDIR/usr/lib/ | grep -E "(profiler|tcmalloc|unwind)" || echo "No profiling libraries found in AppImage!"
+  fi
 
 AppDir:
   path: ./AppDir
@@ -50,6 +82,9 @@ AppDir:
         AIX_TARGET: usr/bin/viam-camera-realsense
         ASAN_OPTIONS: detect_leaks=1 detect_stack_use_after_return=true
         LSAN_OPTIONS: verbosity=1:log_threads=1
+        # Profiling environment variables
+        PROFILE_OUTPUT_DIR: "/tmp/realsense_profiles"
+        CPUPROFILE_FREQUENCY: 1000 # Sample at 1000Hz instead of 100Hz
 AppImage:
   arch: x86_64
   comp: gzip

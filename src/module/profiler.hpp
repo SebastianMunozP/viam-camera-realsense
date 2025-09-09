@@ -4,7 +4,6 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
-#include <gperftools/heap-profiler.h>
 #include <gperftools/profiler.h>
 #include <iostream>
 #include <memory>
@@ -14,32 +13,19 @@
 namespace realsense {
 namespace profiling {
 
-class CameraProfiler {
+class Profiler {
 private:
   std::string camera_name_;
   std::string serial_number_;
-  bool cpu_profiling_enabled_ = false;
-  bool heap_profiling_enabled_ = false;
   std::string profile_dir_ = "/tmp/realsense_profiles";
   std::string cpu_profile_path_;
-  std::string heap_profile_path_;
   bool cpu_profiling_started_ = false;
-  bool heap_profiling_started_ = false;
 
 public:
-  CameraProfiler(const std::string &camera_name,
-                 const std::string &serial_number)
+  Profiler(const std::string &camera_name, const std::string &serial_number)
       : camera_name_(camera_name), serial_number_(serial_number) {
 
     // Check environment variables
-    if (const char *env_cpu = std::getenv("ENABLE_CPU_PROFILING")) {
-      cpu_profiling_enabled_ = (std::string(env_cpu) == "1");
-    }
-
-    if (const char *env_heap = std::getenv("ENABLE_HEAP_PROFILING")) {
-      heap_profiling_enabled_ = (std::string(env_heap) == "1");
-    }
-
     if (const char *env_dir = std::getenv("PROFILE_OUTPUT_DIR")) {
       profile_dir_ = env_dir;
     }
@@ -48,27 +34,17 @@ public:
     profile_dir_ = profile_dir_ + "/" + serial_number_;
     system(("mkdir -p " + profile_dir_).c_str());
 
-    if (cpu_profiling_enabled_ || heap_profiling_enabled_) {
-      std::cout << "[" << serial_number_
-                << "] CameraProfiler initialized for: " << camera_name_
-                << std::endl;
-      std::cout << "[" << serial_number_ << "] CPU profiling: "
-                << (cpu_profiling_enabled_ ? "ENABLED" : "DISABLED")
-                << std::endl;
-      std::cout << "[" << serial_number_ << "] Heap profiling: "
-                << (heap_profiling_enabled_ ? "ENABLED" : "DISABLED")
-                << std::endl;
-      std::cout << "[" << serial_number_
-                << "] Profile directory: " << profile_dir_ << std::endl;
-      start_session_profiling();
-    }
+    std::cout << "[" << serial_number_
+              << "] Profiler initialized for: " << camera_name_ << std::endl;
+    std::cout << "[" << serial_number_
+              << "] Profile directory: " << profile_dir_ << std::endl;
+
+    start_session_profiling();
   }
 
-  ~CameraProfiler() { stop_session_profiling(); }
+  ~Profiler() { stop_session_profiling(); }
 
-  bool is_enabled() const {
-    return cpu_profiling_enabled_ || heap_profiling_enabled_;
-  }
+  bool is_enabled() const { return true; }
 
   void log_operation_start(const std::string &operation) {
     if (!is_enabled())
@@ -87,14 +63,12 @@ public:
 
 private:
   void start_session_profiling() {
-    if (!cpu_profiling_enabled_ && !heap_profiling_enabled_)
-      return;
 
     auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(
                          std::chrono::system_clock::now().time_since_epoch())
                          .count();
 
-    if (cpu_profiling_enabled_ && !cpu_profiling_started_) {
+    if (!cpu_profiling_started_) {
       cpu_profile_path_ =
           profile_dir_ + "/cpu_session_" + std::to_string(timestamp) + ".prof";
       std::cout << "[" << serial_number_
@@ -109,20 +83,7 @@ private:
       } else {
         std::cerr << "[" << serial_number_ << "] Failed to start CPU profiler!"
                   << std::endl;
-        cpu_profiling_enabled_ = false;
       }
-    }
-
-    if (heap_profiling_enabled_ && !heap_profiling_started_) {
-      heap_profile_path_ =
-          profile_dir_ + "/heap_session_" + std::to_string(timestamp) + ".heap";
-      std::cout << "[" << serial_number_
-                << "] Starting heap profiling session: " << heap_profile_path_
-                << std::endl;
-      HeapProfilerStart(heap_profile_path_.c_str());
-      heap_profiling_started_ = true;
-      std::cout << "[" << serial_number_
-                << "] Heap profiling session started successfully" << std::endl;
     }
   }
 
@@ -137,18 +98,6 @@ private:
 
       // Check file size
       check_profile_file(cpu_profile_path_, "CPU session");
-    }
-
-    if (heap_profiling_started_) {
-      std::cout << "[" << serial_number_
-                << "] Stopping heap profiling session..." << std::endl;
-      HeapProfilerDump("final");
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      HeapProfilerStop();
-      heap_profiling_started_ = false;
-
-      // Check file size
-      check_profile_file(heap_profile_path_, "Heap session");
     }
   }
 
@@ -180,10 +129,10 @@ class ProfileScope {
 private:
   std::string operation_;
   std::chrono::high_resolution_clock::time_point start_time_;
-  CameraProfiler *profiler_;
+  Profiler *profiler_;
 
 public:
-  ProfileScope(CameraProfiler *profiler, const std::string &operation)
+  ProfileScope(Profiler *profiler, const std::string &operation)
       : operation_(operation), profiler_(profiler) {
     if (profiler_ && profiler_->is_enabled()) {
       start_time_ = std::chrono::high_resolution_clock::now();
@@ -216,9 +165,9 @@ namespace realsense {
 namespace profiling {
 
 // No-op profiler when profiling is disabled
-class CameraProfiler {
+class Profiler {
 public:
-  CameraProfiler(const std::string &, const std::string &) {}
+  Profiler(const std::string &, const std::string &) {}
   bool is_enabled() const { return false; }
   void log_operation_start(const std::string &) {}
   void log_operation_end(const std::string &, std::chrono::microseconds) {}
@@ -226,7 +175,7 @@ public:
 
 class ProfileScope {
 public:
-  ProfileScope(CameraProfiler *, const std::string &) {}
+  ProfileScope(Profiler *, const std::string &) {}
 };
 
 } // namespace profiling

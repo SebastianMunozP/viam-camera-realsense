@@ -164,18 +164,6 @@ public:
     VIAM_SDK_LOG(info) << "[constructor] start for resource "
                        << config_->resource_name << " with serial number "
                        << requested_serial_number;
-#ifdef ENABLE_PROFILING
-    // Initialize profiler with camera name and serial - profiling starts
-    // immediately
-    profiler_ = std::make_unique<realsense::profiling::CameraProfiler>(
-        cfg.name(),
-        requested_serial_number.empty() ? "unknown" : requested_serial_number);
-
-    if (profiler_->is_enabled()) {
-      VIAM_SDK_LOG(info) << "[" << requested_serial_number
-                         << "] Camera profiling enabled for: " << cfg.name();
-    }
-#endif
 
     // This will the initial set of connected devices (i.e. the devices that
     // were connected before the callback was set)
@@ -196,6 +184,24 @@ public:
     }
     realsense_ctx_->addInstance(this);
     physical_camera_assigned_ = true;
+
+#ifdef ENABLE_PROFILING
+    // Initialize profiler with camera name and serial - profiling starts
+    // immediately
+    std::string device_serial;
+    {
+      auto device_guard = device_->synchronize();
+      device_serial = device_guard->serial_number;
+    }
+    profiler_ = std::make_unique<realsense::profiling::Profiler>(
+        cfg.name(),
+        requested_serial_number.empty() ? "unknown" : device_serial);
+
+    if (profiler_->is_enabled()) {
+      VIAM_SDK_LOG(info) << "[" << device_serial
+                         << "] Camera profiling enabled for: " << cfg.name();
+    }
+#endif
 
     VIAM_SDK_LOG(info) << "Realsense constructor end "
                        << requested_serial_number;
@@ -725,7 +731,7 @@ private:
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<SynchronizedContextT>> realsense_ctx_;
 #ifdef ENABLE_PROFILING
-  std::unique_ptr<realsense::profiling::CameraProfiler> profiler_;
+  std::unique_ptr<realsense::profiling::Profiler> profiler_;
 #endif
   void deviceChangedCallback(rs2::event_information &info) {
     std::cout << "[deviceChangedCallback] Device connection status changed"
