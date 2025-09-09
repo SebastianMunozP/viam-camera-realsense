@@ -15,6 +15,8 @@
 # limitations under the License.
 
 # Set up the linter
+ sudo sh -c 'echo "nameserver 8.8.8.8" > /etc/resolv.conf'
+ sudo sh -c 'echo "nameserver 8.8.4.4" >> /etc/resolv.conf'
 if command -v clang-format-19 &> /dev/null; then
     CLANG_FORMAT=clang-format-19
 elif command -v clang-format &> /dev/null; then

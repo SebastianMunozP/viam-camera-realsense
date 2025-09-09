@@ -94,6 +94,10 @@ int serve(int argc, char **argv) try {
 
 int main(int argc, char *argv[]) {
   std::cout << "Realsense C++ SDK version: " << RS2_API_VERSION_STR << "\n";
+
+#ifdef ENABLE_PROFILING
+  std::cout << "Profiling build enabled\n";
+#endif
   const std::string usage = "usage: realsense /path/to/unix/socket";
   if (argc < 2) {
     std::cout << "ERROR: insufficient arguments\n";

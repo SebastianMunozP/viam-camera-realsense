@@ -1,8 +1,10 @@
 #pragma once
 #include "device.hpp"
 #include "encoding.hpp"
+#include "profiler.hpp"
 #include "time.hpp"
 #include "utils.hpp"
+
 #include <viam/sdk/components/camera.hpp>
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
@@ -162,6 +164,18 @@ public:
     VIAM_SDK_LOG(info) << "[constructor] start for resource "
                        << config_->resource_name << " with serial number "
                        << requested_serial_number;
+#ifdef ENABLE_PROFILING
+    // Initialize profiler with camera name and serial - profiling starts
+    // immediately
+    profiler_ = std::make_unique<realsense::profiling::CameraProfiler>(
+        cfg.name(),
+        requested_serial_number.empty() ? "unknown" : requested_serial_number);
+
+    if (profiler_->is_enabled()) {
+      VIAM_SDK_LOG(info) << "[" << requested_serial_number
+                         << "] Camera profiling enabled for: " << cfg.name();
+    }
+#endif
 
     // This will the initial set of connected devices (i.e. the devices that
     // were connected before the callback was set)
@@ -207,6 +221,9 @@ public:
   }
   void reconfigure(const viam::sdk::Dependencies &deps,
                    const viam::sdk::ResourceConfig &cfg) override {
+#ifdef ENABLE_PROFILING
+    CAMERA_PROFILE_SCOPE(profiler_.get(), "reconfigure");
+#endif
     VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
     if (not physical_camera_assigned_) {
       VIAM_SDK_LOG(error) << "[reconfigure] cannot reconfigure a device that "
@@ -294,6 +311,9 @@ public:
   viam::sdk::Camera::raw_image
   get_image(std::string mime_type,
             const viam::sdk::ProtoStruct &extra) override {
+#ifdef ENABLE_PROFILING
+    CAMERA_PROFILE_SCOPE(profiler_.get(), "get_image_" + mime_type);
+#endif
     try {
       VIAM_SDK_LOG(debug) << "[get_image] start";
       if (not latest_frameset_) {
@@ -325,7 +345,11 @@ public:
     }
     return viam::sdk::Camera::raw_image{}; // should never reach here
   }
+
   viam::sdk::Camera::image_collection get_images() override {
+#ifdef ENABLE_PROFILING
+    CAMERA_PROFILE_SCOPE(profiler_.get(), "get_images");
+#endif
     try {
       if (not latest_frameset_) {
         VIAM_SDK_LOG(error) << "[get_images] no frameset available";
@@ -402,6 +426,9 @@ public:
   viam::sdk::Camera::point_cloud
   get_point_cloud(std::string mime_type,
                   const viam::sdk::ProtoStruct &extra) override {
+#ifdef ENABLE_PROFILING
+    CAMERA_PROFILE_SCOPE(profiler_.get(), "get_point_cloud");
+#endif
     try {
       if (not latest_frameset_) {
         VIAM_SDK_LOG(error) << "[get_point_cloud] no frameset available";
@@ -470,7 +497,11 @@ public:
                                std::string(e.what()));
     }
   }
+
   viam::sdk::Camera::properties get_properties() override {
+#ifdef ENABLE_PROFILING
+    CAMERA_PROFILE_SCOPE(profiler_.get(), "get_properties");
+#endif
     try {
       VIAM_SDK_LOG(debug) << "[get_properties] start";
       if (not device_) {
@@ -551,6 +582,9 @@ public:
   }
   std::vector<viam::sdk::GeometryConfig>
   get_geometries(const viam::sdk::ProtoStruct &extra) override {
+#ifdef ENABLE_PROFILING
+    CAMERA_PROFILE_SCOPE(profiler_.get(), "get_geometries");
+#endif
     // This is the geometry for the D435 and D435i, the only models that we
     // currently support. See
     // https://github.com/viam-modules/viam-camera-realsense/pull/75 for
@@ -690,7 +724,9 @@ private:
 
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<SynchronizedContextT>> realsense_ctx_;
-
+#ifdef ENABLE_PROFILING
+  std::unique_ptr<realsense::profiling::CameraProfiler> profiler_;
+#endif
   void deviceChangedCallback(rs2::event_information &info) {
     std::cout << "[deviceChangedCallback] Device connection status changed"
               << std::endl;

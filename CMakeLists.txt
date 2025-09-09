@@ -9,9 +9,16 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Define an option for enabling build with AddressSanitizer
 option(ENABLE_SANITIZER "Enable AddressSanitizer" OFF)
+option(ENABLE_PROFILING "Enable gperftools profiling" OFF)
+
 if(ENABLE_SANITIZER)
     message(STATUS "Building with AddressSanitizer enabled")
 endif()
+
+if(ENABLE_PROFILING)
+    message(STATUS "Building with gperftools profiling enabled")
+endif()
+
 option(CMAKE_BUILD_TYPE RelWithDebInfo)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -74,7 +81,32 @@ if(ENABLE_SANITIZER)
     )
 endif()
 
-# Add shared flags
+# Apply profiling to all targets if enabled
+if(ENABLE_PROFILING)
+    # Find gperftools
+    find_library(PROFILER_LIBRARY profiler)
+    find_library(TCMALLOC_LIBRARY tcmalloc)
+    
+    if(NOT PROFILER_LIBRARY)
+        message(FATAL_ERROR "gperftools profiler library not found. Install with: apt install google-perftools libgoogle-perftools-dev")
+    endif()
+    
+    if(NOT TCMALLOC_LIBRARY)
+        message(FATAL_ERROR "gperftools tcmalloc library not found. Install with: apt install google-perftools libgoogle-perftools-dev")
+    endif()
+    
+    message(STATUS "Found profiler: ${PROFILER_LIBRARY}")
+    message(STATUS "Found tcmalloc: ${TCMALLOC_LIBRARY}")
+    
+    # Add profiling to library
+    target_link_libraries(viamrealsense PRIVATE ${PROFILER_LIBRARY} ${TCMALLOC_LIBRARY})
+    target_compile_definitions(viamrealsense PRIVATE ENABLE_PROFILING)
+    
+    # Add profiling to executable
+    target_link_libraries(viam-camera-realsense PRIVATE ${PROFILER_LIBRARY} ${TCMALLOC_LIBRARY})
+    target_compile_definitions(viam-camera-realsense PRIVATE ENABLE_PROFILING)
+endif()# Add shared flags
+
 target_compile_features(viamrealsense PUBLIC
     cxx_std_17
 )
@@ -86,4 +118,3 @@ target_compile_options(viamrealsense PRIVATE
 
 enable_testing()
 add_subdirectory(test)
-

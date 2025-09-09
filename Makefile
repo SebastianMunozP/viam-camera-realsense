@@ -1,3 +1,5 @@
+SANITIZE ?= OFF
+PROFILE ?= OFF
 default: viam-camera-realsense
 
 lint:
@@ -7,9 +9,8 @@ build: lint
 	mkdir -p build
 
 build/build.ninja: build CMakeLists.txt
-	cd build && cmake -G Ninja -DENABLE_SANITIZER=$(SANITIZE) -DCMAKE_BUILD_TYPE=RelWithDebInfo .. 
+	cd build && cmake -G Ninja -DENABLE_SANITIZER=$(SANITIZE) -DENABLE_PROFILING=$(PROFILE) -DCMAKE_BUILD_TYPE=RelWithDebInfo .. 
 
-SANITIZE ?= OFF
 viam-camera-realsense: src/* build/build.ninja
 	cd build && ninja viam-camera-realsense -j 4
 	cp build/viam-camera-realsense .
@@ -25,7 +26,7 @@ clean-all: clean
 test: build/build.ninja
 	cd build && ninja -j 4 test/all && ctest --output-on-failure
 
-.PHONY: build lint
+.PHONY: build lint profile-build
 
 # Docker
 BUILD_CMD = docker buildx build --pull $(BUILD_PUSH) --force-rm --no-cache --build-arg MAIN_TAG=$(MAIN_TAG) --build-arg BASE_TAG=$(BUILD_TAG) --platform linux/$(BUILD_TAG) -f $(BUILD_FILE) -t '$(MAIN_TAG):$(BUILD_TAG)' .

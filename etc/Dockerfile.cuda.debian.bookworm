@@ -32,7 +32,10 @@ RUN apt-get -y --no-install-recommends install \
     protobuf-compiler-grpc \
     software-properties-common \
     sudo \
-    wget
+    wget \
+    google-perftools \
+    libgoogle-perftools-dev \
+    libtcmalloc-minimal4
 
 
 RUN bash -c 'wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|apt-key add -'
