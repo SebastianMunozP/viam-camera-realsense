@@ -11,6 +11,16 @@ Navigate to the [**CONFIGURE** tab](https://docs.viam.com/build/configure/) of y
 
 ## Configure your `realsense` camera
 
+### Configure with discovery service
+
+1. On the [**CONFIGURE** tab](https://docs.viam.com/build/configure/), add the ** discovery / realsense:discovery ** service.
+1. Save your configuration.
+1. Click on the **TEST** panel for your discovery service.
+   You should now see possible configurations.
+1. Click **Add component** next to the configuration for your camera.    
+
+### Configure manually
+
 Copy and paste the following attributes into your camera's JSON configuration:
 
 ```json
