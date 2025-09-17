@@ -291,6 +291,26 @@ public:
   viam::sdk::ProtoStruct
   do_command(const viam::sdk::ProtoStruct &command) override {
     VIAM_SDK_LOG(error) << "do_command not implemented";
+    {
+      auto device_guard = device_->synchronize();
+      auto dev = device_guard->device;
+      for (auto const &[key, value] : command) {
+        if (key == "update_firmware") {
+          std::stringstream info;
+          if (dev->supports(RS2_CAMERA_INFO_FIRMWARE_VERSION)) {
+            info << "  Firmware Version:               "
+                 << dev->get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION)
+                 << std::endl;
+          }
+          if (dev->supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
+            info << "  Recommended Firmware Version:   "
+                 << dev->get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)
+                 << std::endl;
+          }
+          VIAM_SDK_LOG(info) << info.str();
+        }
+      }
+    }
     return viam::sdk::ProtoStruct();
   }
 
