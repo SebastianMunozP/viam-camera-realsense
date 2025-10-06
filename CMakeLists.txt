@@ -10,6 +10,16 @@ include(cmake/simd_flags.cmake)
 
 option(VIAM_REALSENSE_ENABLE_SANITIZER "Enable AddressSanitizer" OFF)
 option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" ON)
+option(VIAM_REALSENSE_DISABLE_APPIMAGE "Deploy without AppImage" OFF)
+
+if (VIAM_REALSENSE_DISABLE_APPIMAGE)
+    if (APPLE)
+        list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/../lib")
+    else()
+        list(PREPEND CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+    endif()
+
+endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -41,6 +51,28 @@ target_link_libraries(viamrealsense
 
 add_executable(viam-camera-realsense src/module/main.cpp)
 target_link_libraries(viam-camera-realsense PRIVATE viamrealsense)
+
+install(
+    TARGETS
+        viamrealsense
+        viam-camera-realsense
+)
+
+if (VIAM_REALSENSE_DISABLE_APPIMAGE)
+    install(
+        FILES
+            meta.json-no-appimage
+        RENAME
+            meta.json
+        DESTINATION .
+    )
+
+    set(CPACK_PACKAGE_NAME "viam-realsense")
+    set(CPACK_PACKAGE_FILE_NAME "module")
+    set(CPACK_GENERATOR "TGZ")
+    set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY 0)
+    include(CPack)
+endif()
 
 if(VIAM_REALSENSE_ENABLE_SANITIZER)
     message(STATUS "Building with AddressSanitizer enabled")
