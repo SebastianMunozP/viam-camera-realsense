@@ -80,7 +80,7 @@ The following methods of the Viam camera API are supported:
 
 - [`GetPointCloud`](https://docs.viam.com/components/camera/#getpointcloud): returns depth data and can return color data depending on the provided image
 - [`GetImage`](https://docs.viam.com/components/camera/#getimage): returns color data
-- [`GetImages`](https://docs.viam.com/components/camera/#getimages): returns both depth and color data
+- [`GetImages`](https://docs.viam.com/components/camera/#getimages): returns both depth and color data, possible to filter by image source
 - [`GetProperties`](https://docs.viam.com/components/camera/#getproperties): returns intrinsic properties of a camera
 
 ### CONTROL tab of app.viam.com
