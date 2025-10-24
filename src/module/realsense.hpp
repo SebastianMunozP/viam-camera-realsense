@@ -518,16 +518,30 @@ public:
         p.intrinsic_parameters.focal_y_px = props.fy;
         p.intrinsic_parameters.center_x_px = props.ppx;
         p.intrinsic_parameters.center_y_px = props.ppy;
-        p.distortion_parameters.model = rs2_distortion_to_string(props.model);
-        for (auto const &coeff : props.coeffs)
-          p.distortion_parameters.parameters.push_back(coeff);
+        /*
+       Disabling distortion parameters for now, when this is reenabled, we need to make sure that get_properties works well through the SDK.
+       A way to do this is to create a python script and query camera.get_properties and make sure it doesn't throw an error.
+       This is related to this ticker: https://viam.atlassian.net/browse/RSDK-12408
 
-        std::stringstream coeffs_stream;
-        for (size_t i = 0; i < p.distortion_parameters.parameters.size(); ++i) {
-          if (i > 0)
-            coeffs_stream << ", ";
-          coeffs_stream << p.distortion_parameters.parameters[i];
-        }
+       Which errors when creatng a new distorter here: https://github.com/viamrobotics/rdk/blob/062f15b372240c332fa309760da8f607c5af6c9a/components/camera/client.go#L315
+
+       There is another fundamental aspect to this, the distorer presumably distorts images using the distortion models supperted here: https://github.com/viamrobotics/rdk/blob/e97069d07515d7e5961ba5ac2ef660619a2d6dda/rimage/transform/distorter.go#L10
+       Tghe consists of BrownConradyDistortionType and KannalaBrandtDistortionType. But realsense reports a InverseBrownConrady as its distortion model, which aparently does the inverse operation, take a distorted image and undistort it.
+       We need to figure out how to handle this.
+
+        */ 
+        // p.distortion_parameters.model =
+        // rs2_distortion_to_string(props.model); for (auto const &coeff :
+        // props.coeffs)
+        //   p.distortion_parameters.parameters.push_back(coeff);
+
+        // std::stringstream coeffs_stream;
+        // for (size_t i = 0; i < p.distortion_parameters.parameters.size();
+        // ++i) {
+        //   if (i > 0)
+        //     coeffs_stream << ", ";
+        //   coeffs_stream << p.distortion_parameters.parameters[i];
+        // }
 
         VIAM_RESOURCE_LOG(debug)
             << "[get_properties] properties: ["
@@ -536,9 +550,9 @@ public:
             << "focal_x: " << p.intrinsic_parameters.focal_x_px << ", "
             << "focal_y: " << p.intrinsic_parameters.focal_y_px << ", "
             << "center_x: " << p.intrinsic_parameters.center_x_px << ", "
-            << "center_y: " << p.intrinsic_parameters.center_y_px << ", "
-            << "distortion_model: " << p.distortion_parameters.model << ", "
-            << "distortion_coeffs: [" << coeffs_stream.str() << "]" << "]";
+            << "center_y: " << p.intrinsic_parameters.center_y_px << "]";
+        // << "distortion_model: " << p.distortion_parameters.model << ", "
+        // << "distortion_coeffs: [" << coeffs_stream.str() << "]" << "]";
       };
       rs2_intrinsics props;
       viam::sdk::Camera::properties response{};
