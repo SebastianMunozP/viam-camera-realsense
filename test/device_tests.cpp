@@ -259,7 +259,8 @@ TEST_F(DeviceTest, PrintDeviceInfo_ValidDevice_LogsInfo) {
       .WillOnce(Return("IP Address Info"));
 
   // This test mainly ensures no exceptions are thrown
-  EXPECT_NO_THROW(printDeviceInfo(*mock_device_));
+  MockLogger logger;
+  EXPECT_NO_THROW(printDeviceInfo(*mock_device_, logger));
 }
 
 // Test SensorTypeTraits
@@ -362,7 +363,8 @@ TEST_F(DeviceTest, DestroyDevice_ValidDevice_ReturnsTrue) {
   }
 
   // Execute
-  bool result = destroyDevice(device);
+  MockLogger logger;
+  bool result = destroyDevice(device, logger);
 
   // Verify
   EXPECT_TRUE(result);
@@ -373,7 +375,8 @@ TEST_F(DeviceTest, DestroyDevice_NullDevice_ReturnsFalse) {
   std::shared_ptr<boost::synchronized_value<ViamRSDevice<>>> device = nullptr;
 
   // Execute
-  bool result = destroyDevice(device);
+  MockLogger logger;
+  bool result = destroyDevice(device, logger);
 
   // Verify
   EXPECT_FALSE(result);
@@ -395,7 +398,8 @@ TEST_F(DeviceTest, DestroyDevice_StartedDevice_StopsAndDestroys) {
   }
 
   // Execute
-  bool result = destroyDevice(device);
+  MockLogger logger;
+  bool result = destroyDevice(device, logger);
 
   // Verify
   EXPECT_TRUE(result);
