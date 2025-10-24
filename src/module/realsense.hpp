@@ -519,17 +519,25 @@ public:
         p.intrinsic_parameters.center_x_px = props.ppx;
         p.intrinsic_parameters.center_y_px = props.ppy;
         /*
-       Disabling distortion parameters for now, when this is reenabled, we need to make sure that get_properties works well through the SDK.
-       A way to do this is to create a python script and query camera.get_properties and make sure it doesn't throw an error.
-       This is related to this ticker: https://viam.atlassian.net/browse/RSDK-12408
+       Disabling distortion parameters for now, when this is reenabled, we need
+       to make sure that get_properties works well through the SDK. A way to do
+       this is to create a python script and query camera.get_properties and
+       make sure it doesn't throw an error. This is related to this ticker:
+       https://viam.atlassian.net/browse/RSDK-12408
 
-       Which errors when creatng a new distorter here: https://github.com/viamrobotics/rdk/blob/062f15b372240c332fa309760da8f607c5af6c9a/components/camera/client.go#L315
+       Which errors when creatng a new distorter here:
+       https://github.com/viamrobotics/rdk/blob/062f15b372240c332fa309760da8f607c5af6c9a/components/camera/client.go#L315
 
-       There is another fundamental aspect to this, the distorer presumably distorts images using the distortion models supperted here: https://github.com/viamrobotics/rdk/blob/e97069d07515d7e5961ba5ac2ef660619a2d6dda/rimage/transform/distorter.go#L10
-       Tghe consists of BrownConradyDistortionType and KannalaBrandtDistortionType. But realsense reports a InverseBrownConrady as its distortion model, which aparently does the inverse operation, take a distorted image and undistort it.
-       We need to figure out how to handle this.
+       There is another fundamental aspect to this, the distorer presumably
+       distorts images using the distortion models supperted here:
+       https://github.com/viamrobotics/rdk/blob/e97069d07515d7e5961ba5ac2ef660619a2d6dda/rimage/transform/distorter.go#L10
+       Tghe consists of BrownConradyDistortionType and
+       KannalaBrandtDistortionType. But realsense reports a InverseBrownConrady
+       as its distortion model, which aparently does the inverse operation, take
+       a distorted image and undistort it. We need to figure out how to handle
+       this.
 
-        */ 
+        */
         // p.distortion_parameters.model =
         // rs2_distortion_to_string(props.model); for (auto const &coeff :
         // props.coeffs)
