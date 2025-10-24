@@ -124,7 +124,8 @@ struct DeviceFunctions {
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
       viam::sdk::LogSource &)>
       destroyDevice;
-  std::function<void(const rs2::device &, viam::sdk::LogSource &)> printDeviceInfo;
+  std::function<void(const rs2::device &, viam::sdk::LogSource &)>
+      printDeviceInfo;
   std::function<
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>(
           std::string const &, std::shared_ptr<rs2::device>,
@@ -135,7 +136,8 @@ struct DeviceFunctions {
       std::string const &,
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
       std::shared_ptr<boost::synchronized_value<rs2::frameset>> &,
-      std::uint64_t, realsense::RsResourceConfig const &, viam::sdk::LogSource &)>
+      std::uint64_t, realsense::RsResourceConfig const &,
+      viam::sdk::LogSource &)>
       startDevice;
   std::function<void(
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
@@ -479,7 +481,8 @@ public:
         }
 
         data = encoding::encodeRGBPointsToPCD(
-            my_dev->point_cloud_filter->process(my_dev->align->process(fs)), logger_);
+            my_dev->point_cloud_filter->process(my_dev->align->process(fs)),
+            logger_);
       } // End scope for my_dev lock
 
       if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
@@ -881,9 +884,10 @@ private:
                std::unordered_set<std::string> const &supported_models,
                realsense::RsResourceConfig const &config,
                viam::sdk::LogSource &logger) {
-              return device::createDevice<realsense::RsResourceConfig, 
-                  device::ViamRSDevice<>, rs2::device, rs2::config, 
-                  rs2::color_sensor, rs2::depth_sensor, rs2::video_stream_profile>(
+              return device::createDevice<
+                  realsense::RsResourceConfig, device::ViamRSDevice<>,
+                  rs2::device, rs2::config, rs2::color_sensor,
+                  rs2::depth_sensor, rs2::video_stream_profile>(
                   serial, dev_ptr, supported_models, config, logger);
             },
         .startDevice =
@@ -904,9 +908,10 @@ private:
                    device,
                realsense::RsResourceConfig const &viamConfig,
                viam::sdk::LogSource &logger) {
-              device::reconfigureDevice<realsense::RsResourceConfig, 
-                  device::ViamRSDevice<>, rs2::device, rs2::config, 
-                  rs2::color_sensor, rs2::depth_sensor, rs2::video_stream_profile>(
+              device::reconfigureDevice<
+                  realsense::RsResourceConfig, device::ViamRSDevice<>,
+                  rs2::device, rs2::config, rs2::color_sensor,
+                  rs2::depth_sensor, rs2::video_stream_profile>(
                   device, viamConfig, logger);
             }};
   };

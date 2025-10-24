@@ -184,10 +184,12 @@ getPCDPoints(std::pair<rs2::points, rs2::video_frame> &&data) {
 }
 
 std::vector<std::uint8_t>
-encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data, viam::sdk::LogSource &logger) {
+encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data,
+                     viam::sdk::LogSource &logger) {
   auto pcdPoints = getPCDPoints(std::move(data));
   if (pcdPoints.empty()) {
-    VIAM_DEVICE_LOG(logger, error) << "[encodeRGBPointsToPCD] No valid points found";
+    VIAM_DEVICE_LOG(logger, error)
+        << "[encodeRGBPointsToPCD] No valid points found";
     return {};
   }
 
@@ -223,9 +225,9 @@ encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data, viam::sdk:
   size_t dataSize = pcdPoints.size() * sizeof(PointXYZRGB);
   pcdBytes.insert(pcdBytes.end(), dataPtr, dataPtr + dataSize);
 
-  VIAM_DEVICE_LOG(logger, debug) << "[encodeRGBPointsToPCD] Converted " << pcdPoints.size()
-                      << " points to PCD format, encoded in " << pcdBytes.size()
-                      << " bytes";
+  VIAM_DEVICE_LOG(logger, debug)
+      << "[encodeRGBPointsToPCD] Converted " << pcdPoints.size()
+      << " points to PCD format, encoded in " << pcdBytes.size() << " bytes";
   return pcdBytes;
 }
 

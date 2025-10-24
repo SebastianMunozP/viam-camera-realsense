@@ -6,8 +6,16 @@
 #include <viam/sdk/common/instance.hpp>
 #include <viam/sdk/components/camera.hpp>
 #include <viam/sdk/config/resource.hpp>
+#include <viam/sdk/log/logging.hpp>
 
 #include <librealsense2/rs.hpp>
+
+// Mock logger for testing
+class MockLogger : public viam::sdk::LogSource {
+public:
+  MOCK_METHOD(void, log,
+              (viam::sdk::log_level level, const std::string &message));
+};
 
 namespace realsense {
 namespace device {
@@ -75,18 +83,27 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
       .stopDevice =
           [mock](
               std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
-                  &device) -> bool { return mock->stopDevice(device); },
+                  &device,
+              viam::sdk::LogSource &) -> bool {
+        return mock->stopDevice(device);
+      },
       .destroyDevice =
           [mock](
               std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
-                  &device) -> bool { return mock->destroyDevice(device); },
+                  &device,
+              viam::sdk::LogSource &) -> bool {
+        return mock->destroyDevice(device);
+      },
       .printDeviceInfo =
-          [mock](const auto &dev) { mock->printDeviceInfo(dev); },
+          [mock](const auto &dev, viam::sdk::LogSource &) {
+            mock->printDeviceInfo(dev);
+          },
       .createDevice =
-          [mock](
-              const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
-              const std::unordered_set<std::string> &supported_models,
-              const realsense::RsResourceConfig &config) // Add config parameter
+          [mock](const std::string &serial,
+                 std::shared_ptr<rs2::device> dev_ptr,
+                 const std::unordered_set<std::string> &supported_models,
+                 const realsense::RsResourceConfig &config,
+                 viam::sdk::LogSource &) // Add logger parameter
       -> std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> {
         auto raw_device = mock->createDevice(serial, dev_ptr, supported_models,
                                              config); // Pass config
@@ -101,7 +118,8 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
               std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                   &latest_frameset,
               std::uint64_t maxFrameAgeMs,
-              const realsense::RsResourceConfig &viamConfig) {
+              const realsense::RsResourceConfig &viamConfig,
+              viam::sdk::LogSource &) {
             mock->startDevice(serial, device, latest_frameset, maxFrameAgeMs,
                               viamConfig);
           },
@@ -109,7 +127,8 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
           [mock](
               std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                   device,
-              realsense::RsResourceConfig const &viamConfig) {
+              realsense::RsResourceConfig const &viamConfig,
+              viam::sdk::LogSource &) {
             mock->reconfigureDevice(device, viamConfig);
           }};
 }
@@ -118,7 +137,8 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
   return DeviceFunctions{
       .stopDevice =
           [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
-                 &device) -> bool {
+                 &device,
+             viam::sdk::LogSource &) -> bool {
         std::cout << "Mock: stopDevice called" << std::endl;
         if (device) {
           auto locked_device = device->synchronize();
@@ -128,13 +148,14 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
       },
       .destroyDevice =
           [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
-                 &device) -> bool {
+                 &device,
+             viam::sdk::LogSource &) -> bool {
         std::cout << "Mock: destroyDevice called" << std::endl;
         device = nullptr;
         return true;
       },
       .printDeviceInfo =
-          [](const auto &dev) {
+          [](const auto &dev, viam::sdk::LogSource &) {
             std::cout << "Mock: printDeviceInfo called" << std::endl;
             if constexpr (std::is_same_v<std::decay_t<decltype(dev)>,
                                          MockRsDevice>) {
@@ -145,7 +166,7 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
       .createDevice =
           [](const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
              const std::unordered_set<std::string> &supported_models,
-             const realsense::RsResourceConfig &config)
+             const realsense::RsResourceConfig &config, viam::sdk::LogSource &)
           -> std::shared_ptr<
               boost::synchronized_value<device::ViamRSDevice<>>> {
         std::cout << "Mock: createDevice called for " << serial << std::endl;
@@ -165,7 +186,8 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
              std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                  &latest_frameset,
              std::uint64_t maxFrameAgeMs,
-             const realsense::RsResourceConfig &viamConfig) {
+             const realsense::RsResourceConfig &viamConfig,
+             viam::sdk::LogSource &) {
             std::cout << "Mock: startDevice called for " << serial << std::endl;
             if (device) {
               auto locked_device = device->synchronize();
@@ -175,7 +197,8 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
       .reconfigureDevice =
           [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                  device,
-             realsense::RsResourceConfig const &viamConfig) {
+             realsense::RsResourceConfig const &viamConfig,
+             viam::sdk::LogSource &) {
             std::cout << "Mock: reconfigureDevice called" << std::endl;
             // No-op for mock
           }};

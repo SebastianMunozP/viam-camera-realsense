@@ -169,10 +169,9 @@ void frameCallback(
 /************************ STREAM PROFILES ************************/
 
 template <typename VideoStreamProfileT>
-bool checkIfMatchingColorDepthProfiles(
-    const VideoStreamProfileT &color,
-    const VideoStreamProfileT &depth,
-    viam::sdk::LogSource &logger) noexcept {
+bool checkIfMatchingColorDepthProfiles(const VideoStreamProfileT &color,
+                                       const VideoStreamProfileT &depth,
+                                       viam::sdk::LogSource &logger) noexcept {
   if (std::tuple(color.width(), color.height(), color.fps()) ==
       std::tuple(depth.width(), depth.height(), depth.fps())) {
     VIAM_DEVICE_LOG(logger, info)
@@ -199,9 +198,10 @@ public:
 
 template <typename DeviceT, typename ConfigT, typename SensorT,
           typename VideoStreamProfileT, typename ViamConfigT>
-std::shared_ptr<ConfigT> createSingleSensorConfig(std::shared_ptr<DeviceT> dev,
-                                                  ViamConfigT const &viamConfig,
-                                                   viam::sdk::LogSource &logger) {
+std::shared_ptr<ConfigT>
+createSingleSensorConfig(std::shared_ptr<DeviceT> dev,
+                         ViamConfigT const &viamConfig,
+                         viam::sdk::LogSource &logger) {
 
   VIAM_DEVICE_LOG(logger, info)
       << "[createSingleSensorConfig] Creating config for single "
@@ -257,7 +257,7 @@ template <typename DeviceT, typename ConfigT, typename ColorSensorT,
           typename ViamConfigT>
 std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev,
                                                 ViamConfigT const &viamConfig,
-                                                   viam::sdk::LogSource &logger) {
+                                                viam::sdk::LogSource &logger) {
   auto cfg = std::make_shared<ConfigT>();
 
   // Query all sensors for the device
@@ -312,7 +312,7 @@ template <typename DeviceT, typename ConfigT, typename ColorSensorT,
           typename ViamConfigT>
 std::shared_ptr<ConfigT> createConfig(std::shared_ptr<DeviceT> device,
                                       ViamConfigT const &viamConfig,
-                                                   viam::sdk::LogSource &logger) {
+                                      viam::sdk::LogSource &logger) {
   std::shared_ptr<rs2::config> config = nullptr;
 
   if (utils::contains("color", viamConfig.sensors) and
@@ -472,7 +472,7 @@ void startDevice(
     std::shared_ptr<boost::synchronized_value<ViamDeviceT>> dev,
     std::shared_ptr<boost::synchronized_value<FrameSetT>> &frameSetStorage,
     std::uint64_t const maxFrameAgeMs, ViamConfigT const &viamConfig,
-                                                   viam::sdk::LogSource &logger) {
+    viam::sdk::LogSource &logger) {
   VIAM_DEVICE_LOG(logger, info)
       << "[startDevice] starting device " << serialNumber;
   if (not dev) {

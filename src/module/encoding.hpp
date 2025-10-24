@@ -24,7 +24,8 @@ viam::sdk::Camera::raw_image
 encodeDepthFrameToResponse(rs2::depth_frame const &frame);
 
 std::vector<std::uint8_t>
-encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data, viam::sdk::LogSource &logger);
+encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data,
+                     viam::sdk::LogSource &logger);
 
 } // namespace encoding
 } // namespace realsense
