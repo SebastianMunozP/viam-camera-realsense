@@ -117,27 +117,31 @@ struct RsResourceConfig {
 
 struct DeviceFunctions {
   std::function<bool(
-      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &)>
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
+      viam::sdk::LogSource &)>
       stopDevice;
   std::function<bool(
-      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &)>
+      std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
+      viam::sdk::LogSource &)>
       destroyDevice;
-  std::function<void(const rs2::device &)> printDeviceInfo;
+  std::function<void(const rs2::device &, viam::sdk::LogSource &)>
+      printDeviceInfo;
   std::function<
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>(
           std::string const &, std::shared_ptr<rs2::device>,
           std::unordered_set<std::string> const &,
-          realsense::RsResourceConfig const &)>
+          realsense::RsResourceConfig const &, viam::sdk::LogSource &)>
       createDevice;
   std::function<void(
       std::string const &,
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
       std::shared_ptr<boost::synchronized_value<rs2::frameset>> &,
-      std::uint64_t, realsense::RsResourceConfig const &)>
+      std::uint64_t, realsense::RsResourceConfig const &,
+      viam::sdk::LogSource &)>
       startDevice;
   std::function<void(
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
-      realsense::RsResourceConfig const &)>
+      realsense::RsResourceConfig const &, viam::sdk::LogSource &)>
       reconfigureDevice;
 };
 
@@ -162,39 +166,39 @@ public:
         device_funcs_(device_funcs), assigned_serials_(assigned_serials) {
 
     std::string requested_serial_number = config_->serial_number;
-    VIAM_SDK_LOG(info) << "[constructor] start for resource "
-                       << config_->resource_name << " with serial number "
-                       << requested_serial_number;
+    VIAM_RESOURCE_LOG(info)
+        << "[constructor] start for resource " << config_->resource_name
+        << " with serial number " << requested_serial_number;
 
     // This will the initial set of connected devices (i.e. the devices that
     // were connected before the callback was set)
     auto device_list = realsense_ctx_->query_devices();
-    VIAM_SDK_LOG(info) << "[constructor] start for resource "
-                       << config_->resource_name
-                       << " number of devices found: " << device_list.size();
+    VIAM_RESOURCE_LOG(info)
+        << "[constructor] start for resource " << config_->resource_name
+        << " number of devices found: " << device_list.size();
     if (not assign_and_initialize_device(device_list)) {
       if (not requested_serial_number.empty()) {
-        VIAM_SDK_LOG(error) << "[constructor] failed to start device "
-                            << requested_serial_number;
+        VIAM_RESOURCE_LOG(error) << "[constructor] failed to start device "
+                                 << requested_serial_number;
         throw std::runtime_error("failed to start device " +
                                  requested_serial_number);
       } else {
-        VIAM_SDK_LOG(error) << "[constructor] failed to start a device";
+        VIAM_RESOURCE_LOG(error) << "[constructor] failed to start a device";
         throw std::runtime_error("failed to start a device");
       }
     }
     realsense_ctx_->addInstance(this);
     physical_camera_assigned_ = true;
 
-    VIAM_SDK_LOG(info) << "Realsense constructor end "
-                       << requested_serial_number;
+    VIAM_RESOURCE_LOG(info)
+        << "Realsense constructor end " << requested_serial_number;
   }
   ~Realsense() {
     if (device_) {
       { // Begin scope for device_guard lock
         auto device_guard = device_->synchronize();
-        VIAM_SDK_LOG(info) << "[destructor] Realsense destructor start "
-                           << device_guard->serial_number;
+        VIAM_RESOURCE_LOG(info) << "[destructor] Realsense destructor start "
+                                << device_guard->serial_number;
         { // Begin scope for serials_guard lock
           auto serials_guard = assigned_serials_->synchronize();
           serials_guard->erase(device_guard->serial_number);
@@ -204,21 +208,22 @@ public:
     }
 
     // Now call stopDevice and destroyDevice (these will lock internally)
-    device_funcs_.stopDevice(device_);
-    device_funcs_.destroyDevice(device_);
-    VIAM_SDK_LOG(info) << "[destructor] Realsense destructor end";
+    device_funcs_.stopDevice(device_, this->logger_);
+    device_funcs_.destroyDevice(device_, this->logger_);
+    VIAM_RESOURCE_LOG(info) << "[destructor] Realsense destructor end";
   }
   void reconfigure(const viam::sdk::Dependencies &deps,
                    const viam::sdk::ResourceConfig &cfg) override {
-    VIAM_SDK_LOG(info) << "[reconfigure] reconfigure start";
+    VIAM_RESOURCE_LOG(info) << "[reconfigure] reconfigure start";
     if (not physical_camera_assigned_) {
-      VIAM_SDK_LOG(error) << "[reconfigure] cannot reconfigure a device that "
-                             "does not have a physical device assigned";
+      VIAM_RESOURCE_LOG(error)
+          << "[reconfigure] cannot reconfigure a device that "
+             "does not have a physical device assigned";
       throw std::runtime_error("cannot reconfigure a device that does not have "
                                "a physical device assigned");
     }
     if (not device_) {
-      VIAM_SDK_LOG(error) << "[reconfigure] device is null";
+      VIAM_RESOURCE_LOG(error) << "[reconfigure] device is null";
       throw std::runtime_error("device is null");
     }
 
@@ -228,11 +233,11 @@ public:
       prev_serial_number = device_guard->serial_number;
     } // End scope for device_guard lock
 
-    VIAM_SDK_LOG(error) << "[reconfigure] stopping device "
-                        << prev_serial_number;
-    if (not device_funcs_.stopDevice(device_)) {
-      VIAM_SDK_LOG(error) << "[reconfigure] failed to stop device "
-                          << prev_serial_number;
+    VIAM_RESOURCE_LOG(error)
+        << "[reconfigure] stopping device " << prev_serial_number;
+    if (not device_funcs_.stopDevice(device_, this->logger_)) {
+      VIAM_RESOURCE_LOG(error)
+          << "[reconfigure] failed to stop device " << prev_serial_number;
       throw std::runtime_error("failed to stop device " + prev_serial_number);
     }
 
@@ -259,10 +264,10 @@ public:
           } // End scope for serials_guard lock
         } // End scope for device_guard lock
       }
-      VIAM_SDK_LOG(error) << "[reconfigure] destroying device "
-                          << prev_serial_number;
-      if (not device_funcs_.destroyDevice(device_)) {
-        VIAM_SDK_LOG(error)
+      VIAM_RESOURCE_LOG(error)
+          << "[reconfigure] destroying device " << prev_serial_number;
+      if (not device_funcs_.destroyDevice(device_, this->logger_)) {
+        VIAM_RESOURCE_LOG(error)
             << "[reconfigure] failed to destroy device " << prev_serial_number;
         throw std::runtime_error("failed to destroy device " +
                                  prev_serial_number);
@@ -270,27 +275,29 @@ public:
       physical_camera_assigned_ = false;
 
       if (not assign_and_initialize_device(device_list)) {
-        VIAM_SDK_LOG(error) << "[reconfigure] failed to start device "
-                            << config_->serial_number;
+        VIAM_RESOURCE_LOG(error) << "[reconfigure] failed to start device "
+                                 << config_->serial_number;
         throw std::runtime_error("failed to start device " +
                                  config_->serial_number);
       }
       physical_camera_assigned_ = true;
     } else {
       realsense::RsResourceConfig config_copy = config_.get();
-      VIAM_SDK_LOG(info) << "[reconfigure] same serial number, reusing device "
-                         << prev_serial_number;
-      device_funcs_.reconfigureDevice(device_, config_copy);
+      VIAM_RESOURCE_LOG(info)
+          << "[reconfigure] same serial number, reusing device "
+          << prev_serial_number;
+      device_funcs_.reconfigureDevice(device_, config_copy, this->logger_);
       device_funcs_.startDevice(config_copy.serial_number, device_,
-                                latest_frameset_, maxFrameAgeMs, config_copy);
+                                latest_frameset_, maxFrameAgeMs, config_copy,
+                                this->logger_);
     }
 
-    VIAM_SDK_LOG(info) << "[reconfigure] Realsense reconfigure end";
+    VIAM_RESOURCE_LOG(info) << "[reconfigure] Realsense reconfigure end";
   }
 
   viam::sdk::ProtoStruct
   do_command(const viam::sdk::ProtoStruct &command) override {
-    VIAM_SDK_LOG(error) << "do_command not implemented";
+    VIAM_RESOURCE_LOG(error) << "do_command not implemented";
     return viam::sdk::ProtoStruct();
   }
 
@@ -298,9 +305,9 @@ public:
   get_image(std::string mime_type,
             const viam::sdk::ProtoStruct &extra) override {
     try {
-      VIAM_SDK_LOG(debug) << "[get_image] start";
+      VIAM_RESOURCE_LOG(debug) << "[get_image] start";
       if (not latest_frameset_) {
-        VIAM_SDK_LOG(error) << "[get_image] no frameset available";
+        VIAM_RESOURCE_LOG(error) << "[get_image] no frameset available";
         throw std::runtime_error("no frameset available");
       }
       if (config_->getMainSensor() == "color") {
@@ -308,7 +315,7 @@ public:
         time::throwIfTooOld(time::getNowMs(),
                             fs.get_color_frame().get_timestamp(), maxFrameAgeMs,
                             "no recent color frame: check USB connection");
-        VIAM_SDK_LOG(debug) << "[get_image] end";
+        VIAM_RESOURCE_LOG(debug) << "[get_image] end";
         return encoding::encodeVideoFrameToResponse(fs.get_color_frame());
       } else if (config_->getMainSensor() == "depth") {
         auto fs = latest_frameset_->get();
@@ -322,7 +329,7 @@ public:
       }
 
     } catch (const std::exception &e) {
-      VIAM_SDK_LOG(error) << "[get_image] error: " << e.what();
+      VIAM_RESOURCE_LOG(error) << "[get_image] error: " << e.what();
       throw std::runtime_error("failed to create image: " +
                                std::string(e.what()));
     }
@@ -351,10 +358,10 @@ public:
       }
 
       if (not latest_frameset_) {
-        VIAM_SDK_LOG(error) << "[get_images] no frameset available";
+        VIAM_RESOURCE_LOG(error) << "[get_images] no frameset available";
         throw std::runtime_error("no frameset available");
       }
-      VIAM_SDK_LOG(debug) << "[get_images] start";
+      VIAM_RESOURCE_LOG(debug) << "[get_images] start";
       std::string serial_number = config_->serial_number;
       auto fs = latest_frameset_->get();
 
@@ -399,7 +406,7 @@ public:
         double colorTS = color.get_timestamp();
         double depthTS = depth.get_timestamp();
         if (colorTS != depthTS) {
-          VIAM_SDK_LOG(error)
+          VIAM_RESOURCE_LOG(error)
               << "color and depth timestamps differ, defaulting to "
                  "older of the two"
               << "color timestamp was " << colorTS << " depth timestamp was "
@@ -415,10 +422,10 @@ public:
                 latestTimestamp)};
       }
 
-      VIAM_SDK_LOG(debug) << "[get_images] end";
+      VIAM_RESOURCE_LOG(debug) << "[get_images] end";
       return response;
     } catch (const std::exception &e) {
-      VIAM_SDK_LOG(error) << "[get_images] error: " << e.what();
+      VIAM_RESOURCE_LOG(error) << "[get_images] error: " << e.what();
       throw std::runtime_error("failed to create images: " +
                                std::string(e.what()));
     }
@@ -428,10 +435,10 @@ public:
                   const viam::sdk::ProtoStruct &extra) override {
     try {
       if (not latest_frameset_) {
-        VIAM_SDK_LOG(error) << "[get_point_cloud] no frameset available";
+        VIAM_RESOURCE_LOG(error) << "[get_point_cloud] no frameset available";
         throw std::runtime_error("no frameset available");
       }
-      VIAM_SDK_LOG(debug) << "[get_point_cloud] start";
+      VIAM_RESOURCE_LOG(debug) << "[get_point_cloud] start";
       auto fs = latest_frameset_->get();
 
       double nowMs = time::getNowMs();
@@ -462,7 +469,7 @@ public:
       }
 
       if (not device_) {
-        VIAM_SDK_LOG(error) << "[get_point_cloud] no device available";
+        VIAM_RESOURCE_LOG(error) << "[get_point_cloud] no device available";
         throw std::runtime_error("no device available");
       }
       std::vector<std::uint8_t> data;
@@ -474,11 +481,12 @@ public:
         }
 
         data = encoding::encodeRGBPointsToPCD(
-            my_dev->point_cloud_filter->process(my_dev->align->process(fs)));
+            my_dev->point_cloud_filter->process(my_dev->align->process(fs)),
+            logger_);
       } // End scope for my_dev lock
 
       if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
-        VIAM_SDK_LOG(error)
+        VIAM_RESOURCE_LOG(error)
             << "[get_point_cloud] data size exceeds gRPC message size limit";
         throw std::runtime_error("point cloud size " +
                                  std::to_string(data.size()) +
@@ -486,23 +494,23 @@ public:
                                  std::to_string(MAX_GRPC_MESSAGE_SIZE));
       }
 
-      VIAM_SDK_LOG(debug) << "[get_point_cloud] end";
+      VIAM_RESOURCE_LOG(debug) << "[get_point_cloud] end";
       return viam::sdk::Camera::point_cloud{kPcdMimeType, data};
     } catch (const std::exception &e) {
-      VIAM_SDK_LOG(error) << "[get_point_cloud] error: " << e.what();
+      VIAM_RESOURCE_LOG(error) << "[get_point_cloud] error: " << e.what();
       throw std::runtime_error("failed to create pointcloud: " +
                                std::string(e.what()));
     }
   }
   viam::sdk::Camera::properties get_properties() override {
     try {
-      VIAM_SDK_LOG(debug) << "[get_properties] start";
+      VIAM_RESOURCE_LOG(debug) << "[get_properties] start";
       if (not device_) {
-        VIAM_SDK_LOG(error) << "[get_properties] no device available";
+        VIAM_RESOURCE_LOG(error) << "[get_properties] no device available";
         throw std::runtime_error("no device available");
       }
-      auto fillResp = [](viam::sdk::Camera::properties &p,
-                         rs2_intrinsics const &props) {
+      auto fillResp = [this](viam::sdk::Camera::properties &p,
+                             rs2_intrinsics const &props) {
         p.supports_pcd = true;
         p.intrinsic_parameters.width_px = props.width;
         p.intrinsic_parameters.height_px = props.height;
@@ -510,27 +518,49 @@ public:
         p.intrinsic_parameters.focal_y_px = props.fy;
         p.intrinsic_parameters.center_x_px = props.ppx;
         p.intrinsic_parameters.center_y_px = props.ppy;
-        p.distortion_parameters.model = rs2_distortion_to_string(props.model);
-        for (auto const &coeff : props.coeffs)
-          p.distortion_parameters.parameters.push_back(coeff);
+        /*
+       Disabling distortion parameters for now, when this is reenabled, we need
+       to make sure that get_properties works well through the SDK. A way to do
+       this is to create a python script and query camera.get_properties and
+       make sure it doesn't throw an error. This is related to this ticker:
+       https://viam.atlassian.net/browse/RSDK-12408
 
-        std::stringstream coeffs_stream;
-        for (size_t i = 0; i < p.distortion_parameters.parameters.size(); ++i) {
-          if (i > 0)
-            coeffs_stream << ", ";
-          coeffs_stream << p.distortion_parameters.parameters[i];
-        }
+       Which errors when creatng a new distorter here:
+       https://github.com/viamrobotics/rdk/blob/062f15b372240c332fa309760da8f607c5af6c9a/components/camera/client.go#L315
 
-        VIAM_SDK_LOG(debug)
+       There is another fundamental aspect to this, the distorer presumably
+       distorts images using the distortion models supperted here:
+       https://github.com/viamrobotics/rdk/blob/e97069d07515d7e5961ba5ac2ef660619a2d6dda/rimage/transform/distorter.go#L10
+       Tghe consists of BrownConradyDistortionType and
+       KannalaBrandtDistortionType. But realsense reports a InverseBrownConrady
+       as its distortion model, which aparently does the inverse operation, take
+       a distorted image and undistort it. We need to figure out how to handle
+       this.
+
+        */
+        // p.distortion_parameters.model =
+        // rs2_distortion_to_string(props.model); for (auto const &coeff :
+        // props.coeffs)
+        //   p.distortion_parameters.parameters.push_back(coeff);
+
+        // std::stringstream coeffs_stream;
+        // for (size_t i = 0; i < p.distortion_parameters.parameters.size();
+        // ++i) {
+        //   if (i > 0)
+        //     coeffs_stream << ", ";
+        //   coeffs_stream << p.distortion_parameters.parameters[i];
+        // }
+
+        VIAM_RESOURCE_LOG(debug)
             << "[get_properties] properties: ["
             << "width: " << p.intrinsic_parameters.width_px << ", "
             << "height: " << p.intrinsic_parameters.height_px << ", "
             << "focal_x: " << p.intrinsic_parameters.focal_x_px << ", "
             << "focal_y: " << p.intrinsic_parameters.focal_y_px << ", "
             << "center_x: " << p.intrinsic_parameters.center_x_px << ", "
-            << "center_y: " << p.intrinsic_parameters.center_y_px << ", "
-            << "distortion_model: " << p.distortion_parameters.model << ", "
-            << "distortion_coeffs: [" << coeffs_stream.str() << "]" << "]";
+            << "center_y: " << p.intrinsic_parameters.center_y_px << "]";
+        // << "distortion_model: " << p.distortion_parameters.model << ", "
+        // << "distortion_coeffs: [" << coeffs_stream.str() << "]" << "]";
       };
       rs2_intrinsics props;
       viam::sdk::Camera::properties response{};
@@ -565,10 +595,10 @@ public:
         }
       } // End scope for my_dev lock
 
-      VIAM_SDK_LOG(debug) << "[get_properties] end";
+      VIAM_RESOURCE_LOG(debug) << "[get_properties] end";
       return response;
     } catch (const std::exception &e) {
-      VIAM_SDK_LOG(error) << "[get_properties] error: " << e.what();
+      VIAM_RESOURCE_LOG(error) << "[get_properties] error: " << e.what();
       throw std::runtime_error("failed to create properties: " +
                                std::string(e.what()));
     }
@@ -698,8 +728,8 @@ public:
 
   // Handles device changes for this instance
   void handleDeviceChange(rs2::event_information &info) {
-    VIAM_SDK_LOG(info) << "[handleDeviceChange] Processing for serial: "
-                       << config_->serial_number;
+    VIAM_RESOURCE_LOG(info) << "[handleDeviceChange] Processing for serial: "
+                            << config_->serial_number;
 
     deviceChangedCallback(info);
   }
@@ -758,22 +788,22 @@ private:
       return true;
     }
     std::string requested_serial_number = config_->serial_number;
-    VIAM_SDK_LOG(info) << "[assign_and_initialize_device] starting device "
-                       << config_->serial_number;
+    VIAM_RESOURCE_LOG(info) << "[assign_and_initialize_device] starting device "
+                            << config_->serial_number;
     // This will the initial set of connected devices (i.e. the devices that
     // were connected before the callback was set)
-    VIAM_SDK_LOG(info)
+    VIAM_RESOURCE_LOG(info)
         << "[assign_and_initialize_device] Number of connected devices: "
         << device_list.size() << "\n";
 
     for (auto const &dev : device_list) {
-      device_funcs_.printDeviceInfo(dev);
+      device_funcs_.printDeviceInfo(dev, this->logger_);
 
       auto dev_ptr = std::make_shared<std::decay_t<decltype(dev)>>(dev);
       std::string connected_device_serial_number =
           dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
-      VIAM_SDK_LOG(info)
+      VIAM_RESOURCE_LOG(info)
           << "[assign_and_initialize_device] trying connecting to device: "
           << connected_device_serial_number;
 
@@ -783,37 +813,39 @@ private:
         if ((requested_serial_number.empty() &&
              serials_guard->count(connected_device_serial_number) == 0) ||
             (requested_serial_number == connected_device_serial_number)) {
-          VIAM_SDK_LOG(info)
+          VIAM_RESOURCE_LOG(info)
               << "[assign_and_initialize_device] grabbing device: "
               << connected_device_serial_number;
 
           serials_guard->insert(connected_device_serial_number);
         } else {
-          VIAM_SDK_LOG(info)
+          VIAM_RESOURCE_LOG(info)
               << "[assign_and_initialize_device] Could not grab device: "
               << connected_device_serial_number;
           continue;
         }
       } // End scope for serials_guard lock
-      VIAM_SDK_LOG(info)
+      VIAM_RESOURCE_LOG(info)
           << "[assign_and_initialize_device] calling createDevice for: "
           << connected_device_serial_number;
       realsense::RsResourceConfig config_copy = config_.get();
-      device_ =
-          device_funcs_.createDevice(connected_device_serial_number, dev_ptr,
-                                     SUPPORTED_CAMERA_MODELS, config_copy);
+      device_ = device_funcs_.createDevice(connected_device_serial_number,
+                                           dev_ptr, SUPPORTED_CAMERA_MODELS,
+                                           config_copy, this->logger_);
       BOOST_ASSERT(device_ != nullptr);
 
-      VIAM_SDK_LOG(info)
+      VIAM_RESOURCE_LOG(info)
           << "[assign_and_initialize_device] calling startDevice for: "
           << connected_device_serial_number;
       device_funcs_.startDevice(connected_device_serial_number, device_,
-                                latest_frameset_, maxFrameAgeMs, config_copy);
-      VIAM_SDK_LOG(info)
+                                latest_frameset_, maxFrameAgeMs, config_copy,
+                                this->logger_);
+      VIAM_RESOURCE_LOG(info)
           << "[assign_and_initialize_device] startDevice completed for: "
           << connected_device_serial_number;
-      VIAM_SDK_LOG(info) << "[assign_and_initialize_device] Device Registered: "
-                         << requested_serial_number;
+      VIAM_RESOURCE_LOG(info)
+          << "[assign_and_initialize_device] Device Registered: "
+          << requested_serial_number;
       physical_camera_assigned_ = true;
       return true;
     }
@@ -855,22 +887,30 @@ private:
     return DeviceFunctions{
         .stopDevice =
             [](std::shared_ptr<
-                boost::synchronized_value<device::ViamRSDevice<>>> &device) {
-              return device::stopDevice(device);
+                   boost::synchronized_value<device::ViamRSDevice<>>> &device,
+               viam::sdk::LogSource &logger) {
+              return device::stopDevice(device, logger);
             },
         .destroyDevice =
             [](std::shared_ptr<
-                boost::synchronized_value<device::ViamRSDevice<>>> &device) {
-              return device::destroyDevice(device);
+                   boost::synchronized_value<device::ViamRSDevice<>>> &device,
+               viam::sdk::LogSource &logger) {
+              return device::destroyDevice(device, logger);
             },
         .printDeviceInfo =
-            [](const auto &dev) { device::printDeviceInfo(dev); },
+            [](const auto &dev, viam::sdk::LogSource &logger) {
+              device::printDeviceInfo(dev, logger);
+            },
         .createDevice =
             [](std::string const &serial, std::shared_ptr<rs2::device> dev_ptr,
                std::unordered_set<std::string> const &supported_models,
-               realsense::RsResourceConfig const &config) {
-              return device::createDevice<realsense::RsResourceConfig>(
-                  serial, dev_ptr, supported_models, config);
+               realsense::RsResourceConfig const &config,
+               viam::sdk::LogSource &logger) {
+              return device::createDevice<
+                  realsense::RsResourceConfig, device::ViamRSDevice<>,
+                  rs2::device, rs2::config, rs2::color_sensor,
+                  rs2::depth_sensor, rs2::video_stream_profile>(
+                  serial, dev_ptr, supported_models, config, logger);
             },
         .startDevice =
             [](const std::string &serial,
@@ -879,17 +919,22 @@ private:
                std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                    &latest_frameset,
                std::uint64_t maxFrameAgeMs,
-               realsense::RsResourceConfig const &viamConfig) {
+               realsense::RsResourceConfig const &viamConfig,
+               viam::sdk::LogSource &logger) {
               return device::startDevice(serial, device, latest_frameset,
-                                         maxFrameAgeMs, viamConfig);
+                                         maxFrameAgeMs, viamConfig, logger);
             },
         .reconfigureDevice =
             [](std::shared_ptr<
                    boost::synchronized_value<device::ViamRSDevice<>>>
                    device,
-               realsense::RsResourceConfig const &viamConfig) {
-              device::reconfigureDevice<realsense::RsResourceConfig>(
-                  device, viamConfig);
+               realsense::RsResourceConfig const &viamConfig,
+               viam::sdk::LogSource &logger) {
+              device::reconfigureDevice<
+                  realsense::RsResourceConfig, device::ViamRSDevice<>,
+                  rs2::device, rs2::config, rs2::color_sensor,
+                  rs2::depth_sensor, rs2::video_stream_profile>(
+                  device, viamConfig, logger);
             }};
   };
 };

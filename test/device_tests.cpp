@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <viam/sdk/common/instance.hpp>
+#include <viam/sdk/log/logging.hpp>
 
 #include "device.hpp"
 #include "realsense.hpp"
@@ -17,6 +18,13 @@ using ::testing::Invoke;
 using ::testing::NiceMock;
 using ::testing::Return;
 using ::testing::StrictMock;
+
+// Mock logger for testing
+class MockLogger : public viam::sdk::LogSource {
+public:
+  MOCK_METHOD(void, log,
+              (viam::sdk::log_level level, const std::string &message));
+};
 
 namespace realsense {
 namespace device {
@@ -251,7 +259,8 @@ TEST_F(DeviceTest, PrintDeviceInfo_ValidDevice_LogsInfo) {
       .WillOnce(Return("IP Address Info"));
 
   // This test mainly ensures no exceptions are thrown
-  EXPECT_NO_THROW(printDeviceInfo(*mock_device_));
+  MockLogger logger;
+  EXPECT_NO_THROW(printDeviceInfo(*mock_device_, logger));
 }
 
 // Test SensorTypeTraits
@@ -270,6 +279,7 @@ TEST_F(DeviceTest,
        CheckIfMatchingColorDepthProfiles_MatchingProfiles_ReturnsTrue) {
   MockVideoStreamProfile color_profile;
   MockVideoStreamProfile depth_profile;
+  MockLogger logger;
 
   // Setup matching profiles
   EXPECT_CALL(color_profile, width()).WillRepeatedly(Return(640));
@@ -281,7 +291,8 @@ TEST_F(DeviceTest,
   EXPECT_CALL(depth_profile, fps()).WillRepeatedly(Return(30));
 
   // Execute
-  bool result = checkIfMatchingColorDepthProfiles(color_profile, depth_profile);
+  bool result =
+      checkIfMatchingColorDepthProfiles(color_profile, depth_profile, logger);
 
   // Verify
   EXPECT_TRUE(result);
@@ -291,6 +302,7 @@ TEST_F(DeviceTest,
        CheckIfMatchingColorDepthProfiles_DifferentResolution_ReturnsFalse) {
   MockVideoStreamProfile color_profile;
   MockVideoStreamProfile depth_profile;
+  MockLogger logger;
 
   // Setup non-matching profiles
   EXPECT_CALL(color_profile, width()).WillRepeatedly(Return(640));
@@ -302,7 +314,8 @@ TEST_F(DeviceTest,
   EXPECT_CALL(depth_profile, fps()).WillRepeatedly(Return(30));
 
   // Execute
-  bool result = checkIfMatchingColorDepthProfiles(color_profile, depth_profile);
+  bool result =
+      checkIfMatchingColorDepthProfiles(color_profile, depth_profile, logger);
 
   // Verify
   EXPECT_FALSE(result);
@@ -350,7 +363,8 @@ TEST_F(DeviceTest, DestroyDevice_ValidDevice_ReturnsTrue) {
   }
 
   // Execute
-  bool result = destroyDevice(device);
+  MockLogger logger;
+  bool result = destroyDevice(device, logger);
 
   // Verify
   EXPECT_TRUE(result);
@@ -361,7 +375,8 @@ TEST_F(DeviceTest, DestroyDevice_NullDevice_ReturnsFalse) {
   std::shared_ptr<boost::synchronized_value<ViamRSDevice<>>> device = nullptr;
 
   // Execute
-  bool result = destroyDevice(device);
+  MockLogger logger;
+  bool result = destroyDevice(device, logger);
 
   // Verify
   EXPECT_FALSE(result);
@@ -383,7 +398,8 @@ TEST_F(DeviceTest, DestroyDevice_StartedDevice_StopsAndDestroys) {
   }
 
   // Execute
-  bool result = destroyDevice(device);
+  MockLogger logger;
+  bool result = destroyDevice(device, logger);
 
   // Verify
   EXPECT_TRUE(result);

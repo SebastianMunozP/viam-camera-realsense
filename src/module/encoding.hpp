@@ -1,5 +1,6 @@
 #pragma once
 #include <viam/sdk/components/camera.hpp>
+#include <viam/sdk/log/logging.hpp>
 
 #include <librealsense2/rs.hpp>
 
@@ -23,7 +24,8 @@ viam::sdk::Camera::raw_image
 encodeDepthFrameToResponse(rs2::depth_frame const &frame);
 
 std::vector<std::uint8_t>
-encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data);
+encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data,
+                     viam::sdk::LogSource &logger);
 
 } // namespace encoding
 } // namespace realsense
