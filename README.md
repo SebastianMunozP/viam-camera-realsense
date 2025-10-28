@@ -6,7 +6,7 @@ Configure this model on your machine to stream image and depth data from the [In
 Navigate to the [**CONFIGURE** tab](https://docs.viam.com/build/configure/) of your [machine](https://docs.viam.com/fleet/machines/) in [the Viam app](https://app.viam.com/).
 [Add `camera / realsense` to your machine](https://docs.viam.com/build/configure/#components).
 
-> [!NOTE]  
+> [!NOTE]
 > For more information, see [Configure a Machine](https://docs.viam.com/manage/configuration/).
 
 ## Configure your `realsense` camera
@@ -17,7 +17,7 @@ Navigate to the [**CONFIGURE** tab](https://docs.viam.com/build/configure/) of y
 1. Save your configuration.
 1. Click on the **TEST** panel for your discovery service.
    You should now see possible configurations.
-1. Click **Add component** next to the configuration for your camera.    
+1. Click **Add component** next to the configuration for your camera.
 
 ### Configure manually
 
@@ -90,16 +90,10 @@ For more information, see [Control Machines](https://docs.viam.com/fleet/control
 
 ### Locally install the module
 
-If you are using a Linux machine, and do not want to use the Viam registry, you can download the module AppImage from our servers directly to your machine:
+If you are using a Linux machine, and do not want to use the Viam registry, you can [download the module code from the registry](https://app.viam.com/module/viam/realsense) and use it directly on your machine.
+Note that as of version 0.16.0-rc3, the module is no longer distributed as an AppImage.
 
-```
-sudo curl -o /usr/local/bin/viam-camera-realsense http://packages.viam.com/apps/camera-servers/viam-camera-realsense-latest-aarch64.AppImage
-sudo chmod a+rx /usr/local/bin/viam-camera-realsense
-```
-
-If you need the AppImage associated with a specific tag, replace `latest` in the URL with the tag version, i.e. `0.0.X`.
-
-Then, follow the instructions to [add a local module](https://docs.viam.com/registry/configure/#add-a-local-module) to add the local instance of the `realsense` module to your machine.
+Follow the instructions to [add a local module](https://docs.viam.com/operate/modules/support-hardware/#test-your-module-locally) just as you would for testing.
 Provide an **Executable path** of `/usr/local/bin/viam-camera-realsense` when adding the module.
 
 Or, if you aren't using the Viam app to manage your machine's configuration, modify your machine's JSON file as follows to add the `realsense` module to your machine:
@@ -127,16 +121,16 @@ Support for specific hardware is known for the following devices. The table is n
 
 ## Linux distribution recommendation
 
-This module depends on the [`librealsense` SDK](https://github.com/IntelRealSense/librealsense/releases). As of the time of writing, Ubuntu is the only Linux Distro `librealsense` officially supports. The module works on our hardware setups using Bullseye on RPI4, and some setups on Bookworm. However, we recommend adhering to the requirements of the SDK dependency and to use Ubuntu when possible to avoid instability and unexpected behavior. 
+This module depends on the [`librealsense` SDK](https://github.com/IntelRealSense/librealsense/releases). As of the time of writing, Ubuntu is the only Linux Distro `librealsense` officially supports. The module works on our hardware setups using Bullseye on RPI4, and some setups on Bookworm. However, we recommend adhering to the requirements of the SDK dependency and to use Ubuntu when possible to avoid instability and unexpected behavior.
 
 ## Troubleshooting
 
-If you get an error like "failed to set power state", or "Permission denied", you may need to install the udev rules for when the USB plugs in. 
+If you get an error like "failed to set power state", or "Permission denied", you may need to install the udev rules for when the USB plugs in.
 
 ```
 wget https://raw.githubusercontent.com/IntelRealSense/librealsense/7a7c2bcfbc03d45154ad63fa76b221b2bb9d228f/config/99-realsense-libusb.rules
-sudo cp 99-realsense-libusb.rules /etc/udev/rules.d/ 
-sudo udevadm control --reload-rules 
+sudo cp 99-realsense-libusb.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
 
@@ -146,34 +140,34 @@ The module takes advantage of faster USB ports. Use the (blue) USB 3.0 port on t
 
 ## Building the module
 
-You can also build it yourself using Docker and [Viam canon](https://github.com/viamrobotics/canon). 
-Use the commands
+You can also build the module yourself from source using Conan. See the [SDK Docs](https://github.com/viamrobotics/viam-cpp-sdk/blob/main/BUILDING.md#building-with-conan)
+for instructions on initial Conan setup and configuration. Then you can do
 
 ```
-docker pull ghcr.io/viam-modules/viam-camera-realsense:arm64
-git clone https://github.com/viam-modules/viam-camera-realsense/
-cd viam-camera-realsense/
-canon -arch arm64 make appimage-arm64
+conan remote add viamconan https://viam.jfrog.io/artifactory/api/conan/viamconan
+conan install .  -b missing -o:a "viam-cpp-sdk/*:shared=False"
+cmake . --preset=conan-release
 ```
 
-This will use the Docker container to compile a binary for the `aarch64` architecture. If you want to compile for `x86_64`/`amd64` architecture, change `arm64` to `amd64` in the above commands. The AppImage will be put in the `packaging/appimages/deploy` directory.
+This will create a CMake build tree which can be built with CMake or directly by running `make` for example. You can pass arguments
+to the `cmake` call to configure the build, for example `-G Ninja` to use `ninja` as the build system, or `-DVIAM_REALSENSE_ENABLE_SANITIZER=1` to
+build the module with ASAN/LSAN enabled to test for memory leaks.
 
-If you would like to try to gather all of the dependencies yourself and not use Docker, you will need:
+> [!NOTE]
+> Running `conan install` above may generate an error related to `libudev`. You can fix this by installing `libudev` with your system
+package manager, or follow the instructions in the error message to tell `conan` how to resolve this dependency.
+
+If you would like to try to gather all of the dependencies yourself, you will need:
 
 - [librealsense](https://github.com/IntelRealSense/librealsense)
-  - `git checkout` and install from source. 
+  - `git checkout` and install from source.
   - be sure to use cmake flags `cmake .. -DBUILD_EXAMPLES=false -DBUILD_GRAPHICAL_EXAMPLES=false -DCMAKE_BUILD_TYPE=Release`
 - [libjpegturbo](https://github.com/libjpeg-turbo/libjpeg-turbo)
 - [libprotobuf](https://github.com/protocolbuffers/protobuf)
 - [Viam C++ SDK](https://github.com/viamrobotics/viam-cpp-sdk/)
   - specifically `libviamsdk`, `libviamapi`, and `libviam_rust_utils`
 
-then do `make viam-camera-realsense` to compile the binary, and `make appimage` to create the AppImage.
-
-## Building with Address Sanitizer
-
-When developing, you also have the option to build the module with ASAN/LSAN enabled to test for memory leaks. You can do so by running a build command such as `canon -arch arm64 make clean appimage-arm64 SANITIZE=ON` with the `SANITIZE` flag `=ON`. ASAN/LSAN logs will then be included as error logs in your robot logs on the Viam App.
-
+then use CMake to generate a build.
 
 ## Using within a Frame System
 
