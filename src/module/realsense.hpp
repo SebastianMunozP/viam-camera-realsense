@@ -796,58 +796,67 @@ private:
         << "[assign_and_initialize_device] Number of connected devices: "
         << device_list.size() << "\n";
 
-    for (auto const &dev : device_list) {
-      device_funcs_.printDeviceInfo(dev, this->logger_);
+    int devCount = device_list.size();
+    for (int i = 0; i < devCount; i++) {
+      try {
+        VIAM_RESOURCE_LOG(debug)
+            << "[assign_and_initialize_device] Attempting to access device at index " << i;
+        auto dev = device_list[i];
+        VIAM_RESOURCE_LOG(debug)
+            << "[assign_and_initialize_device] Successfully accessed device at index " << i;
 
-      auto dev_ptr = std::make_shared<std::decay_t<decltype(dev)>>(dev);
-      std::string connected_device_serial_number =
-          dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+        device_funcs_.printDeviceInfo(dev, this->logger_);
 
-      VIAM_RESOURCE_LOG(info)
-          << "[assign_and_initialize_device] trying connecting to device: "
-          << connected_device_serial_number;
+        auto dev_ptr = std::make_shared<std::decay_t<decltype(dev)>>(dev);
+        std::string connected_device_serial_number =
+            dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
-      // Atomically check and insert serial number
-      { // Begin scope for serials_guard lock
-        auto serials_guard = assigned_serials_->synchronize();
-        if ((requested_serial_number.empty() &&
-             serials_guard->count(connected_device_serial_number) == 0) ||
-            (requested_serial_number == connected_device_serial_number)) {
-          VIAM_RESOURCE_LOG(info)
-              << "[assign_and_initialize_device] grabbing device: "
-              << connected_device_serial_number;
+        VIAM_RESOURCE_LOG(info)
+            << "[assign_and_initialize_device] trying connecting to device: "
+            << connected_device_serial_number;
 
-          serials_guard->insert(connected_device_serial_number);
-        } else {
-          VIAM_RESOURCE_LOG(info)
-              << "[assign_and_initialize_device] Could not grab device: "
-              << connected_device_serial_number;
-          continue;
-        }
-      } // End scope for serials_guard lock
-      VIAM_RESOURCE_LOG(info)
-          << "[assign_and_initialize_device] calling createDevice for: "
-          << connected_device_serial_number;
-      realsense::RsResourceConfig config_copy = config_.get();
-      device_ = device_funcs_.createDevice(connected_device_serial_number,
-                                           dev_ptr, SUPPORTED_CAMERA_MODELS,
-                                           config_copy, this->logger_);
-      BOOST_ASSERT(device_ != nullptr);
+        // Atomically check and insert serial number
+        { // Begin scope for serials_guard lock
+          auto serials_guard = assigned_serials_->synchronize();
+          if ((requested_serial_number.empty() &&
+               serials_guard->count(connected_device_serial_number) == 0) ||
+              (requested_serial_number == connected_device_serial_number)) {
+            VIAM_RESOURCE_LOG(info)
+                << "[assign_and_initialize_device] grabbing device: "
+                << connected_device_serial_number;
 
-      VIAM_RESOURCE_LOG(info)
-          << "[assign_and_initialize_device] calling startDevice for: "
-          << connected_device_serial_number;
-      device_funcs_.startDevice(connected_device_serial_number, device_,
-                                latest_frameset_, maxFrameAgeMs, config_copy,
-                                this->logger_);
-      VIAM_RESOURCE_LOG(info)
-          << "[assign_and_initialize_device] startDevice completed for: "
-          << connected_device_serial_number;
-      VIAM_RESOURCE_LOG(info)
-          << "[assign_and_initialize_device] Device Registered: "
-          << requested_serial_number;
-      physical_camera_assigned_ = true;
-      return true;
+            serials_guard->insert(connected_device_serial_number);
+          } else {
+            VIAM_RESOURCE_LOG(info)
+                << "[assign_and_initialize_device] Could not grab device: "
+                << connected_device_serial_number;
+            continue;
+          }
+        } // End scope for serials_guard lock
+        VIAM_RESOURCE_LOG(info)
+            << "[assign_and_initialize_device] calling createDevice for: "
+            << connected_device_serial_number;
+        realsense::RsResourceConfig config_copy = config_.get();
+        device_ = device_funcs_.createDevice(connected_device_serial_number,
+                                             dev_ptr, SUPPORTED_CAMERA_MODELS,
+                                             config_copy, this->logger_);
+        BOOST_ASSERT(device_ != nullptr);
+
+        VIAM_RESOURCE_LOG(info)
+            << "[assign_and_initialize_device] calling startDevice for: "
+            << connected_device_serial_number;
+        device_funcs_.startDevice(connected_device_serial_number, device_,
+                                  latest_frameset_, maxFrameAgeMs, config_copy,
+                                  this->logger_);
+        physical_camera_assigned_ = true;
+        return true;
+      } catch (const std::exception &e) {
+        VIAM_RESOURCE_LOG(error)
+            << "[assign_and_initialize_device] Failed to access/initialize device at index "
+            << i << ": " << e.what();
+        // Continue trying other devices
+        continue;
+      }
     }
     return false;
   }

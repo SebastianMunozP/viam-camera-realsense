@@ -43,70 +43,76 @@ std::optional<std::string> getCameraModel(std::shared_ptr<DeviceT> dev) {
 
 template <typename DeviceT>
 void printDeviceInfo(DeviceT const &dev, viam::sdk::LogSource &logger) {
-  std::stringstream info;
-  if (dev.supports(RS2_CAMERA_INFO_NAME)) {
-    info << "DeviceInfo:\n"
-         << "  Name:                           "
-         << dev.get_info(RS2_CAMERA_INFO_NAME) << std::endl;
+  try {
+    std::stringstream info;
+    if (dev.supports(RS2_CAMERA_INFO_NAME)) {
+      info << "DeviceInfo:\n"
+           << "  Name:                           "
+           << dev.get_info(RS2_CAMERA_INFO_NAME) << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
+      info << "  Serial Number:                  "
+           << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_PRODUCT_LINE)) {
+      info << "  Product Line:                   "
+           << dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE) << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_PRODUCT_ID)) {
+      info << "  Product ID:                      "
+           << dev.get_info(RS2_CAMERA_INFO_PRODUCT_ID) << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
+      info << "  USB Type Descriptor:            "
+           << dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR) << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_FIRMWARE_VERSION)) {
+      info << "  Firmware Version:               "
+           << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION) << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
+      info << "  Recommended Firmware Version:   "
+           << dev.get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)
+           << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
+      info << "  Firmware Update ID:   "
+           << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID) << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_PHYSICAL_PORT)) {
+      info << "  Physical Port:   " << dev.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT)
+           << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_DEBUG_OP_CODE)) {
+      info << "  Debug OP Code:   " << dev.get_info(RS2_CAMERA_INFO_DEBUG_OP_CODE)
+           << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_ADVANCED_MODE)) {
+      info << "  Advanced Mode:   " << dev.get_info(RS2_CAMERA_INFO_ADVANCED_MODE)
+           << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_CAMERA_LOCKED)) {
+      info << "  Camera Locked:   " << dev.get_info(RS2_CAMERA_INFO_CAMERA_LOCKED)
+           << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER)) {
+      info << "  ASIC Serial Number:             "
+           << dev.get_info(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER) << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_DFU_DEVICE_PATH)) {
+      info << "  DFU Device Path:            "
+           << dev.get_info(RS2_CAMERA_INFO_DFU_DEVICE_PATH) << std::endl;
+    }
+    if (dev.supports(RS2_CAMERA_INFO_IP_ADDRESS)) {
+      info << "  IP Address:            "
+           << dev.get_info(RS2_CAMERA_INFO_IP_ADDRESS) << std::endl;
+    }
+    VIAM_DEVICE_LOG(logger, info) << info.str();
+  } catch (const std::exception &e) {
+    VIAM_DEVICE_LOG(logger, error)
+        << "[printDeviceInfo] Failed to retrieve device info with error: " << e.what()
+        << ". Device may be in an invalid state or have firmware compatibility issues.";
   }
-  if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
-    info << "  Serial Number:                  "
-         << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_PRODUCT_LINE)) {
-    info << "  Product Line:                   "
-         << dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE) << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_PRODUCT_ID)) {
-    info << "  Product ID:                      "
-         << dev.get_info(RS2_CAMERA_INFO_PRODUCT_ID) << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
-    info << "  USB Type Descriptor:            "
-         << dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR) << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_FIRMWARE_VERSION)) {
-    info << "  Firmware Version:               "
-         << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION) << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
-    info << "  Recommended Firmware Version:   "
-         << dev.get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)
-         << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
-    info << "  Firmware Update ID:   "
-         << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID) << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_PHYSICAL_PORT)) {
-    info << "  Physical Port:   " << dev.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT)
-         << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_DEBUG_OP_CODE)) {
-    info << "  Debug OP Code:   " << dev.get_info(RS2_CAMERA_INFO_DEBUG_OP_CODE)
-         << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_ADVANCED_MODE)) {
-    info << "  Advanced Mode:   " << dev.get_info(RS2_CAMERA_INFO_ADVANCED_MODE)
-         << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_CAMERA_LOCKED)) {
-    info << "  Camera Locked:   " << dev.get_info(RS2_CAMERA_INFO_CAMERA_LOCKED)
-         << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER)) {
-    info << "  ASIC Serial Number:             "
-         << dev.get_info(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER) << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_DFU_DEVICE_PATH)) {
-    info << "  DFU Device Path:            "
-         << dev.get_info(RS2_CAMERA_INFO_DFU_DEVICE_PATH) << std::endl;
-  }
-  if (dev.supports(RS2_CAMERA_INFO_IP_ADDRESS)) {
-    info << "  IP Address:            "
-         << dev.get_info(RS2_CAMERA_INFO_IP_ADDRESS) << std::endl;
-  }
-  VIAM_DEVICE_LOG(logger, info) << info.str();
 }
 
 /********************** CALLBACKS ************************/

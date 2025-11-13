@@ -2,7 +2,9 @@
 
 #include "realsense.hpp"
 
+#include <chrono>
 #include <memory>
+#include <thread>
 
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
@@ -28,41 +30,106 @@ public:
   discover_resources(const viam::sdk::ProtoStruct &extra) override {
     std::vector<viam::sdk::ResourceConfig> configs;
 
-    auto deviceList = rs_ctx_->query_devices();
-    int devCount = deviceList.size();
+    try {
+      VIAM_SDK_LOG(info) << "[discover_resources] Starting device discovery";
 
-    if (devCount == 0) {
-      VIAM_SDK_LOG(warn)
-          << "[discover_resources] No Realsense devices found during discovery";
-      return {};
-    }
+      auto deviceList = rs_ctx_->query_devices();
+      int devCount = deviceList.size();
 
-    VIAM_SDK_LOG(info) << "[discover_resources] Discovered " << devCount
-                       << " devices";
+      VIAM_SDK_LOG(info) << "[discover_resources] query_devices returned "
+                         << devCount << " devices";
 
-    for (auto const &dev : deviceList) {
-      if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
-        std::string serial_number = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-
-        viam::sdk::ProtoStruct attributes;
-        attributes["serial_number"] = serial_number;
-
-        viam::sdk::ProtoList sensors;
-        sensors.push_back("color");
-        sensors.push_back("depth");
-        attributes["sensors"] = sensors;
-
-        std::ostringstream name;
-        name << "realsense-" << serial_number;
-
-        viam::sdk::ResourceConfig config(
-            "camera", std::move(name.str()), "viam", attributes,
-            "rdk:component:camera", realsense::Realsense<ContextT>::model,
-            viam::sdk::LinkConfig{}, viam::sdk::log_level::info);
-        configs.push_back(config);
+      if (devCount == 0) {
+        VIAM_SDK_LOG(warn) << "[discover_resources] No Realsense devices found "
+                              "during discovery";
+        return {};
       }
+
+      std::vector<std::string> device_errors;
+      for (int i = 0; i < devCount; i++) {
+        try {
+          VIAM_SDK_LOG(debug)
+              << "[discover_resources] Attempting to access device at index "
+              << i;
+          auto dev = deviceList[i];
+          VIAM_SDK_LOG(debug)
+              << "[discover_resources] Successfully accessed device at index "
+              << i;
+
+          if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
+
+            std::string serial_number =
+                dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+
+            viam::sdk::ProtoStruct attributes;
+            attributes["serial_number"] = serial_number;
+
+            viam::sdk::ProtoList sensors;
+            sensors.push_back("color");
+            sensors.push_back("depth");
+            attributes["sensors"] = sensors;
+
+            std::ostringstream name;
+            name << "realsense-" << serial_number;
+
+            viam::sdk::ResourceConfig config(
+                "camera", std::move(name.str()), "viam", attributes,
+                "rdk:component:camera", realsense::Realsense<ContextT>::model,
+                viam::sdk::LinkConfig{}, viam::sdk::log_level::info);
+            configs.push_back(config);
+          } else {
+            VIAM_SDK_LOG(warn) << "[discover_resources] Device at index " << i
+                               << " does not support serial number";
+          }
+        } catch (const std::exception &e) {
+          VIAM_SDK_LOG(error)
+              << "[discover_resources] Failed to access device at index " << i
+              << ": " << e.what() << "Device may be in an invalid state or have firmware compatibility issues." ;
+          std::ostringstream error_msg;
+          error_msg << "Device " << i << ": " << e.what();
+          device_errors.push_back(error_msg.str());
+          // Continue to try other devices
+          continue;
+        }
+      }
+
+      // If we found at least one valid device, return those configs
+      if (!configs.empty()) {
+        if (!device_errors.empty()) {
+          VIAM_SDK_LOG(warn) << "[discover_resources] Successfully discovered "
+                             << configs.size() << " device(s), but "
+                             << device_errors.size() << " device(s) failed";
+          for (const auto &err : device_errors) {
+            VIAM_SDK_LOG(error)
+                << "[discover_resources] Failed device: " << err;
+          }
+        }
+        VIAM_SDK_LOG(info) << "[discover_resources] Successfully created "
+                           << configs.size() << " configs";
+        return configs;
+      }
+
+      // If all devices failed, throw an error with details
+      if (!device_errors.empty()) {
+        std::ostringstream error_msg;
+        error_msg << "RealSense device(s) detected but inaccessible. "
+                  << "Errors: ";
+        for (size_t i = 0; i < device_errors.size(); i++) {
+          if (i > 0)
+            error_msg << "; ";
+          error_msg << device_errors[i];
+        }
+        error_msg << ". Device(s) may be in an invalid state or have firmware compatibility issues.";
+        throw std::runtime_error(error_msg.str());
+      }
+      return configs;
+
+    } catch (const std::exception &e) {
+      std::ostringstream err;
+      err << "[discover_resources]: " << e.what();
+      VIAM_SDK_LOG(error) << err.str();
+      throw std::runtime_error(err.str());
     }
-    return configs;
   }
 
   viam::sdk::ProtoStruct
