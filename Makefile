@@ -1,15 +1,26 @@
 default: viam-camera-realsense
 
+# Optional: Override profile for ARM64 builds
+# Usage: make module.tar.gz CONAN_PROFILE=etc/conan/arm64-profile CONAN_BUILD=librealsense
+CONAN_PROFILE ?=
+CONAN_BUILD ?= missing
+
 conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	conan create . -o "viam-cpp-sdk/*:shared=False" -s build_type=Release -s compiler.cppstd=gnu17 --build=missing
+	conan create . \
+	$(if $(CONAN_PROFILE),--profile=$(CONAN_PROFILE),) \
+	-o "viam-cpp-sdk/*:shared=False" \
+	-s build_type=Release \
+	$(if $(CONAN_PROFILE),,	-s compiler.cppstd=gnu17) \
+	--build=$(CONAN_BUILD)
 
 module.tar.gz: lint conan-pkg meta.json
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install --requires=viam-camera-realsense/0.0.1 \
+	$(if $(CONAN_PROFILE),--profile=$(CONAN_PROFILE),) \
 	-o:a "viam-cpp-sdk/*:shared=False" \
 	-s:a build_type=Release \
-	-s:a compiler.cppstd=gnu17 \
+	$(if $(CONAN_PROFILE),,	-s:a compiler.cppstd=gnu17) \
 	--deployer-package "&" \
 	--envs-generation false
 
