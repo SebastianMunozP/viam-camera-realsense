@@ -113,7 +113,7 @@ jobs:
         run: |
           git clone https://github.com/lia-viam/conan-center-index.git
           cd conan-center-index
-          git checkout realsense-2.55.1
+          git checkout realsense-2.56.5
           conan create recipes/librealsense/all/conanfile.py --version=2.56.5 --build=missing
 
       - name: Get Viam SDK
