@@ -1,5 +1,18 @@
 default: viam-camera-realsense
 
+conan-pkg:
+	test -f ./venv/bin/activate && . ./venv/bin/activate; \
+	conan create . -o "viam-cpp-sdk/*:shared=False" -s build_type=Release -s compiler.cppstd=gnu17 --build=missing
+
+module.tar.gz: lint conan-pkg meta.json
+	test -f ./venv/bin/activate && . ./venv/bin/activate; \
+	conan install --requires=viam-camera-realsense/0.0.1 \
+	-o:a "viam-cpp-sdk/*:shared=False" \
+	-s:a build_type=Release \
+	-s:a compiler.cppstd=gnu17 \
+	--deployer-package "&" \
+	--envs-generation false
+
 lint:
 	./bin/run-clang-format.sh
 
