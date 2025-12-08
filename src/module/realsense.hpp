@@ -799,11 +799,13 @@ private:
     int devCount = device_list.size();
     for (int i = 0; i < devCount; i++) {
       try {
-        VIAM_RESOURCE_LOG(debug)
-            << "[assign_and_initialize_device] Attempting to access device at index " << i;
+        VIAM_RESOURCE_LOG(debug) << "[assign_and_initialize_device] Attempting "
+                                    "to access device at index "
+                                 << i;
         auto dev = device_list[i];
-        VIAM_RESOURCE_LOG(debug)
-            << "[assign_and_initialize_device] Successfully accessed device at index " << i;
+        VIAM_RESOURCE_LOG(debug) << "[assign_and_initialize_device] "
+                                    "Successfully accessed device at index "
+                                 << i;
 
         device_funcs_.printDeviceInfo(dev, this->logger_);
 
@@ -851,9 +853,9 @@ private:
         physical_camera_assigned_ = true;
         return true;
       } catch (const std::exception &e) {
-        VIAM_RESOURCE_LOG(error)
-            << "[assign_and_initialize_device] Failed to access/initialize device at index "
-            << i << ": " << e.what();
+        VIAM_RESOURCE_LOG(error) << "[assign_and_initialize_device] Failed to "
+                                    "access/initialize device at index "
+                                 << i << ": " << e.what();
         // Continue trying other devices
         continue;
       }

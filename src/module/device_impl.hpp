@@ -80,20 +80,20 @@ void printDeviceInfo(DeviceT const &dev, viam::sdk::LogSource &logger) {
            << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID) << std::endl;
     }
     if (dev.supports(RS2_CAMERA_INFO_PHYSICAL_PORT)) {
-      info << "  Physical Port:   " << dev.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT)
-           << std::endl;
+      info << "  Physical Port:   "
+           << dev.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT) << std::endl;
     }
     if (dev.supports(RS2_CAMERA_INFO_DEBUG_OP_CODE)) {
-      info << "  Debug OP Code:   " << dev.get_info(RS2_CAMERA_INFO_DEBUG_OP_CODE)
-           << std::endl;
+      info << "  Debug OP Code:   "
+           << dev.get_info(RS2_CAMERA_INFO_DEBUG_OP_CODE) << std::endl;
     }
     if (dev.supports(RS2_CAMERA_INFO_ADVANCED_MODE)) {
-      info << "  Advanced Mode:   " << dev.get_info(RS2_CAMERA_INFO_ADVANCED_MODE)
-           << std::endl;
+      info << "  Advanced Mode:   "
+           << dev.get_info(RS2_CAMERA_INFO_ADVANCED_MODE) << std::endl;
     }
     if (dev.supports(RS2_CAMERA_INFO_CAMERA_LOCKED)) {
-      info << "  Camera Locked:   " << dev.get_info(RS2_CAMERA_INFO_CAMERA_LOCKED)
-           << std::endl;
+      info << "  Camera Locked:   "
+           << dev.get_info(RS2_CAMERA_INFO_CAMERA_LOCKED) << std::endl;
     }
     if (dev.supports(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER)) {
       info << "  ASIC Serial Number:             "
@@ -110,8 +110,10 @@ void printDeviceInfo(DeviceT const &dev, viam::sdk::LogSource &logger) {
     VIAM_DEVICE_LOG(logger, info) << info.str();
   } catch (const std::exception &e) {
     VIAM_DEVICE_LOG(logger, error)
-        << "[printDeviceInfo] Failed to retrieve device info with error: " << e.what()
-        << ". Device may be in an invalid state or have firmware compatibility issues.";
+        << "[printDeviceInfo] Failed to retrieve device info with error: "
+        << e.what()
+        << ". Device may be in an invalid state or have firmware compatibility "
+           "issues.";
   }
 }
 

@@ -84,7 +84,9 @@ public:
         } catch (const std::exception &e) {
           VIAM_SDK_LOG(error)
               << "[discover_resources] Failed to access device at index " << i
-              << ": " << e.what() << "Device may be in an invalid state or have firmware compatibility issues." ;
+              << ": " << e.what()
+              << "Device may be in an invalid state or have firmware "
+                 "compatibility issues.";
           std::ostringstream error_msg;
           error_msg << "Device " << i << ": " << e.what();
           device_errors.push_back(error_msg.str());
@@ -119,7 +121,8 @@ public:
             error_msg << "; ";
           error_msg << device_errors[i];
         }
-        error_msg << ". Device(s) may be in an invalid state or have firmware compatibility issues.";
+        error_msg << ". Device(s) may be in an invalid state or have firmware "
+                     "compatibility issues.";
         throw std::runtime_error(error_msg.str());
       }
       return configs;
