@@ -28,6 +28,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Install Conan
+        run: pip3 install conan
+
       - name: Build the binary
         run: make viam-camera-realsense
 
