@@ -52,7 +52,7 @@ class ViamRealsense(ConanFile):
         CMake(self).build(target='package')
         copy(self, pattern="module.tar.gz", src=self.build_folder, dst=self.package_folder)
 
-    def deploy(self):
+   def deploy(self):
         # For editable packages, package_folder might equal deploy_folder, so copy from build_folder
         # In CI/CD, build_folder might be None, so check it exists first
         src = self.package_folder
