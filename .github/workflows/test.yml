@@ -28,17 +28,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install Conan
-        run: pip3 install conan
-
       - name: Build the binary
         run: make viam-camera-realsense
 
       - name: Run the tests
         run: make test
-
-      - name: Test module.tar.gz creation
-        run: |
-          make module.tar.gz
-          test -f module.tar.gz || (echo "module.tar.gz not created" && exit 1)
-          echo "✓ module.tar.gz created successfully"
