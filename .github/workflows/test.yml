@@ -33,3 +33,9 @@ jobs:
 
       - name: Run the tests
         run: make test
+
+      - name: Test module.tar.gz creation
+        run: |
+          make module.tar.gz
+          test -f module.tar.gz || (echo "module.tar.gz not created" && exit 1)
+          echo "✓ module.tar.gz created successfully"
