@@ -23,6 +23,10 @@ static constexpr std::uint64_t maxFrameAgeMs =
     1e3; // time until a frame is considered stale, in miliseconds (equal to 1
 static constexpr size_t MAX_GRPC_MESSAGE_SIZE =
     33554432; // 32MB gRPC message size limit
+
+static constexpr std::uint64_t maxFrameSetFrameMs =
+    2; // max time difference between frames in a frameset to be considered
+       // simultaneous, in miliseconds (equal to 2 ms)
 const std::string service_name = "viam_realsense";
 
 const std::string kColorSourceName = "color";
@@ -401,11 +405,15 @@ public:
       if (utils::contains("color", sensors) and
           utils::contains("depth", sensors) and should_process_color and
           should_process_depth) {
-        auto color = fs.get_color_frame();
-        auto depth = fs.get_depth_frame();
-        double colorTS = color.get_timestamp();
-        double depthTS = depth.get_timestamp();
-        if (colorTS != depthTS) {
+        auto const color = fs.get_color_frame();
+        auto const depth = fs.get_depth_frame();
+        auto const timeDiff = static_cast<std::uint64_t>(std::llround(
+            std::abs(color.get_timestamp() - depth.get_timestamp())));
+        auto const colorTS =
+            static_cast<std::uint64_t>(std::llround(color.get_timestamp()));
+        auto const depthTS =
+            static_cast<std::uint64_t>(std::llround(depth.get_timestamp()));
+        if (timeDiff > maxFrameSetFrameMs) {
           VIAM_RESOURCE_LOG(error)
               << "color and depth timestamps differ, defaulting to "
                  "older of the two"
@@ -413,8 +421,7 @@ public:
               << depthTS;
         }
         // use the older of the two timestamps
-        std::uint64_t timestamp = static_cast<std::uint64_t>(
-            std::llround(std::min(depthTS, colorTS)));
+        std::uint64_t timestamp = std::min(depthTS, colorTS);
 
         std::chrono::microseconds latestTimestamp(timestamp);
         response.metadata.captured_at = viam::sdk::time_pt{
