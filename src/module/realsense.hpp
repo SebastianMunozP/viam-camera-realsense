@@ -19,12 +19,12 @@
 namespace realsense {
 static const std::unordered_set<std::string> SUPPORTED_CAMERA_MODELS = {
     "D435", "D435I"};
-static constexpr std::uint64_t maxFrameAgeMs =
+static constexpr std::uint64_t MAX_FRAME_AGE_MS =
     1e3; // time until a frame is considered stale, in miliseconds (equal to 1
 static constexpr size_t MAX_GRPC_MESSAGE_SIZE =
     33554432; // 32MB gRPC message size limit
 
-static constexpr std::uint64_t maxFrameSetFrameMs =
+static constexpr std::uint64_t MAX_FRAME_SET_TIME_DIFF_MS =
     2; // max time difference between frames in a frameset to be considered
        // simultaneous, in miliseconds (equal to 2 ms)
 const std::string service_name = "viam_realsense";
@@ -292,7 +292,7 @@ public:
           << prev_serial_number;
       device_funcs_.reconfigureDevice(device_, config_copy, this->logger_);
       device_funcs_.startDevice(config_copy.serial_number, device_,
-                                latest_frameset_, maxFrameAgeMs, config_copy,
+                                latest_frameset_, MAX_FRAME_AGE_MS, config_copy,
                                 this->logger_);
     }
 
@@ -316,16 +316,16 @@ public:
       }
       if (config_->getMainSensor() == "color") {
         auto fs = latest_frameset_->get();
-        time::throwIfTooOld(time::getNowMs(),
-                            fs.get_color_frame().get_timestamp(), maxFrameAgeMs,
-                            "no recent color frame: check USB connection");
+        time::throwIfTooOld(
+            time::getNowMs(), fs.get_color_frame().get_timestamp(),
+            MAX_FRAME_AGE_MS, "no recent color frame: check USB connection");
         VIAM_RESOURCE_LOG(debug) << "[get_image] end";
         return encoding::encodeVideoFrameToResponse(fs.get_color_frame());
       } else if (config_->getMainSensor() == "depth") {
         auto fs = latest_frameset_->get();
-        time::throwIfTooOld(time::getNowMs(),
-                            fs.get_depth_frame().get_timestamp(), maxFrameAgeMs,
-                            "no recent depth frame: check USB connection");
+        time::throwIfTooOld(
+            time::getNowMs(), fs.get_depth_frame().get_timestamp(),
+            MAX_FRAME_AGE_MS, "no recent depth frame: check USB connection");
         return encoding::encodeDepthFrameToResponse(fs.get_depth_frame());
       } else {
         throw std::invalid_argument("unknown main sensor: " +
@@ -413,7 +413,7 @@ public:
             static_cast<std::uint64_t>(std::llround(color.get_timestamp()));
         auto const depthTS =
             static_cast<std::uint64_t>(std::llround(depth.get_timestamp()));
-        if (timeDiff > maxFrameSetFrameMs) {
+        if (timeDiff > MAX_FRAME_SET_TIME_DIFF_MS) {
           VIAM_RESOURCE_LOG(error)
               << "color and depth timestamps differ, defaulting to "
                  "older of the two"
@@ -455,14 +455,14 @@ public:
         throw std::invalid_argument("no color frame");
       }
 
-      time::throwIfTooOld(nowMs, color_frame.get_timestamp(), maxFrameAgeMs,
+      time::throwIfTooOld(nowMs, color_frame.get_timestamp(), MAX_FRAME_AGE_MS,
                           "no recent color frame: check USB connection");
 
       rs2::depth_frame depth_frame = fs.get_depth_frame();
       if (not depth_frame) {
         throw std::invalid_argument("no depth frame");
       }
-      time::throwIfTooOld(nowMs, depth_frame.get_timestamp(), maxFrameAgeMs,
+      time::throwIfTooOld(nowMs, depth_frame.get_timestamp(), MAX_FRAME_AGE_MS,
                           "no recent depth frame: check USB connection");
 
       if (color_frame.get_data() == nullptr or
@@ -855,8 +855,8 @@ private:
             << "[assign_and_initialize_device] calling startDevice for: "
             << connected_device_serial_number;
         device_funcs_.startDevice(connected_device_serial_number, device_,
-                                  latest_frameset_, maxFrameAgeMs, config_copy,
-                                  this->logger_);
+                                  latest_frameset_, MAX_FRAME_AGE_MS,
+                                  config_copy, this->logger_);
         physical_camera_assigned_ = true;
         return true;
       } catch (const std::exception &e) {
@@ -936,11 +936,12 @@ private:
                    boost::synchronized_value<device::ViamRSDevice<>>> &device,
                std::shared_ptr<boost::synchronized_value<rs2::frameset>>
                    &latest_frameset,
-               std::uint64_t maxFrameAgeMs,
+               std::uint64_t maxFrameSetFrameMs,
                realsense::RsResourceConfig const &viamConfig,
                viam::sdk::LogSource &logger) {
               return device::startDevice(serial, device, latest_frameset,
-                                         maxFrameAgeMs, viamConfig, logger);
+                                         maxFrameSetFrameMs, viamConfig,
+                                         logger);
             },
         .reconfigureDevice =
             [](std::shared_ptr<
