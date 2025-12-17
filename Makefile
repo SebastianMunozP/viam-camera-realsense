@@ -4,6 +4,16 @@ conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan create . -o "viam-cpp-sdk/*:shared=False" -s build_type=Release -s compiler.cppstd=gnu17 --build=missing
 
+force-module.tar.gz: lint conan-pkg meta.json
+	test -f ./venv/bin/activate && . ./venv/bin/activate; \
+	conan install --build=librealsense/2.56.5 --build=missing --build=viam-camera-realsense/0.0.1 \
+	-o librealsense/*:BUILD_EASYLOGGINGPP=True \
+	-o:a "viam-cpp-sdk/*:shared=False" \
+	-s:a build_type=Release \
+	-s:a compiler.cppstd=gnu17 \
+	--deployer-package "&" \
+	--envs-generation false
+
 module.tar.gz: lint conan-pkg meta.json
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install --requires=viam-camera-realsense/0.0.1 \
@@ -22,6 +32,7 @@ build: lint
 build/build.ninja: build CMakeLists.txt
 	cd build && \
 	cmake -G Ninja \
+	-DBUILD_EASYLOGGINGPP=ON \
 	-DVIAM_REALSENSE_ENABLE_TESTS=$(TESTS) \
 	-DVIAM_REALSENSE_ENABLE_SANITIZER=$(SANITIZE) -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 

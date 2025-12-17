@@ -59,6 +59,7 @@ int serve(int argc, char **argv) try {
 
   for (size_t i = 0; i < argc; i++) {
     if (std::string(argv[i]) == "--log-level=debug") {
+      std::cerr << "Enabling Realsense debug logging\n";
       rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
     }
   }
