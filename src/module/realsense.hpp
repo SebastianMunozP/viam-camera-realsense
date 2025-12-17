@@ -415,7 +415,9 @@ public:
             static_cast<std::uint64_t>(std::llround(depth.get_timestamp()));
         if (timeDiff > MAX_FRAME_SET_TIME_DIFF_MS) {
           VIAM_RESOURCE_LOG(error)
-              << "color and depth timestamps differ, defaulting to "
+              << "color and depth timestamps differ more than "
+              << MAX_FRAME_SET_TIME_DIFF_MS
+              << "ms, defaulting to the "
                  "older of the two"
               << "color timestamp was " << colorTS << " depth timestamp was "
               << depthTS;
