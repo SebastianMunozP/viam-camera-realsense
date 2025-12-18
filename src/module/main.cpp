@@ -57,11 +57,11 @@ int serve(int argc, char **argv) try {
 
   VIAM_SDK_LOG(info) << "[serve] Starting Realsense module";
 
-  for (size_t i = 0; i < argc; i++) {
-    if (std::string(argv[i]) == "--log-level=debug") {
-      rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
-    }
-  }
+  // for (size_t i = 0; i < argc; i++) {
+  //   if (std::string(argv[i]) == "--log-level=debug") {
+  //     rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
+  //   }
+  // }
 
   auto ctx = std::make_shared<boost::synchronized_value<rs2::context>>();
   // Wrap the context in a RealsenseContext, which will manage the callback for
