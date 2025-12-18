@@ -10,9 +10,9 @@ OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
 # NOTE: this is written under the assumption that it will be built in canon
 
-# elif  [[ ${OS} == "linux" ]]; then
-#     sudo apt -y update && sudo apt -y upgrade && sudo apt-get install -y libasound-dev portaudio19-dev python3-venv cmake
-# fi
+if  [[ ${OS} == "linux" ]]; then
+    sudo apt -y update && sudo apt -y upgrade && sudo apt-get install -y python3-venv cmake
+fi
 
 if [ ! -f "./venv/bin/activate" ]; then
   echo 'creating and sourcing virtual env'
