@@ -29,5 +29,3 @@ if [ ! -f "./venv/bin/conan" ]; then
 fi
 
 conan profile detect || echo "Conan is already installed"
-
-conan remote add viamconan https://viam.jfrog.io/artifactory/api/conan/viamconan --force || echo "Viam conan remote already exists"
