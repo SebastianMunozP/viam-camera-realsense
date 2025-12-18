@@ -11,7 +11,7 @@ build/build.ninja: build CMakeLists.txt
 	cd build && cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 
 $(BIN): conanfile.py src/* bin/* test/*
-	$(MAKE) module.tar.gz
+	bin/build.sh
 
 test: $(BIN)
 	cd build-conan/build/RelWithDebInfo && ctest --output-on-failure
@@ -42,7 +42,7 @@ module.tar.gz: conan-pkg meta.json
 	--envs-generation false
 
 lint:
-	./bin/run-clang-format.sh
+	./bin/lint.sh
 
 
 # Docker
