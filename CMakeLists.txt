@@ -52,7 +52,6 @@ install(TARGETS
 install( FILES meta.json DESTINATION .)
 
 
-if (VIAM_REALSENSE_ENABLE_TESTS)
-    enable_testing()
-    add_subdirectory(test)
-endif()
+
+enable_testing()
+add_subdirectory(test)
