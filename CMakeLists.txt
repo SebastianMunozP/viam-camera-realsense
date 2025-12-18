@@ -11,8 +11,6 @@ project(viam-camera-realsense
 
 include(cmake/simd_flags.cmake)
 
-# option(VIAM_REALSENSE_ENABLE_SANITIZER "Enable AddressSanitizer" OFF)
-
 if (APPLE)
     list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/../lib")
 else()
@@ -34,45 +32,9 @@ target_link_libraries(viam-camera-realsense
         libjpeg-turbo::turbojpeg-static
         ${CMAKE_DL_LIBS}
 )
-# target_link_libraries(viam-camera-realsense PRIVATE viamrealsense)
-
-# install(TARGETS viamrealsense
-#     LIBRARY DESTINATION lib
-#     ARCHIVE DESTINATION lib
-# )
 
 install(TARGETS viam-camera-realsense DESTINATION .)
 install( FILES meta.json DESTINATION .)
-
-# set(CPACK_PACKAGE_NAME "viam-realsense")
-# set(CPACK_PACKAGE_FILE_NAME "module")
-# set(CPACK_GENERATOR "TGZ")
-# set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY 0)
-# include(CPack)
-
-# if(VIAM_REALSENSE_ENABLE_SANITIZER)
-#     message(STATUS "Building with AddressSanitizer enabled")
-#     target_compile_options(viamrealsense PUBLIC
-#         -fsanitize=address
-#         -fsanitize-address-use-after-scope
-#         -fno-omit-frame-pointer
-#         -static-libasan
-#     )
-
-#     target_link_options(viamrealsense PUBLIC
-#         -fsanitize=address
-#         -fno-omit-frame-pointer
-#         -static-libasan
-#     )
-# endif()
-
-# if (NOT MSVC)
-#     target_compile_options(viamrealsense
-#         PRIVATE
-#             -Wredundant-move
-#             -Wpessimizing-move
-#     )
-# endif()
 
 
 enable_testing()
