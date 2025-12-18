@@ -1,0 +1,6 @@
+[requires]
+librealsense/2.56.5
+
+[generators]
+CMakeDeps
+CMakeToolchain

@@ -51,6 +51,13 @@ install(TARGETS
     DESTINATION .)
 install( FILES meta.json DESTINATION .)
 
+add_executable(viam-camera-realsense-cli src/cli/main.cpp)
+target_link_libraries(viam-camera-realsense-cli
+    PUBLIC
+        realsense2::realsense2
+    PRIVATE
+        ${CMAKE_DL_LIBS}
+)
 
 
 enable_testing()
