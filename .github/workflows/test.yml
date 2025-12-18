@@ -39,8 +39,5 @@ jobs:
         run: |
           make setup
 
-      - name: Build the binary
-        run: make module.tar.gz
-
       - name: Run the tests
         run: make test
