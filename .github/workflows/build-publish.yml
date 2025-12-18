@@ -69,6 +69,8 @@ jobs:
 
       - name: Setup python and conan
         run: |
+          apt-get update
+          apt-get -y install cmake cmake-data
           make setup
 
       - name: Build
