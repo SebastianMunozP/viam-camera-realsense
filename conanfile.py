@@ -1,13 +1,14 @@
 
 import os
 import tarfile
+import re
 from tempfile import TemporaryDirectory
 
 from conan import ConanFile
 from conan.api.output import ConanOutput
 from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
-from conan.tools.files import copy
+from conan.tools.files import copy, load
 from conan.internal.deploy import _flatten_directory
 
 class ViamRealsense(ConanFile):
@@ -18,9 +19,30 @@ class ViamRealsense(ConanFile):
     package_type = "application"
     settings = "os", "compiler", "build_type", "arch"
 
-    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json"
+    options = {
+        "shared": [True, False]
+    }
+    default_options = {
+        "shared": True
+    }
+
+    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
 
     version = "0.0.1"
+
+    def set_version(self):
+        content = load(self, "CMakeLists.txt")
+        self.version = re.search("set\(CMAKE_PROJECT_VERSION (.+)\)", content).group(1).strip()
+
+    def configure(self):
+        # If we're building static then build the world as static, otherwise
+        # stuff will probably break.
+        # If you want your shared build to also build the world as shared, you
+        # can invoke conan with -o "&:shared=False" -o "*:shared=False",
+        # possibly with --build=missing or --build=cascade as desired,
+        # but this is probably not necessary.
+        if not self.options.shared:
+            self.options["*"].shared = False
 
     def validate(self):
         check_min_cppstd(self, 17)
@@ -35,7 +57,6 @@ class ViamRealsense(ConanFile):
 
     def generate(self):
         tc = CMakeToolchain(self)
-        tc.cache_variables["VIAM_REALSENSE_ENABLE_TESTS"] = False
         tc.generate()
 
         CMakeDeps(self).generate()
@@ -46,17 +67,23 @@ class ViamRealsense(ConanFile):
         cmake.build()
 
     def package(self):
-        CMake(self).install()
-
-        # Use CPack to build the module.tar.gz and manually copy it to the package folder
-        CMake(self).build(target='package')
-        copy(self, pattern="module.tar.gz", src=self.build_folder, dst=self.package_folder)
+        cmake = CMake(self)
+        cmake.install()
 
     def deploy(self):
-        # For editable packages, package_folder might equal deploy_folder, so copy from build_folder
-        # In CI/CD, build_folder might be None, so check it exists first
-        src = self.package_folder
-        if self.build_folder and os.path.exists(os.path.join(self.build_folder, "module.tar.gz")):
-            src = self.build_folder
-        if src != self.deploy_folder:
-            copy(self, pattern="module.tar.gz", src=src, dst=self.deploy_folder)
+        with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
+            self.output.debug(f"Creating temporary directory {tmp_dir}")
+
+            self.output.info("Copying viam-camera-realsense binary")
+            copy(self, "viam-camera-realsense", src=self.package_folder, dst=tmp_dir)
+
+            self.output.info("Copying meta.json")
+            copy(self, "meta.json", src=self.package_folder, dst=tmp_dir)
+
+            self.output.info("Creating module.tar.gz")
+            with tarfile.open(os.path.join(self.deploy_folder, "module.tar.gz"), "w|gz") as tar:
+                tar.add(tmp_dir, arcname=".", recursive=True)
+
+                self.output.info("module.tar.gz contents:")
+                for mem in tar.getmembers():
+                    self.output.info(mem.name)

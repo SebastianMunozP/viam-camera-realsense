@@ -4,7 +4,32 @@
 #include <librealsense2/rs.hpp>
 #include <viam/sdk/common/instance.hpp>
 
-viam::sdk::Instance global_instance;
+using ::testing::_;
+using ::testing::InSequence;
+using ::testing::Invoke;
+using ::testing::NiceMock;
+using ::testing::Return;
+using ::testing::StrictMock;
+
+namespace realsense {
+namespace discovery {
+namespace test {
+
+class RealsenseTestEnvironment : public ::testing::Environment {
+public:
+  void SetUp() override {
+    // Create the instance here, before any tests run
+    instance_ = std::make_unique<viam::sdk::Instance>();
+  }
+
+  void TearDown() override {
+    // Clean up the instance
+    instance_.reset();
+  }
+
+private:
+  std::unique_ptr<viam::sdk::Instance> instance_;
+};
 
 class MockDevice {
   std::string serial_number_;
@@ -84,4 +109,15 @@ TEST(RealsenseDiscoveryTest, MultipleDevicesFound) {
   EXPECT_EQ(configs[0].attributes().at("serial_number"), "123456");
   EXPECT_EQ(configs[1].name(), "realsense-789");
   EXPECT_EQ(configs[1].attributes().at("serial_number"), "789");
+}
+
+} // namespace test
+} // namespace discovery
+} // namespace realsense
+
+GTEST_API_ int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::testing::AddGlobalTestEnvironment(
+      new realsense::discovery::test::RealsenseTestEnvironment);
+  return RUN_ALL_TESTS();
 }

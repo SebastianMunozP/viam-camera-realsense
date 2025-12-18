@@ -1,48 +1,49 @@
-default: viam-camera-realsense
+OUTPUT_NAME = viam-camera-realsense
+BIN := build-conan/build/RelWithDebInfo/viam-camera-realsense
 
+.PHONY: build setup test clean lint conan-pkg
+
+default: module.tar.gz
+
+build: $(BIN)
+
+build/build.ninja: build CMakeLists.txt
+	cd build && cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+
+$(BIN): conanfile.py src/* bin/* test/*
+	$(MAKE) module.tar.gz
+
+test: $(BIN)
+	cd build-conan/build/RelWithDebInfo && ctest --output-on-failure
+
+clean:
+	rm -rf build-conan/build/RelWithDebInfo module.tar.gz
+
+setup:
+	bin/setup.sh
+
+# Both the commands below need to source/activate the venv in the same line as the
+# conan call because every line of a Makefile runs in a subshell
 conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	conan create . -o "viam-cpp-sdk/*:shared=False" -s build_type=Release -s compiler.cppstd=gnu17 --build=missing
+	conan create . \
+	-o:a "viam-cpp-sdk/*:shared=False" \
+	-s:a build_type=Release \
+	-s:a compiler.cppstd=17 \
+	--build=missing
 
-module.tar.gz: lint conan-pkg meta.json
+module.tar.gz: conan-pkg meta.json
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install --requires=viam-camera-realsense/0.0.1 \
 	-o:a "viam-cpp-sdk/*:shared=False" \
 	-s:a build_type=Release \
-	-s:a compiler.cppstd=gnu17 \
+	-s:a compiler.cppstd=17 \
 	--deployer-package "&" \
 	--envs-generation false
 
 lint:
 	./bin/run-clang-format.sh
 
-build: lint
-	mkdir -p build
-
-build/build.ninja: build CMakeLists.txt
-	cd build && \
-	cmake -G Ninja \
-	-DVIAM_REALSENSE_ENABLE_TESTS=$(TESTS) \
-	-DVIAM_REALSENSE_ENABLE_SANITIZER=$(SANITIZE) -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
-
-TESTS ?= ON
-SANITIZE ?= OFF
-viam-camera-realsense: src/* build/build.ninja
-	cd build && ninja viam-camera-realsense -j 4
-	cp build/viam-camera-realsense .
-
-all: default
-
-clean:
-	rm -rf viam-camera-realsense build
-
-clean-all: clean
-	git clean -fxd
-
-test: build/build.ninja
-	cd build && ninja -j 4 test/all && ctest --output-on-failure
-
-.PHONY: build lint
 
 # Docker
 BUILD_CMD = docker buildx build --pull $(BUILD_PUSH) --force-rm --no-cache --build-arg MAIN_TAG=$(MAIN_TAG) --build-arg BASE_TAG=$(BUILD_TAG) --platform linux/$(BUILD_TAG) -f $(BUILD_FILE) -t '$(MAIN_TAG):$(BUILD_TAG)' .

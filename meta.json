@@ -17,5 +17,11 @@
       "short_description": "A discovery service to find connected RealSense cameras"
     }
   ],
-  "entrypoint": "bin/viam-camera-realsense"
+  "build": {
+       "setup": "make setup",
+       "build": "make module.tar.gz",
+       "path" : "module.tar.gz",
+       "arch" : ["linux/amd64", "linux/arm64"]
+  },
+  "entrypoint": "viam-camera-realsense"
 }

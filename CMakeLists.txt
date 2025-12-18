@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
+set(CMAKE_PROJECT_VERSION 0.0.1)
+set(CMAKE_CXX_STANDARD 17)
+
 
 project(viam-camera-realsense
     DESCRIPTION "Viam Module for the Intel RealSense Camera"
@@ -8,8 +11,7 @@ project(viam-camera-realsense
 
 include(cmake/simd_flags.cmake)
 
-option(VIAM_REALSENSE_ENABLE_SANITIZER "Enable AddressSanitizer" OFF)
-option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" ON)
+# option(VIAM_REALSENSE_ENABLE_SANITIZER "Enable AddressSanitizer" OFF)
 
 if (APPLE)
     list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/../lib")
@@ -19,24 +21,12 @@ endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
 find_package(realsense2 REQUIRED)
-
 find_package(viam-cpp-sdk REQUIRED)
-
 find_package(libjpeg-turbo CONFIG REQUIRED)
 
-add_library(viamrealsense src/module/encoding.cpp)
-
-target_include_directories(viamrealsense
-    PUBLIC src/module
-)
-
-target_compile_features(viamrealsense PUBLIC
-    cxx_std_17
-)
-
-target_link_libraries(viamrealsense
+add_executable(viam-camera-realsense src/module/main.cpp src/module/encoding.cpp)
+target_link_libraries(viam-camera-realsense
     PUBLIC
         viam-cpp-sdk::viamsdk
         realsense2::realsense2
@@ -44,53 +34,46 @@ target_link_libraries(viamrealsense
         libjpeg-turbo::turbojpeg-static
         ${CMAKE_DL_LIBS}
 )
+# target_link_libraries(viam-camera-realsense PRIVATE viamrealsense)
 
-add_executable(viam-camera-realsense src/module/main.cpp)
-target_link_libraries(viam-camera-realsense PRIVATE viamrealsense)
+# install(TARGETS viamrealsense
+#     LIBRARY DESTINATION lib
+#     ARCHIVE DESTINATION lib
+# )
 
-install(
-    TARGETS
-        viamrealsense
-        viam-camera-realsense
-)
+install(TARGETS viam-camera-realsense DESTINATION .)
+install( FILES meta.json DESTINATION .)
 
-install(
-    FILES
-        meta.json
-    DESTINATION .
-)
+# set(CPACK_PACKAGE_NAME "viam-realsense")
+# set(CPACK_PACKAGE_FILE_NAME "module")
+# set(CPACK_GENERATOR "TGZ")
+# set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY 0)
+# include(CPack)
 
-set(CPACK_PACKAGE_NAME "viam-realsense")
-set(CPACK_PACKAGE_FILE_NAME "module")
-set(CPACK_GENERATOR "TGZ")
-set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY 0)
-include(CPack)
+# if(VIAM_REALSENSE_ENABLE_SANITIZER)
+#     message(STATUS "Building with AddressSanitizer enabled")
+#     target_compile_options(viamrealsense PUBLIC
+#         -fsanitize=address
+#         -fsanitize-address-use-after-scope
+#         -fno-omit-frame-pointer
+#         -static-libasan
+#     )
 
-if(VIAM_REALSENSE_ENABLE_SANITIZER)
-    message(STATUS "Building with AddressSanitizer enabled")
-    target_compile_options(viamrealsense PUBLIC
-        -fsanitize=address
-        -fsanitize-address-use-after-scope
-        -fno-omit-frame-pointer
-        -static-libasan
-    )
+#     target_link_options(viamrealsense PUBLIC
+#         -fsanitize=address
+#         -fno-omit-frame-pointer
+#         -static-libasan
+#     )
+# endif()
 
-    target_link_options(viamrealsense PUBLIC
-        -fsanitize=address
-        -fno-omit-frame-pointer
-        -static-libasan
-    )
-endif()
+# if (NOT MSVC)
+#     target_compile_options(viamrealsense
+#         PRIVATE
+#             -Wredundant-move
+#             -Wpessimizing-move
+#     )
+# endif()
 
-if (NOT MSVC)
-    target_compile_options(viamrealsense
-        PRIVATE
-            -Wredundant-move
-            -Wpessimizing-move
-    )
-endif()
 
-if (VIAM_REALSENSE_ENABLE_TESTS)
-    enable_testing()
-    add_subdirectory(test)
-endif()
+enable_testing()
+add_subdirectory(test)

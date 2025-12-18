@@ -28,8 +28,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Run linter and check formatting
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-19
+          find ./src/module -type f \( -name \*.cpp -o -name \*.hpp \) | xargs clang-format-19 --dry-run --Werror --style=file
+          find ./test -type f \( -name \*.cpp -o -name \*.hpp \) | xargs clang-format-19 --dry-run --Werror --style=file
+
+      - name: Install dependencies
+        run: |
+          make setup
+
       - name: Build the binary
-        run: make viam-camera-realsense
+        run: make module.tar.gz
 
       - name: Run the tests
         run: make test
