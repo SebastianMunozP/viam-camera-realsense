@@ -111,9 +111,7 @@ jobs:
 
       - name: Build
         run: |
-          source ./venv/bin/activate
-          conan create . -o:a "viam-cpp-sdk/*:shared=False" -s:a build_type=Release -s:a compiler.cppstd=17 --build=missing -cc core:non_interactive=True
-          conan install --requires=viam-camera-realsense/0.0.1 --deployer-package "&" -o "viam-cpp-sdk/*:shared=False" -v v
+          make module.tar.gz
 
       - name: Upload module artifact
         if: github.event_name == 'release'
