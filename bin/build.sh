@@ -23,6 +23,9 @@ rm -rf build-conan
 if [ -f "./venv/bin/activate" ]; then
   echo 'sourcing virtual env'
   source ./venv/bin/activate
+else
+  echo "No virtual environment found. Please run 'bin/setup.sh' first."
+  exit 1
 fi
 
 conan install . \
@@ -38,4 +41,3 @@ conan build . \
       -s:a build_type=Release \
       -s:a "&:build_type=RelWithDebInfo" \
       -s:a compiler.cppstd=17
- 

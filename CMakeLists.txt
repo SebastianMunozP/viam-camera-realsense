@@ -22,6 +22,7 @@ find_package(Threads REQUIRED)
 find_package(realsense2 REQUIRED)
 find_package(viam-cpp-sdk REQUIRED)
 find_package(libjpeg-turbo CONFIG REQUIRED)
+find_package(PkgConfig REQUIRED)
 
 add_executable(viam-camera-realsense src/module/main.cpp src/module/encoding.cpp)
 target_link_libraries(viam-camera-realsense

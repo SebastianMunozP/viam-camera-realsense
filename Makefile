@@ -1,17 +1,3 @@
-
-# For Linux: In order to be able to retrieve libudev, PKG_CONFIG_PATH needs to be correctly set 
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Linux)
-	ARCH := $(shell uname -m)
-	ifeq ($(ARCH),x86_64)
-		export PKG_CONFIG_PATH := /usr/lib/x86_64-linux-gnu/pkgconfig
-	else ifeq ($(ARCH),aarch64)
-		export PKG_CONFIG_PATH := /usr/lib/aarch64-linux-gnu/pkgconfig
-	else ifeq ($(ARCH),arm64)
-		export PKG_CONFIG_PATH := /usr/lib/aarch64-linux-gnu/pkgconfig
-	endif
-endif
-
 OUTPUT_NAME = viam-camera-realsense
 BIN := build-conan/build/RelWithDebInfo/viam-camera-realsense
 
@@ -20,9 +6,6 @@ BIN := build-conan/build/RelWithDebInfo/viam-camera-realsense
 default: module.tar.gz
 
 build: $(BIN)
-
-build/build.ninja: build CMakeLists.txt
-	cd build && cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 
 $(BIN): conanfile.py src/* bin/* test/*
 	bin/build.sh
