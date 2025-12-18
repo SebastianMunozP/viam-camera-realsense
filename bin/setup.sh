@@ -16,8 +16,8 @@ if [[ ${OS} == "linux" ]]; then
         python3 \
         python3-venv \
         python3-pip \
-        cmake=3.25.2 \
-        cmake-data=3.25.2 \
+        cmake \
+        cmake-data \
         autoconf \
         automake \
         build-essential \
