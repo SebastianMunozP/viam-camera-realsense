@@ -107,21 +107,11 @@ jobs:
 
       - name: Setup python and conan
         run: |
-          pip install conan
-          mkdir -p ~/.conan2/profiles
-          cp etc/conan/${{ matrix.profile-name }} ~/.conan2/profiles/default
-          conan profile show
-
-      - name: Get Viam SDK
-        run: |
-          git clone https://github.com/viamrobotics/viam-cpp-sdk.git
-          cd viam-cpp-sdk
-          git checkout releases/v0.20.1
-          conan create . -o "&:shared=False" --build=missing -s compiler.cppstd=17
+          make setup
 
       - name: Build
         run: |
-          conan create . --build=missing -o "viam-cpp-sdk/*:shared=False"
+          conan create . -o:a "viam-cpp-sdk/*:shared=False" -s:a build_type=Release -s:a compiler.cppstd=17 --build=missing -cc core:non_interactive=True
           conan install --requires=viam-camera-realsense/0.0.1 --deployer-package "&" -o "viam-cpp-sdk/*:shared=False" -v v
 
       - name: Upload module artifact
