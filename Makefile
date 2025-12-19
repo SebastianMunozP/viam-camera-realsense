@@ -1,9 +1,29 @@
 OUTPUT_NAME = viam-camera-realsense
 BIN := build-conan/build/RelWithDebInfo/viam-camera-realsense
 
-# Get the architecture-specific pkgconfig path dynamically
-ARCH_PATH = /usr/lib/$(shell uname -m)-linux-gnu/pkgconfig
-DEFAULT_PKG_CONFIG_PATH = $(ARCH_PATH):/usr/share/pkgconfig
+# OS Detection
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+
+# Set architecture-specific paths based on OS
+ifeq ($(UNAME_S),Linux)
+    export DEFAULT_PKG_CONFIG_PATH := /usr/lib/$(UNAME_M)-linux-gnu/pkgconfig:/usr/share/pkgconfig
+else ifeq ($(UNAME_S),Darwin)
+    # macOS Homebrew paths
+    ifeq ($(UNAME_M),arm64)
+        export DEFAULT_PKG_CONFIG_PATH := /opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig
+    else
+        export DEFAULT_PKG_CONFIG_PATH := /usr/local/lib/pkgconfig
+    endif
+endif
+
+# Export for sub-processes (like bin/build.sh), does not pollute the parent shell
+# Only add the colon if PKG_CONFIG_PATH is already set
+ifeq ($(PKG_CONFIG_PATH),)
+    export PKG_CONFIG_PATH := $(DEFAULT_PKG_CONFIG_PATH)
+else
+    export PKG_CONFIG_PATH := $(PKG_CONFIG_PATH):$(DEFAULT_PKG_CONFIG_PATH)
+endif
 
 .PHONY: build setup test clean lint conan-pkg
 
@@ -15,7 +35,7 @@ $(BIN): conanfile.py src/* bin/* test/*
 	bin/build.sh
 
 test: $(BIN)
-	cd build-conan/build/RelWithDebInfo && ctest --output-on-failure
+	cd build-conan/build/RelWithDebInfo && . ./generators/conanrun.sh && ctest --output-on-failure
 
 clean:
 	rm -rf build-conan/build/RelWithDebInfo module.tar.gz
@@ -27,7 +47,7 @@ setup:
 # conan call because every line of a Makefile runs in a subshell
 conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	PKG_CONFIG_PATH=$${PKG_CONFIG_PATH}:$(DEFAULT_PKG_CONFIG_PATH) conan create . \
+	conan create . \
 	-o:a "viam-cpp-sdk/*:shared=False" \
 	-s:a build_type=Release \
 	-s:a compiler.cppstd=17 \
@@ -35,7 +55,7 @@ conan-pkg:
 
 module.tar.gz: conan-pkg meta.json
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	PKG_CONFIG_PATH=$${PKG_CONFIG_PATH}:$(DEFAULT_PKG_CONFIG_PATH) conan install --requires=viam-camera-realsense/0.0.1 \
+	conan install --requires=viam-camera-realsense/0.0.1 \
 	-o:a "viam-cpp-sdk/*:shared=False" \
 	-s:a build_type=Release \
 	-s:a compiler.cppstd=17 \

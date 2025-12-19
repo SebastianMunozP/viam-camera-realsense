@@ -8,28 +8,31 @@ FetchContent_MakeAvailable(googletest)
 
 include(GoogleTest)
 
+# Helper library target for linking to the individual test binaries
+add_library(viamrealsense_test_common INTERFACE)
 
-# Device tests
-add_executable(device_tests device_tests.cpp)
-target_link_libraries(device_tests PRIVATE viamrealsense GTest::gtest GTest::gtest_main GTest::gmock)
-gtest_discover_tests(device_tests DISCOVERY_TIMEOUT 60)
+target_link_libraries(viamrealsense_test_common
+    INTERFACE
+        viamrealsense
+        GTest::gtest
+        GTest::gtest_main
+        GTest::gmock
+        viam-cpp-sdk::viam-cpp-sdk
+)
 
-# Encoding tests (needs turbojpeg)
-add_executable(encoding_tests encoding_tests.cpp)
-target_link_libraries(encoding_tests PRIVATE viamrealsense GTest::gtest GTest::gtest_main GTest::gmock)
-gtest_discover_tests(encoding_tests DISCOVERY_TIMEOUT 60)
+function(viamrealsense_add_gtest SOURCE_FILE_NAME)
+    get_filename_component(TEST_EXECUTABLE_NAME ${SOURCE_FILE_NAME} NAME_WE)
 
-# Realsense tests
-add_executable(realsense_tests realsense_tests.cpp)
-target_link_libraries(realsense_tests PRIVATE viamrealsense GTest::gtest GTest::gtest_main GTest::gmock)
-gtest_discover_tests(realsense_tests DISCOVERY_TIMEOUT 60)
+    add_executable(${TEST_EXECUTABLE_NAME} ${SOURCE_FILE_NAME})
+    target_link_libraries(${TEST_EXECUTABLE_NAME} PRIVATE viamrealsense_test_common)
 
-# Time tests
-add_executable(time_tests time_tests.cpp)
-target_link_libraries(time_tests PRIVATE viamrealsense GTest::gtest GTest::gtest_main GTest::gmock)
-gtest_discover_tests(time_tests DISCOVERY_TIMEOUT 60)
+    # DISCOVERY_MODE PRE_TEST is required to avoid running the test at build-time
+    # which fails because shared libraries aren't in the path yet.
+    gtest_discover_tests(${TEST_EXECUTABLE_NAME} DISCOVERY_TIMEOUT 60 DISCOVERY_MODE PRE_TEST)
+endfunction()
 
-# Discovery tests
-add_executable(discovery_tests discovery_tests.cpp)
-target_link_libraries(discovery_tests PRIVATE viamrealsense GTest::gtest GTest::gtest_main GTest::gmock)
-gtest_discover_tests(discovery_tests DISCOVERY_TIMEOUT 60)
+viamrealsense_add_gtest(device_tests.cpp)
+viamrealsense_add_gtest(encoding_tests.cpp)
+viamrealsense_add_gtest(realsense_tests.cpp)
+viamrealsense_add_gtest(time_tests.cpp)
+viamrealsense_add_gtest(discovery_tests.cpp)
