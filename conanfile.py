@@ -19,13 +19,6 @@ class ViamRealsense(ConanFile):
     package_type = "application"
     settings = "os", "compiler", "build_type", "arch"
 
-    options = {
-        "shared": [True, False]
-    }
-    default_options = {
-        "shared": True
-    }
-
     exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
 
     version = "0.0.1"
@@ -33,16 +26,6 @@ class ViamRealsense(ConanFile):
     def set_version(self):
         content = load(self, "CMakeLists.txt")
         self.version = re.search("set\(CMAKE_PROJECT_VERSION (.+)\)", content).group(1).strip()
-
-    def configure(self):
-        # If we're building static then build the world as static, otherwise
-        # stuff will probably break.
-        # If you want your shared build to also build the world as shared, you
-        # can invoke conan with -o "&:shared=False" -o "*:shared=False",
-        # possibly with --build=missing or --build=cascade as desired,
-        # but this is probably not necessary.
-        if not self.options.shared:
-            self.options["*"].shared = False
 
     def validate(self):
         check_min_cppstd(self, 17)

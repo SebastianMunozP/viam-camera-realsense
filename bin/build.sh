@@ -30,14 +30,12 @@ fi
 
 conan install . \
       --build=missing \
-      -o:a "&:shared=False" \
       -s:a build_type=Release \
       -s:a compiler.cppstd=17
 
 conan build . \
       --output-folder=build-conan \
       --build=none \
-      -o:a "&:shared=False" \
       -s:a build_type=Release \
       -s:a "&:build_type=RelWithDebInfo" \
       -s:a compiler.cppstd=17

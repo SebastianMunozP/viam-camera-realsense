@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 set(CMAKE_PROJECT_VERSION 0.0.1)
-set(CMAKE_CXX_STANDARD 17)
 
 
 project(viam-camera-realsense
@@ -10,6 +9,8 @@ project(viam-camera-realsense
 )
 
 include(cmake/simd_flags.cmake)
+
+option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" ON)
 
 if (APPLE)
     list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/../lib")
@@ -24,19 +25,34 @@ find_package(viam-cpp-sdk REQUIRED)
 find_package(libjpeg-turbo CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 
-add_executable(viam-camera-realsense src/module/main.cpp src/module/encoding.cpp)
-target_link_libraries(viam-camera-realsense
+add_library(viamrealsense src/module/encoding.cpp)
+target_include_directories(viamrealsense
+    PUBLIC src/module
+    
+)
+
+target_compile_features(viamrealsense PUBLIC
+    cxx_std_17
+)
+target_link_libraries(viamrealsense
     PUBLIC
         viam-cpp-sdk::viamsdk
         realsense2::realsense2
-    PRIVATE
         libjpeg-turbo::turbojpeg-static
+    PRIVATE
         ${CMAKE_DL_LIBS}
 )
+add_executable(viam-camera-realsense src/module/main.cpp)
+target_link_libraries(viam-camera-realsense PRIVATE viamrealsense)
 
-install(TARGETS viam-camera-realsense DESTINATION .)
+install(TARGETS 
+    viamrealsense 
+    viam-camera-realsense 
+    DESTINATION .)
 install( FILES meta.json DESTINATION .)
 
 
-enable_testing()
-add_subdirectory(test)
+if (VIAM_REALSENSE_ENABLE_TESTS)
+    enable_testing()
+    add_subdirectory(test)
+endif()
