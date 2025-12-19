@@ -18,6 +18,8 @@ class ViamRealsense(ConanFile):
     url = "https://github.com/viam-modules/viam-camera-realsense"
     package_type = "application"
     settings = "os", "compiler", "build_type", "arch"
+    options = {"with_tests": [True, False]}
+    default_options = {"with_tests": False}
 
     exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
 
@@ -40,6 +42,7 @@ class ViamRealsense(ConanFile):
 
     def generate(self):
         tc = CMakeToolchain(self)
+        tc.variables["VIAM_REALSENSE_ENABLE_TESTS"] = self.options.with_tests
         tc.generate()
 
         CMakeDeps(self).generate()

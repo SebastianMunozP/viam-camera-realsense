@@ -32,6 +32,7 @@ default: module.tar.gz
 conan-build-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan build . \
+	-o with_tests=True \
 	--output-folder=build-conan \
 	--build=none \
 	-s:a build_type=Release \
@@ -41,8 +42,10 @@ conan-build-test:
 conan-install-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install . \
+	-o with_tests=True \
 	--build=missing \
 	-s:a build_type=Release \
+	-s:a "&:build_type=RelWithDebInfo" \
 	-s:a compiler.cppstd=17
 
 test: conan-build-test conan-install-test
@@ -59,6 +62,7 @@ setup:
 conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan create . \
+	-o with_tests=False \
 	-o:a "viam-cpp-sdk/*:shared=False" \
 	-s:a build_type=Release \
 	-s:a compiler.cppstd=17 \

@@ -10,7 +10,7 @@ project(viam-camera-realsense
 
 include(cmake/simd_flags.cmake)
 
-option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" ON)
+option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" OFF)
 
 if (APPLE)
     list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/../lib")
