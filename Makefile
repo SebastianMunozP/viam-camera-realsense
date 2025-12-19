@@ -53,7 +53,7 @@ test: conan-install-test conan-build-test
 	cd build-conan/build/RelWithDebInfo && . ./generators/conanrun.sh && ctest --output-on-failure
 
 clean:
-	rm -rf build-conan/build/RelWithDebInfo module.tar.gz
+	rm -rf build-conan module.tar.gz venv
 
 setup:
 	bin/setup.sh

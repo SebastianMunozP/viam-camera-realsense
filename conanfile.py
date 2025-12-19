@@ -39,6 +39,10 @@ class ViamRealsense(ConanFile):
         self.requires("viam-cpp-sdk/0.20.1")
         self.requires("librealsense/2.56.5")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
+
+        # Pin transitive dependencies to versions with massive binary cache coverage
+        self.requires("abseil/20240116.2", override=True)
+        self.requires("boost/1.81.0", override=True)
         
     def layout(self):
         cmake_layout(self, src_folder=".")
