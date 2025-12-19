@@ -23,12 +23,12 @@ class ViamRealsense(ConanFile):
         "shared": [True, False]
     }
     default_options = {
-        "shared": True
+        "shared": False
     }
 
     exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
 
-    version = "0.0.1"
+    version = "0.0.3"
 
     def set_version(self):
         content = load(self, "CMakeLists.txt")
@@ -48,8 +48,25 @@ class ViamRealsense(ConanFile):
         check_min_cppstd(self, 17)
 
     def requirements(self):
-        self.requires("viam-cpp-sdk/0.20.1")
+        self.requires("viam-cpp-sdk/[>=0.20.1]")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
+        self.requires("xtensor/[>=0.24.3]")
+        # On macOS, librealsense will fetch its own nlohmann_json to avoid conflicts
+        # On other platforms, we use Conan's version
+        if self.settings.os != "Macos":
+            self.requires("nlohmann_json/[>=3.11.0 <4]")
+        if self.settings.os != "Macos":
+            self.requires("librealsense/2.56.5")
+    
+    def configure(self):
+        # If we're building static then build the world as static, otherwise
+        # stuff will probably break.
+        # If you want your shared build to also build the world as shared, you
+        # can invoke conan with -o "&:shared=False" -o "*:shared=False",
+        # possibly with --build=missing or --build=cascade as desired,
+        # but this is probably not necessary.
+        if not self.options.shared:
+            self.options["*"].shared = False
 
     def layout(self):
         cmake_layout(self, src_folder=".")
@@ -58,7 +75,11 @@ class ViamRealsense(ConanFile):
         tc = CMakeToolchain(self)
         tc.generate()
 
-        CMakeDeps(self).generate()
+        deps = CMakeDeps(self)
+        # On macOS, skip nlohmann_json from CMakeDeps to avoid conflicts with librealsense's FetchContent
+        if self.settings.os == "Macos":
+            deps.set_property("nlohmann_json", "cmake_find_mode", "none")
+        deps.generate()
 
     def build(self):
         cmake = CMake(self)
@@ -73,10 +94,8 @@ class ViamRealsense(ConanFile):
         with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
             self.output.debug(f"Creating temporary directory {tmp_dir}")
 
-            self.output.info("Copying viam-camera-realsense binary")
+            self.output.info("Deploying ONLY necessary files to module.tar.gz")
             copy(self, "viam-camera-realsense", src=self.package_folder, dst=tmp_dir)
-
-            self.output.info("Copying meta.json")
             copy(self, "meta.json", src=self.package_folder, dst=tmp_dir)
 
             self.output.info("Creating module.tar.gz")

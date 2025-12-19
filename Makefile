@@ -2,9 +2,12 @@
 MODULE_LOCAL_TARBALL = module-localrealsense.tar.gz
 MODULE_LOCAL_STAGE = module-localrealsense-stage
 MODULE_BIN = build-conan/build/RelWithDebInfo/viam-camera-realsense
-LRS_LIB_DIR = /Users/sebastian.munoz/Repos/librealsense/build/Debug
-LRS_INCLUDE_DIR = /Users/sebastian.munoz/Repos/librealsense/include/librealsense2
-LRS_CMAKE_DIR = /Users/sebastian.munoz/Repos/librealsense/build
+
+# With FetchContent, these are within the build directory
+# We assume standard CMake layout or where FetchContent places them
+# Adjust as needed after first build verification
+LRS_BUILD_DIR = build-conan/build/Release/_deps/realsense2-build
+LRS_SRC_DIR = build-conan/build/Release/_deps/realsense2-src
 
 .PHONY: module-localrealsense.tar.gz
 module-localrealsense.tar.gz: force-rebuild-module bin/run_module_with_sudo.sh
@@ -14,13 +17,23 @@ module-localrealsense.tar.gz: force-rebuild-module bin/run_module_with_sudo.sh
 	mkdir -p $(MODULE_LOCAL_STAGE)/include
 	mkdir -p $(MODULE_LOCAL_STAGE)/cmake
 
-# Copy the binary from the local build directory (layout is usually build/Release on Mac)
+# Copy the binary from the local build directory
 	cp build/Release/viam-camera-realsense $(MODULE_LOCAL_STAGE)/bin/
 	cp bin/run_module_with_sudo.sh $(MODULE_LOCAL_STAGE)/bin/
 	chmod +x $(MODULE_LOCAL_STAGE)/bin/run_module_with_sudo.sh
-	cp $(LRS_LIB_DIR)/librealsense2*.dylib $(MODULE_LOCAL_STAGE)/lib/ || true
-	cp -R $(LRS_INCLUDE_DIR) $(MODULE_LOCAL_STAGE)/include/
-	cp -R $(LRS_CMAKE_DIR) $(MODULE_LOCAL_STAGE)/cmake/
+	
+	# Copy librealsense libs
+	cp $(LRS_BUILD_DIR)/librealsense2*.dylib $(MODULE_LOCAL_STAGE)/lib/ || true
+	# Also check generic build lib if not in specific build dir
+	cp build/Release/librealsense2*.dylib $(MODULE_LOCAL_STAGE)/lib/ || true
+	
+	# Copy headers from source
+	cp -R $(LRS_SRC_DIR)/include/librealsense2 $(MODULE_LOCAL_STAGE)/include/
+	
+	# Copy CMake config if available (might be in build dir)
+	# With FetchContent we might not get a generated config easily accessible/correct for relocation
+	# but we package it if found.
+	cp -R $(LRS_BUILD_DIR)/realsense2Config.cmake $(MODULE_LOCAL_STAGE)/cmake/ || true
 
 	echo '{' > $(MODULE_LOCAL_STAGE)/meta.json
 	echo '  "name": "viam-camera-realsense",' >> $(MODULE_LOCAL_STAGE)/meta.json
@@ -42,27 +55,47 @@ force-rebuild-module:
 	-s:a compiler.cppstd=17 \
 	--build=missing; \
 	conan build . -s build_type=Release
-OUTPUT_NAME = viam-camera-realsense
-BIN := build-conan/build/RelWithDebInfo/viam-camera-realsense
-
-# Get the architecture-specific pkgconfig path dynamically
+VERSION = 0.0.3
+ABS_BUILD = $(CURDIR)/build
+BIN := $(ABS_BUILD)/Release/viam-camera-realsense
+# Architecture-specific paths
 ARCH_PATH = /usr/lib/$(shell uname -m)-linux-gnu/pkgconfig
 DEFAULT_PKG_CONFIG_PATH = $(ARCH_PATH):/usr/share/pkgconfig
 
-.PHONY: build setup test clean lint conan-pkg
+.PHONY: build setup test clean lint
 
 default: module.tar.gz
 
 build: $(BIN)
 
-$(BIN): conanfile.py src/* bin/* test/*
-	bin/build.sh
+ABS_BUILD = $(CURDIR)/build
+BIN := $(ABS_BUILD)/Release/viam-camera-realsense
+# Architecture-specific paths
+ARCH_PATH = /usr/lib/$(shell uname -m)-linux-gnu/pkgconfig
+DEFAULT_PKG_CONFIG_PATH = $(ARCH_PATH):/usr/share/pkgconfig
+
+.PHONY: build setup test clean lint
+
+default: module.tar.gz
+
+build: $(BIN)
+
+$(BIN): conanfile.py src/* bin/*
+	rm -rf build CMakeCache.txt CMakeFiles
+	test -f ./venv/bin/activate && . ./venv/bin/activate; \
+	PKG_CONFIG_PATH=$${PKG_CONFIG_PATH}:$(DEFAULT_PKG_CONFIG_PATH) conan install . \
+	-of . \
+	-o "shared=False" \
+	-s build_type=Release \
+	-s compiler.cppstd=17 \
+	--build=missing; \
+	conan build . -of . -s build_type=Release --build=missing
 
 test: $(BIN)
-	cd build-conan/build/RelWithDebInfo && ctest --output-on-failure
+	cd build/Release && ctest --output-on-failure
 
 clean:
-	rm -rf build-conan/build/RelWithDebInfo module.tar.gz
+	rm -rf build module.tar.gz module-stage
 
 setup:
 	bin/setup.sh
@@ -72,19 +105,18 @@ setup:
 conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	PKG_CONFIG_PATH=$${PKG_CONFIG_PATH}:$(DEFAULT_PKG_CONFIG_PATH) conan create . \
-	-o:a "viam-cpp-sdk/*:shared=False" \
+	-o:a "shared=False" \
 	-s:a build_type=Release \
 	-s:a compiler.cppstd=17 \
 	--build=missing
 
-module.tar.gz: conan-pkg meta.json
-	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	PKG_CONFIG_PATH=$${PKG_CONFIG_PATH}:$(DEFAULT_PKG_CONFIG_PATH) conan install --requires=viam-camera-realsense/0.0.1 \
-	-o:a "viam-cpp-sdk/*:shared=False" \
-	-s:a build_type=Release \
-	-s:a compiler.cppstd=17 \
-	--deployer-package "&" \
-	--envs-generation false
+module.tar.gz: $(BIN) meta.json
+	rm -rf module-stage
+	mkdir -p module-stage
+	cp $(BIN) module-stage/
+	cp meta.json module-stage/
+	tar czvf module.tar.gz -C module-stage .
+	@echo "Created module.tar.gz (v$(VERSION)) from local build directory."
 
 lint:
 	./bin/lint.sh

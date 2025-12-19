@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
-set(CMAKE_PROJECT_VERSION 0.0.1)
+set(CMAKE_PROJECT_VERSION 0.0.3)
 set(CMAKE_CXX_STANDARD 17)
+
+# FORCE absolute toolchain path to prevent sub-project failures
+if(CMAKE_TOOLCHAIN_FILE AND NOT IS_ABSOLUTE "${CMAKE_TOOLCHAIN_FILE}")
+    get_filename_component(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" ABSOLUTE BASE_DIR "${CMAKE_BINARY_DIR}")
+    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" CACHE FILEPATH "Absolute path to toolchain" FORCE)
+endif()
+
+# Force static builds for everything (including FetchContent deps)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 
 project(viam-camera-realsense
@@ -11,53 +20,75 @@ project(viam-camera-realsense
 
 include(cmake/simd_flags.cmake)
 
-if (APPLE)
-    list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/../lib")
-else()
-    list(PREPEND CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
-endif()
+# Handle FetchContent vs Conan
+include(FetchContent)
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-# Manual configuration for local librealsense to avoid broken Config file
-set(LRS_ROOT "/Users/sebastian.munoz/Repos/librealsense")
-
-# Find Headers
-find_path(realsense2_INCLUDE_DIR 
-    NAMES librealsense2/rs.hpp
-    PATHS "${LRS_ROOT}/include"
-    NO_DEFAULT_PATH
-)
-
-# Find Library
-find_library(realsense2_LIBRARY 
-    NAMES realsense2
-    PATHS "${LRS_ROOT}/build/Debug" "${LRS_ROOT}/build"
-    NO_DEFAULT_PATH
-)
-
-if (realsense2_INCLUDE_DIR AND realsense2_LIBRARY)
-    message(STATUS "Found local realsense2 headers: ${realsense2_INCLUDE_DIR}")
-    message(STATUS "Found local realsense2 library: ${realsense2_LIBRARY}")
-    
-    # Define the target expected by the module
-    if (NOT TARGET realsense2::realsense2)
-        add_library(realsense2::realsense2 UNKNOWN IMPORTED)
-        set_target_properties(realsense2::realsense2 PROPERTIES
-            IMPORTED_LOCATION "${realsense2_LIBRARY}"
-            INTERFACE_INCLUDE_DIRECTORIES "${realsense2_INCLUDE_DIR}"
-        )
-    endif()
-
-    # FORCE local headers to the front using CXX_FLAGS
-    # This overrides any order CMake decides for target_include_directories or system paths
-    set(CMAKE_CXX_FLAGS "-I${realsense2_INCLUDE_DIR} ${CMAKE_CXX_FLAGS}")
-else()
-    message(FATAL_ERROR "Could not find local librealsense in ${LRS_ROOT}")
-endif()
 find_package(viam-cpp-sdk REQUIRED)
 find_package(libjpeg-turbo CONFIG REQUIRED)
+if(NOT APPLE)
+    # On non-macOS, we use Conan's nlohmann_json
+    # On macOS, we use the vendored librealsense which has its own JSON
+    find_package(nlohmann_json CONFIG REQUIRED)
+endif()
 find_package(PkgConfig REQUIRED)
+
+# Packaging: Viam expects a flat structure or specific entrypoint.
+# We set RPATH to look in the same directory as the binary.
+if (APPLE)
+    set(CMAKE_INSTALL_RPATH "@loader_path")
+    
+    # Use vendored librealsense for macOS
+    set(LIBREALSENSE_VENDOR_DIR "${CMAKE_SOURCE_DIR}/vendor/librealsense-install")
+    
+    if(NOT EXISTS "${LIBREALSENSE_VENDOR_DIR}")
+        message(FATAL_ERROR 
+            "Vendored librealsense not found at ${LIBREALSENSE_VENDOR_DIR}\n"
+            "Please run: ./bin/build_librealsense_macos.sh")
+    endif()
+    
+    # Find the vendored libraries
+    find_library(REALSENSE2_LIB 
+        NAMES realsense2 librealsense2.a
+        PATHS "${LIBREALSENSE_VENDOR_DIR}/lib"
+        NO_DEFAULT_PATH
+        REQUIRED
+    )
+    
+    find_library(RSUTILS_LIB 
+        NAMES rsutils librsutils.a
+        PATHS "${LIBREALSENSE_VENDOR_DIR}/lib"
+        NO_DEFAULT_PATH
+        REQUIRED
+    )
+    
+    find_library(REALSENSE_FILE_LIB 
+        NAMES realsense-file librealsense-file.a
+        PATHS "${LIBREALSENSE_VENDOR_DIR}/lib"
+        NO_DEFAULT_PATH
+        REQUIRED
+    )
+    
+    # Find system dependencies
+    find_library(IOKIT_FRAMEWORK IOKit)
+    find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
+    find_library(USB_LIB usb-1.0 REQUIRED)
+    
+    # Create imported target
+    add_library(realsense2::realsense2 STATIC IMPORTED)
+    set_target_properties(realsense2::realsense2 PROPERTIES
+        IMPORTED_LOCATION "${REALSENSE2_LIB}"
+        INTERFACE_INCLUDE_DIRECTORIES "${LIBREALSENSE_VENDOR_DIR}/include"
+        INTERFACE_LINK_LIBRARIES "${REALSENSE_FILE_LIB};${RSUTILS_LIB};${USB_LIB};${IOKIT_FRAMEWORK};${COREFOUNDATION_FRAMEWORK}"
+    )
+    
+    message(STATUS "Using vendored librealsense: ${REALSENSE2_LIB}")
+    message(STATUS "Using vendored rsutils: ${RSUTILS_LIB}")
+    message(STATUS "Using vendored realsense-file: ${REALSENSE_FILE_LIB}")
+else()
+    set(CMAKE_INSTALL_RPATH "$ORIGIN")
+    find_package(realsense2 REQUIRED)
+endif()
+
 
 add_executable(viam-camera-realsense src/module/main.cpp src/module/encoding.cpp)
 target_link_libraries(viam-camera-realsense
@@ -70,7 +101,7 @@ target_link_libraries(viam-camera-realsense
 )
 
 install(TARGETS viam-camera-realsense DESTINATION .)
-install( FILES meta.json DESTINATION .)
+install(FILES meta.json DESTINATION .)
 
 add_executable(viam-camera-realsense-cli src/cli/main.cpp)
 target_link_libraries(viam-camera-realsense-cli
