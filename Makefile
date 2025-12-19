@@ -26,7 +26,7 @@ else
 endif
  
 # Common Conan settings to ensure binary cache hits across all build flows
-export CONAN_FLAGS := -s:a build_type=Release -s:a compiler.cppstd=gnu17
+export CONAN_FLAGS := -s:a build_type=Release -s:a compiler.cppstd=17
 
 .PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test
 

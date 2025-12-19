@@ -39,7 +39,7 @@ class ViamRealsense(ConanFile):
         self.requires("viam-cpp-sdk/0.20.1")
         self.requires("librealsense/2.56.5")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
-
+        
     def layout(self):
         cmake_layout(self, src_folder=".")
 
