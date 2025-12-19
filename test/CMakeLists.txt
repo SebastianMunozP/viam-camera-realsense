@@ -17,7 +17,7 @@ target_link_libraries(viamrealsense_test_common
         GTest::gtest
         GTest::gtest_main
         GTest::gmock
-        viam-cpp-sdk::viam-cpp-sdk
+        viam-cpp-sdk::viamsdk
 )
 
 function(viamrealsense_add_gtest SOURCE_FILE_NAME)
