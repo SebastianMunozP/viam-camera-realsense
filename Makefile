@@ -25,16 +25,27 @@ else
     export PKG_CONFIG_PATH := $(PKG_CONFIG_PATH):$(DEFAULT_PKG_CONFIG_PATH)
 endif
 
-.PHONY: build setup test clean lint conan-pkg
+.PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test
 
 default: module.tar.gz
 
-build: $(BIN)
+conan-build-test:
+	test -f ./venv/bin/activate && . ./venv/bin/activate; \
+	conan build . \
+	--output-folder=build-conan \
+	--build=none \
+	-s:a build_type=Release \
+	-s:a "&:build_type=RelWithDebInfo" \
+	-s:a compiler.cppstd=17
 
-$(BIN): conanfile.py src/* bin/* test/*
-	bin/build.sh
+conan-install-test:
+	test -f ./venv/bin/activate && . ./venv/bin/activate; \
+	conan install . \
+	--build=missing \
+	-s:a build_type=Release \
+	-s:a compiler.cppstd=17
 
-test: $(BIN)
+test: conan-build-test conan-install-test
 	cd build-conan/build/RelWithDebInfo && . ./generators/conanrun.sh && ctest --output-on-failure
 
 clean:
