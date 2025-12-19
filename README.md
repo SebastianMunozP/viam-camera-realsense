@@ -140,42 +140,24 @@ The module takes advantage of faster USB ports. Use the (blue) USB 3.0 port on t
 
 ## Building the module
 
-You can also build the module yourself from source using Conan. See the [SDK Docs](https://github.com/viamrobotics/viam-cpp-sdk/blob/main/BUILDING.md#building-with-conan)
-for instructions on initial Conan setup and configuration. Then you can do
-
+### Setup
 ```
-conan remote add viamconan https://viam.jfrog.io/artifactory/api/conan/viamconan
-conan install .  -b missing -o:a "viam-cpp-sdk/*:shared=False"
-cmake . --preset=conan-release
+make setup
 ```
-
-This will create a CMake build tree which can be built with CMake or directly by running `make` for example. You can pass arguments
-to the `cmake` call to configure the build, for example `-G Ninja` to use `ninja` as the build system, or `-DVIAM_REALSENSE_ENABLE_SANITIZER=1` to
-build the module with ASAN/LSAN enabled to test for memory leaks.
-
-The workflow above is suitable for local development on the module, where you want to make changes or contributions. If you want to generate a
-`module.tar.gz` deployment for use as a local module in Viam App, you can do
-
+### Build the module tarball
 ```
-conan create . --build=missing -o:a "viam-cpp-sdk/*:shared=False"
-conan install --requires=viam-camera-realsense/0.0.1 --deployer-package "&" -o:a "viam-cpp-sdk/*:shared=False"
+make module.tar.gz
 ```
 
-> [!NOTE]
-> Running `conan install` above may generate an error related to `libudev`. You can fix this by installing `libudev` with your system
-package manager, or follow the instructions in the error message to tell `conan` how to resolve this dependency.
+### Test the module
+```
+make test
+```
 
-If you would like to try to gather all of the dependencies yourself, you will need:
-
-- [librealsense](https://github.com/IntelRealSense/librealsense)
-  - `git checkout` and install from source.
-  - be sure to use cmake flags `cmake .. -DBUILD_EXAMPLES=false -DBUILD_GRAPHICAL_EXAMPLES=false -DCMAKE_BUILD_TYPE=Release`
-- [libjpegturbo](https://github.com/libjpeg-turbo/libjpeg-turbo)
-- [libprotobuf](https://github.com/protocolbuffers/protobuf)
-- [Viam C++ SDK](https://github.com/viamrobotics/viam-cpp-sdk/)
-  - specifically `libviamsdk`, `libviamapi`, and `libviam_rust_utils`
-
-then use CMake to generate a build.
+### Clean up
+```
+make clean
+```
 
 ## Using within a Frame System
 

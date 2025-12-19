@@ -67,62 +67,15 @@ jobs:
           restore-keys: |
             ${{ matrix.os }}-conan-
 
-      - name: Install dependencies
-        run: |
-          cat /etc/*-release
-          ldd --version
-          uname -a
-
-          apt-get update
-          apt-get -y dist-upgrade
-          DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
-              autoconf \
-              automake \
-              build-essential \
-              ca-certificates \
-              curl \
-              doxygen \
-              g++ \
-              git \
-              gdb \
-              gnupg \
-              gpg \
-              less \
-              libssl-dev \
-              libudev-dev \
-              ninja-build \
-              pkg-config \
-              python3 \
-              python3-pip \
-              software-properties-common \
-              sudo \
-              wget \
-
-          sudo wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | sudo gpg --dearmor - | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
-          sudo echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main' | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
-
-          apt-get update
-          apt-get -y install cmake=3.25.2-0kitware1ubuntu22.04.1 cmake-data=3.25.2-0kitware1ubuntu22.04.1
-
-
       - name: Setup python and conan
         run: |
-          pip install conan
-          mkdir -p ~/.conan2/profiles
-          cp etc/conan/${{ matrix.profile-name }} ~/.conan2/profiles/default
-          conan profile show
-
-      - name: Get Viam SDK
-        run: |
-          git clone https://github.com/viamrobotics/viam-cpp-sdk.git
-          cd viam-cpp-sdk
-          git checkout releases/v0.20.1
-          conan create . -o "&:shared=False" --build=missing -s compiler.cppstd=17
+          apt-get update
+          apt-get -y install cmake cmake-data sudo
+          make setup
 
       - name: Build
         run: |
-          conan create . --build=missing -o "viam-cpp-sdk/*:shared=False"
-          conan install --requires=viam-camera-realsense/0.0.1 --deployer-package "&" -o "viam-cpp-sdk/*:shared=False" -v v
+          make module.tar.gz
 
       - name: Upload module artifact
         if: github.event_name == 'release'

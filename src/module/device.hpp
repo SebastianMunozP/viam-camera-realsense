@@ -40,13 +40,13 @@ private:
 template <typename DeviceT = rs2::device, typename PipeT = rs2::pipeline,
           typename AligntT = rs2::align, typename ConfigT = rs2::config>
 struct ViamRSDevice {
-  std::string serial_number;
-  std::shared_ptr<DeviceT> device;
-  bool started;
-  std::shared_ptr<PipeT> pipe;
-  std::shared_ptr<PointCloudFilter> point_cloud_filter;
-  std::shared_ptr<AligntT> align;
-  std::shared_ptr<ConfigT> config;
+  std::string serial_number{};
+  std::shared_ptr<DeviceT> device{};
+  bool started{false};
+  std::shared_ptr<PipeT> pipe{};
+  std::shared_ptr<PointCloudFilter> point_cloud_filter{};
+  std::shared_ptr<AligntT> align{};
+  std::shared_ptr<ConfigT> config{};
 };
 /********************** UTILITIES ************************/
 template <typename DeviceT> void printDeviceInfo(DeviceT const &dev);

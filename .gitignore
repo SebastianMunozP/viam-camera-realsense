@@ -3,3 +3,4 @@ module.tar.gz
 viam-camera-realsense
 build
 .vscode
+venv

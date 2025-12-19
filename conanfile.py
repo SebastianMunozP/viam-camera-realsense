@@ -1,13 +1,14 @@
 
 import os
 import tarfile
+import re
 from tempfile import TemporaryDirectory
 
 from conan import ConanFile
 from conan.api.output import ConanOutput
 from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
-from conan.tools.files import copy
+from conan.tools.files import copy, load
 from conan.internal.deploy import _flatten_directory
 
 class ViamRealsense(ConanFile):
@@ -17,10 +18,19 @@ class ViamRealsense(ConanFile):
     url = "https://github.com/viam-modules/viam-camera-realsense"
     package_type = "application"
     settings = "os", "compiler", "build_type", "arch"
+    options = {"with_tests": [True, False]}
+    default_options = {
+        "with_tests": False,
+        "viam-cpp-sdk/*:shared": False
+    }
 
-    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json"
+    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
 
     version = "0.0.1"
+
+    def set_version(self):
+        content = load(self, "CMakeLists.txt")
+        self.version = re.search("set\(CMAKE_PROJECT_VERSION (.+)\)", content).group(1).strip()
 
     def validate(self):
         check_min_cppstd(self, 17)
@@ -29,13 +39,13 @@ class ViamRealsense(ConanFile):
         self.requires("viam-cpp-sdk/0.20.1")
         self.requires("librealsense/2.56.5")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
-
+        
     def layout(self):
         cmake_layout(self, src_folder=".")
 
     def generate(self):
         tc = CMakeToolchain(self)
-        tc.cache_variables["VIAM_REALSENSE_ENABLE_TESTS"] = False
+        tc.variables["VIAM_REALSENSE_ENABLE_TESTS"] = self.options.with_tests
         tc.generate()
 
         CMakeDeps(self).generate()
@@ -46,17 +56,23 @@ class ViamRealsense(ConanFile):
         cmake.build()
 
     def package(self):
-        CMake(self).install()
-
-        # Use CPack to build the module.tar.gz and manually copy it to the package folder
-        CMake(self).build(target='package')
-        copy(self, pattern="module.tar.gz", src=self.build_folder, dst=self.package_folder)
+        cmake = CMake(self)
+        cmake.install()
 
     def deploy(self):
-        # For editable packages, package_folder might equal deploy_folder, so copy from build_folder
-        # In CI/CD, build_folder might be None, so check it exists first
-        src = self.package_folder
-        if self.build_folder and os.path.exists(os.path.join(self.build_folder, "module.tar.gz")):
-            src = self.build_folder
-        if src != self.deploy_folder:
-            copy(self, pattern="module.tar.gz", src=src, dst=self.deploy_folder)
+        with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
+            self.output.debug(f"Creating temporary directory {tmp_dir}")
+
+            self.output.info("Copying viam-camera-realsense binary")
+            copy(self, "viam-camera-realsense", src=self.package_folder, dst=tmp_dir)
+
+            self.output.info("Copying meta.json")
+            copy(self, "meta.json", src=self.package_folder, dst=tmp_dir)
+
+            self.output.info("Creating module.tar.gz")
+            with tarfile.open(os.path.join(self.deploy_folder, "module.tar.gz"), "w|gz") as tar:
+                tar.add(tmp_dir, arcname=".", recursive=True)
+
+                self.output.info("module.tar.gz contents:")
+                for mem in tar.getmembers():
+                    self.output.info(mem.name)
