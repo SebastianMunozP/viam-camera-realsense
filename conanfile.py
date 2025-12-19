@@ -26,7 +26,7 @@ class ViamRealsense(ConanFile):
 
     exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
 
-    version = "0.0.1"
+    version = "0.0.3"
 
     def set_version(self):
         content = load(self, "CMakeLists.txt")
@@ -36,7 +36,7 @@ class ViamRealsense(ConanFile):
         check_min_cppstd(self, 17)
 
     def requirements(self):
-        self.requires("viam-cpp-sdk/0.20.1")
+        self.requires("viam-cpp-sdk/[>=0.20.1]")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
         
     def layout(self):
@@ -47,7 +47,11 @@ class ViamRealsense(ConanFile):
         tc.variables["VIAM_REALSENSE_ENABLE_TESTS"] = self.options.with_tests
         tc.generate()
 
-        CMakeDeps(self).generate()
+        deps = CMakeDeps(self)
+        # On macOS, skip nlohmann_json from CMakeDeps to avoid conflicts with librealsense's FetchContent
+        if self.settings.os == "Macos":
+            deps.set_property("nlohmann_json", "cmake_find_mode", "none")
+        deps.generate()
 
     def build(self):
         cmake = CMake(self)
@@ -62,10 +66,8 @@ class ViamRealsense(ConanFile):
         with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
             self.output.debug(f"Creating temporary directory {tmp_dir}")
 
-            self.output.info("Copying viam-camera-realsense binary")
+            self.output.info("Deploying ONLY necessary files to module.tar.gz")
             copy(self, "viam-camera-realsense", src=self.package_folder, dst=tmp_dir)
-
-            self.output.info("Copying meta.json")
             copy(self, "meta.json", src=self.package_folder, dst=tmp_dir)
 
             self.output.info("Creating module.tar.gz")
