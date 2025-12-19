@@ -24,6 +24,9 @@ ifeq ($(PKG_CONFIG_PATH),)
 else
     export PKG_CONFIG_PATH := $(PKG_CONFIG_PATH):$(DEFAULT_PKG_CONFIG_PATH)
 endif
+ 
+# Common Conan settings to ensure binary cache hits across all build flows
+export CONAN_FLAGS := -s:a build_type=Release -s:a compiler.cppstd=gnu17
 
 .PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test
 
@@ -35,18 +38,16 @@ conan-build-test:
 	-o "&:with_tests=True" \
 	--output-folder=build-conan \
 	--build=none \
-	-s:a build_type=Release \
-	-s:a "&:build_type=RelWithDebInfo" \
-	-s:a compiler.cppstd=17
+	$(CONAN_FLAGS) \
+	-s:a "&:build_type=RelWithDebInfo"
 
 conan-install-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install . \
 	-o "&:with_tests=True" \
 	--build=missing \
-	-s:a build_type=Release \
-	-s:a "&:build_type=RelWithDebInfo" \
-	-s:a compiler.cppstd=17
+	$(CONAN_FLAGS) \
+	-s:a "&:build_type=RelWithDebInfo"
 
 test: conan-install-test conan-build-test
 	cd build-conan/build/RelWithDebInfo && . ./generators/conanrun.sh && ctest --output-on-failure
@@ -63,17 +64,13 @@ conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan create . \
 	-o "&:with_tests=False" \
-	-o:a "viam-cpp-sdk/*:shared=False" \
-	-s:a build_type=Release \
-	-s:a compiler.cppstd=17 \
+	$(CONAN_FLAGS) \
 	--build=missing
 
 module.tar.gz: conan-pkg meta.json
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install --requires=viam-camera-realsense/0.0.1 \
-	-o:a "viam-cpp-sdk/*:shared=False" \
-	-s:a build_type=Release \
-	-s:a compiler.cppstd=17 \
+	$(CONAN_FLAGS) \
 	--deployer-package "&" \
 	--envs-generation false
 

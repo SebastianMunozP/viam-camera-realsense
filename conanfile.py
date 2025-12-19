@@ -19,7 +19,10 @@ class ViamRealsense(ConanFile):
     package_type = "application"
     settings = "os", "compiler", "build_type", "arch"
     options = {"with_tests": [True, False]}
-    default_options = {"with_tests": False}
+    default_options = {
+        "with_tests": False,
+        "viam-cpp-sdk/*:shared": False
+    }
 
     exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
 
