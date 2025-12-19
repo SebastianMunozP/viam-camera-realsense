@@ -28,7 +28,7 @@ endif
 # Common Conan settings to ensure binary cache hits across all build flows
 export CONAN_FLAGS := -s:a build_type=Release -s:a compiler.cppstd=17
 
-.PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test
+.PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test build-native test-native
 
 default: module.tar.gz
 
@@ -52,8 +52,17 @@ conan-install-test:
 test: conan-install-test conan-build-test
 	cd build-conan/build/RelWithDebInfo && . ./generators/conanrun.sh && ctest --output-on-failure
 
+# Native build targets for CI environments with pre-installed dependencies
+build-native:
+	mkdir -p build-native && cd build-native && \
+	cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
+	make -j$(shell nproc)
+
+test-native: build-native
+	cd build-native && ctest --output-on-failure
+
 clean:
-	rm -rf build-conan module.tar.gz venv
+	rm -rf build-conan build-native module.tar.gz venv
 
 setup:
 	bin/setup.sh
