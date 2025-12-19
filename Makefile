@@ -2,9 +2,9 @@
 MODULE_LOCAL_TARBALL = module-localrealsense.tar.gz
 MODULE_LOCAL_STAGE = module-localrealsense-stage
 MODULE_BIN = build-conan/build/RelWithDebInfo/viam-camera-realsense
-LRS_LIB_DIR = /usr/local/lib
-LRS_INCLUDE_DIR = /usr/local/include/librealsense2
-LRS_CMAKE_DIR = /usr/local/lib/cmake/realsense2
+LRS_LIB_DIR = /Users/sebastian.munoz/Repos/librealsense/build/Debug
+LRS_INCLUDE_DIR = /Users/sebastian.munoz/Repos/librealsense/include/librealsense2
+LRS_CMAKE_DIR = /Users/sebastian.munoz/Repos/librealsense/build
 
 .PHONY: module-localrealsense.tar.gz
 module-localrealsense.tar.gz: force-rebuild-module bin/run_module_with_sudo.sh
@@ -14,9 +14,8 @@ module-localrealsense.tar.gz: force-rebuild-module bin/run_module_with_sudo.sh
 	mkdir -p $(MODULE_LOCAL_STAGE)/include
 	mkdir -p $(MODULE_LOCAL_STAGE)/cmake
 
-# Find the latest built viam-camera-realsense binary from the Conan package directory
-	CONAN_BIN_PATH=$$(find $$HOME/.conan2/p/b/viam-*/p/viam-camera-realsense -type f -perm +111 -name 'viam-camera-realsense' 2>/dev/null | sort -r | head -n1); \
-	cp $$CONAN_BIN_PATH $(MODULE_LOCAL_STAGE)/bin/
+# Copy the binary from the local build directory (layout is usually build/Release on Mac)
+	cp build/Release/viam-camera-realsense $(MODULE_LOCAL_STAGE)/bin/
 	cp bin/run_module_with_sudo.sh $(MODULE_LOCAL_STAGE)/bin/
 	chmod +x $(MODULE_LOCAL_STAGE)/bin/run_module_with_sudo.sh
 	cp $(LRS_LIB_DIR)/librealsense2*.dylib $(MODULE_LOCAL_STAGE)/lib/ || true
@@ -35,14 +34,14 @@ module-localrealsense.tar.gz: force-rebuild-module bin/run_module_with_sudo.sh
 # Always force a rebuild from source before packaging
 .PHONY: force-rebuild-module
 force-rebuild-module:
-	rm -rf build-conan/build/RelWithDebInfo
-	conan remove 'viam-camera-realsense/*' --confirm || true
+	rm -rf build-conan
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	conan create . \
+	conan install . \
 	-o:a "viam-cpp-sdk/*:shared=False" \
 	-s:a build_type=Release \
 	-s:a compiler.cppstd=17 \
-	--build=missing
+	--build=missing; \
+	conan build . -s build_type=Release
 OUTPUT_NAME = viam-camera-realsense
 BIN := build-conan/build/RelWithDebInfo/viam-camera-realsense
 
@@ -142,7 +141,7 @@ CLI_TOOLCHAIN := $(CLI_BUILD_DIR)/conan_toolchain.cmake
 viam-camera-realsense-cli:
 	rm -rf $(CLI_BUILD_DIR) && \
 	conan remove 'librealsense/*' --confirm && \
-	conan install ./src/cli -of=$(CLI_BUILD_DIR) -b missing -s build_type=Debug -o 'librealsense/*:BUILD_EASYLOGGINGPP=True' && \
+	conan install ./src/cli -of=$(CLI_BUILD_DIR) -b missing -s build_type=Debug && \
 	test -f $(CLI_TOOLCHAIN) && \
 	cmake -S src/cli -B $(CLI_BUILD_DIR) -G Ninja -DCMAKE_TOOLCHAIN_FILE=$(CLI_TOOLCHAIN) -DCMAKE_BUILD_TYPE=Debug && \
 	cmake --build $(CLI_BUILD_DIR) --target viam-camera-realsense-cli

@@ -20,7 +20,42 @@ endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-find_package(realsense2 REQUIRED)
+# Manual configuration for local librealsense to avoid broken Config file
+set(LRS_ROOT "/Users/sebastian.munoz/Repos/librealsense")
+
+# Find Headers
+find_path(realsense2_INCLUDE_DIR 
+    NAMES librealsense2/rs.hpp
+    PATHS "${LRS_ROOT}/include"
+    NO_DEFAULT_PATH
+)
+
+# Find Library
+find_library(realsense2_LIBRARY 
+    NAMES realsense2
+    PATHS "${LRS_ROOT}/build/Debug" "${LRS_ROOT}/build"
+    NO_DEFAULT_PATH
+)
+
+if (realsense2_INCLUDE_DIR AND realsense2_LIBRARY)
+    message(STATUS "Found local realsense2 headers: ${realsense2_INCLUDE_DIR}")
+    message(STATUS "Found local realsense2 library: ${realsense2_LIBRARY}")
+    
+    # Define the target expected by the module
+    if (NOT TARGET realsense2::realsense2)
+        add_library(realsense2::realsense2 UNKNOWN IMPORTED)
+        set_target_properties(realsense2::realsense2 PROPERTIES
+            IMPORTED_LOCATION "${realsense2_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${realsense2_INCLUDE_DIR}"
+        )
+    endif()
+
+    # FORCE local headers to the front using CXX_FLAGS
+    # This overrides any order CMake decides for target_include_directories or system paths
+    set(CMAKE_CXX_FLAGS "-I${realsense2_INCLUDE_DIR} ${CMAKE_CXX_FLAGS}")
+else()
+    message(FATAL_ERROR "Could not find local librealsense in ${LRS_ROOT}")
+endif()
 find_package(viam-cpp-sdk REQUIRED)
 find_package(libjpeg-turbo CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -36,7 +71,6 @@ target_compile_features(viamrealsense PUBLIC
 )
 target_link_libraries(viamrealsense
     PUBLIC
-        viam-cpp-sdk::viamsdk
         realsense2::realsense2
         libjpeg-turbo::turbojpeg-static
     PRIVATE
