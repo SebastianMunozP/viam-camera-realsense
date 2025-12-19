@@ -1,6 +1,10 @@
 OUTPUT_NAME = viam-camera-realsense
 BIN := build-conan/build/RelWithDebInfo/viam-camera-realsense
 
+# Get the architecture-specific pkgconfig path dynamically
+ARCH_PATH = /usr/lib/$(shell uname -m)-linux-gnu/pkgconfig
+DEFAULT_PKG_CONFIG_PATH = $(ARCH_PATH):/usr/share/pkgconfig
+
 .PHONY: build setup test clean lint conan-pkg
 
 default: module.tar.gz
@@ -23,7 +27,7 @@ setup:
 # conan call because every line of a Makefile runs in a subshell
 conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	conan create . \
+	PKG_CONFIG_PATH=$${PKG_CONFIG_PATH}:$(DEFAULT_PKG_CONFIG_PATH) conan create . \
 	-o:a "viam-cpp-sdk/*:shared=False" \
 	-s:a build_type=Release \
 	-s:a compiler.cppstd=17 \
@@ -31,7 +35,7 @@ conan-pkg:
 
 module.tar.gz: conan-pkg meta.json
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	conan install --requires=viam-camera-realsense/0.0.1 \
+	PKG_CONFIG_PATH=$${PKG_CONFIG_PATH}:$(DEFAULT_PKG_CONFIG_PATH) conan install --requires=viam-camera-realsense/0.0.1 \
 	-o:a "viam-cpp-sdk/*:shared=False" \
 	-s:a build_type=Release \
 	-s:a compiler.cppstd=17 \
