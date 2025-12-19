@@ -2,8 +2,6 @@
 // orbbec SDK.
 // It is only intended as a viam developer debugging tool
 
-#include <cstdio>
-#include <fstream>
 #include <iostream>
 #include <librealsense2/rs.hpp>
 #include <math.h>
