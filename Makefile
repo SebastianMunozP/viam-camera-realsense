@@ -98,7 +98,6 @@ conan-build-test:
 	$(CONAN_FLAGS) \
 	-s:a "&:build_type=RelWithDebInfo"
 
-<<<<<<< HEAD
 conan-install-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install . \
@@ -109,10 +108,6 @@ conan-install-test:
 
 test: conan-install-test conan-build-test
 	cd build-conan/build/RelWithDebInfo && . ./generators/conanrun.sh && ctest --output-on-failure
-=======
-$(BIN): conanfile.py src/* bin/* test/*
-	bin/build.sh
->>>>>>> 2b72f14 (Adding improvements per PR feedback)
 
 # Native build targets for CI environments with pre-installed dependencies
 build-native:

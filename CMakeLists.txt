@@ -67,11 +67,12 @@ else()
     find_package(realsense2 REQUIRED)
 endif()
 
+find_package(viam-cpp-sdk REQUIRED)
+find_package(libjpeg-turbo CONFIG REQUIRED)
 
 add_library(viamrealsense src/module/encoding.cpp)
 target_include_directories(viamrealsense
     PUBLIC src/module
-    
 )
 
 target_compile_features(viamrealsense PUBLIC
@@ -79,6 +80,7 @@ target_compile_features(viamrealsense PUBLIC
 )
 target_link_libraries(viamrealsense
     PUBLIC
+        viam-cpp-sdk::viam-cpp-sdk
         realsense2::realsense2
         libjpeg-turbo::turbojpeg-static
     PRIVATE
@@ -101,13 +103,7 @@ target_link_libraries(viam-camera-realsense-cli
         ${CMAKE_DL_LIBS}
 )
 
-add_executable(viam-camera-realsense-cli src/cli/main.cpp)
-target_link_libraries(viam-camera-realsense-cli
-    PUBLIC
-        realsense2::realsense2
-    PRIVATE
-        ${CMAKE_DL_LIBS}
-)
-
-enable_testing()
-add_subdirectory(test)
+if (VIAM_REALSENSE_ENABLE_TESTS)
+    enable_testing()
+    add_subdirectory(test)
+endif()

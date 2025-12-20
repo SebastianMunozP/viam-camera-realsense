@@ -24,7 +24,7 @@ class ViamRealsense(ConanFile):
         "viam-cpp-sdk/*:shared": False
     }
 
-    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
+    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*", "vendor/librealsense-install/*", "bin/*"
 
     version = "0.0.3"
 
@@ -61,14 +61,53 @@ class ViamRealsense(ConanFile):
     def package(self):
         cmake = CMake(self)
         cmake.install()
+        # Also package the sudo wrapper
+        if self.settings.os == "Macos":
+            copy(self, "run_module_with_sudo.sh", src=os.path.join(self.export_sources_folder, "bin"), dst=os.path.join(self.package_folder, "bin"))
 
     def deploy(self):
         with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
             self.output.debug(f"Creating temporary directory {tmp_dir}")
+            
+            # Create bin and lib directories
+            os.makedirs(os.path.join(tmp_dir, "bin"), exist_ok=True)
+            os.makedirs(os.path.join(tmp_dir, "lib"), exist_ok=True)
 
-            self.output.info("Deploying ONLY necessary files to module.tar.gz")
-            copy(self, "viam-camera-realsense", src=self.package_folder, dst=tmp_dir)
+            self.output.info("Deploying necessary files to module.tar.gz")
+            
+            # Copy the main binary to bin/
+            copy(self, "viam-camera-realsense", src=self.package_folder, dst=os.path.join(tmp_dir, "bin"))
+            
+            # Copy meta.json to root
             copy(self, "meta.json", src=self.package_folder, dst=tmp_dir)
+            
+            # Copy sudo wrapper from package_folder to bin/ if on macOS
+            if self.settings.os == "Macos":
+                copy(self, "run_module_with_sudo.sh", src=os.path.join(self.package_folder, "bin"), dst=os.path.join(tmp_dir, "bin"))
+                
+                # Copy dylibs from all dependencies to lib/
+                for dep in self.dependencies.values():
+                    if dep.package_folder:
+                        copy(self, "*.dylib", src=dep.package_folder, dst=os.path.join(tmp_dir, "lib"), keep_path=False)
+            else:
+                # On Linux, maybe we also want shared libs?
+                for dep in self.dependencies.values():
+                    if dep.package_folder:
+                        copy(self, "*.so*", src=dep.package_folder, dst=os.path.join(tmp_dir, "lib"), keep_path=False)
+
+            # Update meta.json entrypoint if using sudo wrapper
+            import json
+            meta_path = os.path.join(tmp_dir, "meta.json")
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+            
+            if self.settings.os == "Macos":
+                meta["entrypoint"] = "bin/run_module_with_sudo.sh"
+            else:
+                meta["entrypoint"] = "bin/viam-camera-realsense"
+            
+            with open(meta_path, "w") as f:
+                json.dump(meta, f, indent=2)
 
             self.output.info("Creating module.tar.gz")
             with tarfile.open(os.path.join(self.deploy_folder, "module.tar.gz"), "w|gz") as tar:
