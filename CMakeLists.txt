@@ -1,15 +1,6 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 set(CMAKE_PROJECT_VERSION 0.0.3)
 
-# FORCE absolute toolchain path to prevent sub-project failures
-# if(CMAKE_TOOLCHAIN_FILE AND NOT IS_ABSOLUTE "${CMAKE_TOOLCHAIN_FILE}")
-#     get_filename_component(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" ABSOLUTE BASE_DIR "${CMAKE_BINARY_DIR}")
-#     set(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" CACHE FILEPATH "Absolute path to toolchain" FORCE)
-# endif()
-
-# Force static builds for everything (including FetchContent deps)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-
 
 project(viam-camera-realsense
     DESCRIPTION "Viam Module for the Intel RealSense Camera"
@@ -74,7 +65,7 @@ if (APPLE)
     message(STATUS "Using vendored rsutils: ${RSUTILS_LIB}")
     message(STATUS "Using vendored realsense-file: ${REALSENSE_FILE_LIB}")
 else()
-    set(CMAKE_INSTALL_RPATH "$ORIGIN")
+    list(PREPEND CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
     find_package(realsense2 REQUIRED)
 endif()
 
@@ -83,7 +74,6 @@ find_package(Threads REQUIRED)
 find_package(viam-cpp-sdk REQUIRED)
 find_package(libjpeg-turbo CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
-
 
 add_library(viamrealsense src/module/encoding.cpp)
 target_include_directories(viamrealsense
@@ -109,6 +99,7 @@ install(TARGETS
     viam-camera-realsense 
     DESTINATION .)
 install( FILES meta.json DESTINATION .)
+
 
 if (VIAM_REALSENSE_ENABLE_TESTS)
     enable_testing()
