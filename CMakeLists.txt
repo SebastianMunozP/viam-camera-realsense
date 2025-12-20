@@ -1,12 +1,11 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 set(CMAKE_PROJECT_VERSION 0.0.3)
-set(CMAKE_CXX_STANDARD 17)
 
 # FORCE absolute toolchain path to prevent sub-project failures
-if(CMAKE_TOOLCHAIN_FILE AND NOT IS_ABSOLUTE "${CMAKE_TOOLCHAIN_FILE}")
-    get_filename_component(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" ABSOLUTE BASE_DIR "${CMAKE_BINARY_DIR}")
-    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" CACHE FILEPATH "Absolute path to toolchain" FORCE)
-endif()
+# if(CMAKE_TOOLCHAIN_FILE AND NOT IS_ABSOLUTE "${CMAKE_TOOLCHAIN_FILE}")
+#     get_filename_component(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" ABSOLUTE BASE_DIR "${CMAKE_BINARY_DIR}")
+#     set(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" CACHE FILEPATH "Absolute path to toolchain" FORCE)
+# endif()
 
 # Force static builds for everything (including FetchContent deps)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -20,17 +19,7 @@ project(viam-camera-realsense
 
 include(cmake/simd_flags.cmake)
 
-# Handle FetchContent vs Conan
-include(FetchContent)
-
-find_package(viam-cpp-sdk REQUIRED)
-find_package(libjpeg-turbo CONFIG REQUIRED)
-if(NOT APPLE)
-    # On non-macOS, we use Conan's nlohmann_json
-    # On macOS, we use the vendored librealsense which has its own JSON
-    find_package(nlohmann_json CONFIG REQUIRED)
-endif()
-find_package(PkgConfig REQUIRED)
+option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" OFF)
 
 # Packaging: Viam expects a flat structure or specific entrypoint.
 # We set RPATH to look in the same directory as the binary.
@@ -89,42 +78,37 @@ else()
     find_package(realsense2 REQUIRED)
 endif()
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+find_package(viam-cpp-sdk REQUIRED)
+find_package(libjpeg-turbo CONFIG REQUIRED)
+find_package(PkgConfig REQUIRED)
+
 
 add_library(viamrealsense src/module/encoding.cpp)
 target_include_directories(viamrealsense
     PUBLIC src/module
-)
 
-target_link_libraries(viamrealsense
-    PUBLIC
-        viam-cpp-sdk::viam-cpp-sdk
-        realsense2::realsense2
-        viam-cpp-sdk::viamsdk
-    PRIVATE
-        libjpeg-turbo::turbojpeg-static
 )
-
 target_compile_features(viamrealsense PUBLIC
     cxx_std_17
 )
-
-add_executable(viam-camera-realsense src/module/main.cpp)
-target_link_libraries(viam-camera-realsense
-    PRIVATE
-        viamrealsense
-        ${CMAKE_DL_LIBS}
-)
-
-install(TARGETS viam-camera-realsense DESTINATION .)
-install(FILES meta.json DESTINATION .)
-
-add_executable(viam-camera-realsense-cli src/cli/main.cpp)
-target_link_libraries(viam-camera-realsense-cli
+target_link_libraries(viamrealsense
     PUBLIC
+        viam-cpp-sdk::viamsdk
         realsense2::realsense2
+        libjpeg-turbo::turbojpeg-static
     PRIVATE
         ${CMAKE_DL_LIBS}
 )
+add_executable(viam-camera-realsense src/module/main.cpp)
+target_link_libraries(viam-camera-realsense PRIVATE viamrealsense)
+
+install(TARGETS 
+    viamrealsense 
+    viam-camera-realsense 
+    DESTINATION .)
+install( FILES meta.json DESTINATION .)
 
 if (VIAM_REALSENSE_ENABLE_TESTS)
     enable_testing()
