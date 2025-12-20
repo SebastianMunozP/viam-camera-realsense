@@ -1,4 +1,3 @@
-
 import os
 import tarfile
 import re
@@ -38,6 +37,8 @@ class ViamRealsense(ConanFile):
     def requirements(self):
         self.requires("viam-cpp-sdk/[>=0.20.1]")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
+        if self.options.with_tests:
+            self.requires("gtest/1.17.0")
         
     def layout(self):
         cmake_layout(self, src_folder=".")

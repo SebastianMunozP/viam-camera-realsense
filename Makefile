@@ -1,62 +1,6 @@
-# Package with local librealsense (binary, dylibs, headers, CMake config)
-MODULE_LOCAL_TARBALL = module-localrealsense.tar.gz
-MODULE_LOCAL_STAGE = module-localrealsense-stage
-MODULE_BIN = build-conan/build/RelWithDebInfo/viam-camera-realsense
-
-# With FetchContent, these are within the build directory
-# We assume standard CMake layout or where FetchContent places them
-# Adjust as needed after first build verification
-LRS_BUILD_DIR = build-conan/build/Release/_deps/realsense2-build
-LRS_SRC_DIR = build-conan/build/Release/_deps/realsense2-src
-
-.PHONY: module-localrealsense.tar.gz
-module-localrealsense.tar.gz: force-rebuild-module bin/run_module_with_sudo.sh
-	rm -rf $(MODULE_LOCAL_STAGE) $(MODULE_LOCAL_TARBALL)
-	mkdir -p $(MODULE_LOCAL_STAGE)/bin
-	mkdir -p $(MODULE_LOCAL_STAGE)/lib
-	mkdir -p $(MODULE_LOCAL_STAGE)/include
-	mkdir -p $(MODULE_LOCAL_STAGE)/cmake
-
-# Copy the binary from the local build directory
-	cp build/Release/viam-camera-realsense $(MODULE_LOCAL_STAGE)/bin/
-	cp bin/run_module_with_sudo.sh $(MODULE_LOCAL_STAGE)/bin/
-	chmod +x $(MODULE_LOCAL_STAGE)/bin/run_module_with_sudo.sh
-	
-	# Copy librealsense libs
-	cp $(LRS_BUILD_DIR)/librealsense2*.dylib $(MODULE_LOCAL_STAGE)/lib/ || true
-	# Also check generic build lib if not in specific build dir
-	cp build/Release/librealsense2*.dylib $(MODULE_LOCAL_STAGE)/lib/ || true
-	
-	# Copy headers from source
-	cp -R $(LRS_SRC_DIR)/include/librealsense2 $(MODULE_LOCAL_STAGE)/include/
-	
-	# Copy CMake config if available (might be in build dir)
-	# With FetchContent we might not get a generated config easily accessible/correct for relocation
-	# but we package it if found.
-	cp -R $(LRS_BUILD_DIR)/realsense2Config.cmake $(MODULE_LOCAL_STAGE)/cmake/ || true
-
-	echo '{' > $(MODULE_LOCAL_STAGE)/meta.json
-	echo '  "name": "viam-camera-realsense",' >> $(MODULE_LOCAL_STAGE)/meta.json
-	echo '  "version": "0.0.1",' >> $(MODULE_LOCAL_STAGE)/meta.json
-	echo '  "entrypoint": "bin/run_module_with_sudo.sh"' >> $(MODULE_LOCAL_STAGE)/meta.json
-	echo '}' >> $(MODULE_LOCAL_STAGE)/meta.json
-
-	tar czvf $(MODULE_LOCAL_TARBALL) -C $(MODULE_LOCAL_STAGE) .
-	echo "Created $(MODULE_LOCAL_TARBALL) with sudo wrapper, module binary, librealsense dylibs, headers, CMake config, and meta.json."
-
-# Always force a rebuild from source before packaging
-.PHONY: force-rebuild-module
-force-rebuild-module:
-	rm -rf build-conan
-	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	conan install . \
-	-o:a "viam-cpp-sdk/*:shared=False" \
-	-s:a build_type=Release \
-	-s:a compiler.cppstd=17 \
-	--build=missing; \
-	conan build . -s build_type=Release
 OUTPUT_NAME = viam-camera-realsense
 BIN := build-conan/build/RelWithDebInfo/viam-camera-realsense
+VERSION = 0.0.3
 
 # OS Detection
 UNAME_S := $(shell uname -s)
@@ -135,7 +79,7 @@ conan-pkg:
 
 module.tar.gz: conan-pkg meta.json
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	conan install --requires=viam-camera-realsense/0.0.1 \
+	conan install --requires=viam-camera-realsense/$(VERSION) \
 	$(CONAN_FLAGS) \
 	--deployer-package "&" \
 	--envs-generation false
@@ -183,3 +127,4 @@ docker-amd64-ci: BUILD_TAG = amd64
 docker-amd64-ci: BUILD_PUSH = --push
 docker-amd64-ci:
 	$(BUILD_CMD)
+
