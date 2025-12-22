@@ -1,17 +1,10 @@
-find_package(GTest REQUIRED)
+include(FetchContent)
 
-# On some systems (like older Ubuntu), GMock is a separate package or not 
-# exported by GTestConfig.cmake. We check and try to find it explicitly.
-if (NOT TARGET GTest::gmock)
-    find_package(GMock QUIET)
-    if (NOT TARGET GTest::gmock AND TARGET GMock::gmock)
-        add_library(GTest::gmock ALIAS GMock::gmock)
-    endif()
-endif()
-
-# Fallback: if we still don't have gmock, try to link it by name if possible,
-# or assume it's part of GTest (though unlikely if targets are missing).
-# For now, we prefer targets.
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+FetchContent_MakeAvailable(googletest)
 
 include(GoogleTest)
 
@@ -23,7 +16,7 @@ target_link_libraries(viamrealsense_test_common
         viamrealsense
         GTest::gtest
         GTest::gtest_main
-        $<IF:$<TARGET_EXISTS:GTest::gmock>,GTest::gmock,gmock>
+        GTest::gmock
         viam-cpp-sdk::viamsdk
 )
 
@@ -33,7 +26,9 @@ function(viamrealsense_add_gtest SOURCE_FILE_NAME)
     add_executable(${TEST_EXECUTABLE_NAME} ${SOURCE_FILE_NAME})
     target_link_libraries(${TEST_EXECUTABLE_NAME} PRIVATE viamrealsense_test_common)
 
-    gtest_discover_tests(${TEST_EXECUTABLE_NAME})
+    # DISCOVERY_MODE PRE_TEST is required to avoid running the test at build-time
+    # which fails because shared libraries aren't in the path yet.
+    gtest_discover_tests(${TEST_EXECUTABLE_NAME} DISCOVERY_TIMEOUT 60 DISCOVERY_MODE PRE_TEST)
 endfunction()
 
 viamrealsense_add_gtest(device_tests.cpp)
