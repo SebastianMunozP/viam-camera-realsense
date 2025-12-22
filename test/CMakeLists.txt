@@ -1,4 +1,4 @@
-find_package(GTest REQUIRED)
+find_package(GTest REQUIRED COMPONENTS gtest gmock gtest_main)
 include(GoogleTest)
 
 # Helper library target for linking to the individual test binaries
