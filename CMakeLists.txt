@@ -12,8 +12,6 @@ include(cmake/simd_flags.cmake)
 
 option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" OFF)
 
-# Packaging: Viam expects a flat structure or specific entrypoint.
-# We set RPATH to look in the same directory as the binary.
 if (APPLE)
     set(CMAKE_INSTALL_RPATH "@loader_path")
     
@@ -65,7 +63,7 @@ if (APPLE)
     message(STATUS "Using vendored rsutils: ${RSUTILS_LIB}")
     message(STATUS "Using vendored realsense-file: ${REALSENSE_FILE_LIB}")
 else()
-    set(CMAKE_INSTALL_RPATH "$ORIGIN")
+    list(PREPEND CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
     find_package(realsense2 REQUIRED)
 endif()
 
@@ -78,7 +76,9 @@ find_package(PkgConfig REQUIRED)
 add_library(viamrealsense src/module/encoding.cpp)
 target_include_directories(viamrealsense
     PUBLIC src/module
+
 )
+
 target_compile_features(viamrealsense PUBLIC
     cxx_std_17
 )
