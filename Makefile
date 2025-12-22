@@ -53,16 +53,10 @@ test: conan-install-test conan-build-test
 	cd build-conan/build/RelWithDebInfo && . ./generators/conanrun.sh && ctest --output-on-failure
 
 # Native build targets for CI environments with pre-installed dependencies
-ifeq ($(UNAME_S),Darwin)
-    NPROC := $(shell sysctl -n hw.ncpu)
-else
-    NPROC := $(shell nproc)
-endif
-
 build-native:
 	mkdir -p build-native && cd build-native && \
 	cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
-	make -j$(NPROC)
+	make -j$(shell nproc)
 
 test-native: build-native
 	cd build-native && ctest --output-on-failure
