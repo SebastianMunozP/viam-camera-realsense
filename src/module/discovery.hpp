@@ -36,7 +36,7 @@ public:
       auto deviceList = rs_ctx_->query_devices();
       int devCount = deviceList.size();
 
-      VIAM_SDK_LOG(info) << "[discover_resources] Seb query_devices returned "
+      VIAM_SDK_LOG(info) << "[discover_resources] query_devices returned "
                          << devCount << " devices";
 
       if (devCount == 0) {
@@ -48,11 +48,11 @@ public:
       std::vector<std::string> device_errors;
       for (int i = 0; i < devCount; i++) {
         try {
-          VIAM_SDK_LOG(info)
+          VIAM_SDK_LOG(debug)
               << "[discover_resources] Attempting to access device at index "
               << i;
           auto dev = deviceList[i];
-          VIAM_SDK_LOG(info)
+          VIAM_SDK_LOG(debug)
               << "[discover_resources] Successfully accessed device at index "
               << i;
 
