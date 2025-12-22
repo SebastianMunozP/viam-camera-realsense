@@ -22,15 +22,20 @@ jobs:
               image: ghcr.io/viam-modules/viam-camera-realsense:amd64
               options: --platform linux/amd64
           - os: macos-latest
-            container:
-              image: ghcr.io/viam-modules/viam-camera-realsense:macos
-              options: --platform macos/arm64
+            container: null
 
+    runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          make setup
+          ./bin/build_librealsense_macos.sh
 
       - name: Run the tests
         run: make test-native
