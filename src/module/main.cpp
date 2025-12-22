@@ -57,11 +57,13 @@ int serve(int argc, char **argv) try {
 
   VIAM_SDK_LOG(info) << "[serve] Starting Realsense module";
 
-  for (size_t i = 0; i < argc; i++) {
-    if (std::string(argv[i]) == "--log-level=debug") {
-      rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
-    }
-  }
+  // Disabling debugs by default, this is required while we get realsense SDK libraries with BUILD_EASYLOGGINGPP enabled. 
+  // Uncomment to enable: https://viam.atlassian.net/browse/RSDK-12592
+  // for (size_t i = 0; i < argc; i++) {
+  //   if (std::string(argv[i]) == "--log-level=debug") {
+  //     rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
+  //   }
+  // }
 
   auto ctx = std::make_shared<boost::synchronized_value<rs2::context>>();
   // Wrap the context in a RealsenseContext, which will manage the callback for
