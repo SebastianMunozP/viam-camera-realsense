@@ -1,6 +1,5 @@
 OUTPUT_NAME = viam-camera-realsense
 BIN := build-conan/build/RelWithDebInfo/viam-camera-realsense
-VERSION = 0.0.3
 
 # OS Detection
 UNAME_S := $(shell uname -s)
@@ -79,24 +78,13 @@ conan-pkg:
 
 module.tar.gz: conan-pkg meta.json
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	conan install --requires=viam-camera-realsense/$(VERSION) \
+	conan install --requires=viam-camera-realsense/0.0.1 \
 	$(CONAN_FLAGS) \
 	--deployer-package "&" \
 	--envs-generation false
 
 lint:
 	./bin/lint.sh
-
-CLI_BUILD_DIR := $(abspath build-cli)
-CLI_TOOLCHAIN := $(CLI_BUILD_DIR)/conan_toolchain.cmake
-
-viam-camera-realsense-cli:
-	rm -rf $(CLI_BUILD_DIR) && \
-	conan remove 'librealsense/*' --confirm && \
-	conan install ./src/cli -of=$(CLI_BUILD_DIR) -b missing -s build_type=Debug && \
-	test -f $(CLI_TOOLCHAIN) && \
-	cmake -S src/cli -B $(CLI_BUILD_DIR) -G Ninja -DCMAKE_TOOLCHAIN_FILE=$(CLI_TOOLCHAIN) -DCMAKE_BUILD_TYPE=Debug && \
-	cmake --build $(CLI_BUILD_DIR) --target viam-camera-realsense-cli
 
 # Docker
 BUILD_CMD = docker buildx build --pull $(BUILD_PUSH) --force-rm --no-cache --build-arg MAIN_TAG=$(MAIN_TAG) --build-arg BASE_TAG=$(BUILD_TAG) --platform linux/$(BUILD_TAG) -f $(BUILD_FILE) -t '$(MAIN_TAG):$(BUILD_TAG)' .

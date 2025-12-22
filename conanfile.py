@@ -25,7 +25,7 @@ class ViamRealsense(ConanFile):
 
     exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*", "vendor/librealsense-install/*", "bin/*"
 
-    version = "0.0.3"
+    version = "0.0.1"
 
     def set_version(self):
         content = load(self, "CMakeLists.txt")
@@ -35,10 +35,9 @@ class ViamRealsense(ConanFile):
         check_min_cppstd(self, 17)
 
     def requirements(self):
-        self.requires("viam-cpp-sdk/[>=0.20.1]")
+        self.requires("viam-cpp-sdk/0.20.1")
+        self.requires("librealsense/2.56.5")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
-        if self.options.with_tests:
-            self.requires("gtest/1.17.0")
         
     def layout(self):
         cmake_layout(self, src_folder=".")
@@ -48,11 +47,7 @@ class ViamRealsense(ConanFile):
         tc.variables["VIAM_REALSENSE_ENABLE_TESTS"] = self.options.with_tests
         tc.generate()
 
-        deps = CMakeDeps(self)
-        # On macOS, skip nlohmann_json from CMakeDeps to avoid conflicts with librealsense's FetchContent
-        if self.settings.os == "Macos":
-            deps.set_property("nlohmann_json", "cmake_find_mode", "none")
-        deps.generate()
+        CMakeDeps(self).generate()
 
     def build(self):
         cmake = CMake(self)
@@ -109,6 +104,10 @@ class ViamRealsense(ConanFile):
             
             with open(meta_path, "w") as f:
                 json.dump(meta, f, indent=2)
+
+            # Ensure executable permissions for scripts and binaries
+            os.chmod(os.path.join(tmp_dir, "bin", "run_module_with_sudo.sh"), 0o755)
+            os.chmod(os.path.join(tmp_dir, "bin", "viam-camera-realsense"), 0o755)
 
             self.output.info("Creating module.tar.gz")
             with tarfile.open(os.path.join(self.deploy_folder, "module.tar.gz"), "w|gz") as tar:

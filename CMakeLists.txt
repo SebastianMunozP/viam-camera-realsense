@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
-set(CMAKE_PROJECT_VERSION 0.0.3)
+set(CMAKE_PROJECT_VERSION 0.0.1)
 
 
 project(viam-camera-realsense
@@ -78,7 +78,6 @@ find_package(PkgConfig REQUIRED)
 add_library(viamrealsense src/module/encoding.cpp)
 target_include_directories(viamrealsense
     PUBLIC src/module
-
 )
 target_compile_features(viamrealsense PUBLIC
     cxx_std_17

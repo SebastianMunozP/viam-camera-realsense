@@ -10,7 +10,6 @@ set -euxo pipefail
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
-# NOTE: this is written under the assumption that it will be built in canon
 if [[ ${OS} == "linux" ]]; then
     sudo apt -y update && sudo apt -y upgrade && sudo apt-get install -y \
         python3 \
@@ -78,4 +77,3 @@ fi
 
 conan profile detect || echo "Conan is already installed"
 conan remote add viamconan https://viam.jfrog.io/artifactory/api/conan/viamconan --index 0 || echo "Viam conan remote already exists"
-
