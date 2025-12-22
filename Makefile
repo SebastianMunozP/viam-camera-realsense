@@ -86,6 +86,7 @@ module.tar.gz: conan-pkg meta.json
 lint:
 	./bin/lint.sh
 
+
 # Docker
 BUILD_CMD = docker buildx build --pull $(BUILD_PUSH) --force-rm --no-cache --build-arg MAIN_TAG=$(MAIN_TAG) --build-arg BASE_TAG=$(BUILD_TAG) --platform linux/$(BUILD_TAG) -f $(BUILD_FILE) -t '$(MAIN_TAG):$(BUILD_TAG)' .
 BUILD_PUSH = --load
@@ -115,4 +116,3 @@ docker-amd64-ci: BUILD_TAG = amd64
 docker-amd64-ci: BUILD_PUSH = --push
 docker-amd64-ci:
 	$(BUILD_CMD)
-
