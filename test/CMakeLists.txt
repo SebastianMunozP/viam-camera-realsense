@@ -1,4 +1,18 @@
-find_package(GTest REQUIRED COMPONENTS gtest gmock gtest_main)
+find_package(GTest REQUIRED)
+
+# On some systems (like older Ubuntu), GMock is a separate package or not 
+# exported by GTestConfig.cmake. We check and try to find it explicitly.
+if (NOT TARGET GTest::gmock)
+    find_package(GMock QUIET)
+    if (NOT TARGET GTest::gmock AND TARGET GMock::gmock)
+        add_library(GTest::gmock ALIAS GMock::gmock)
+    endif()
+endif()
+
+# Fallback: if we still don't have gmock, try to link it by name if possible,
+# or assume it's part of GTest (though unlikely if targets are missing).
+# For now, we prefer targets.
+
 include(GoogleTest)
 
 # Helper library target for linking to the individual test binaries
@@ -9,7 +23,7 @@ target_link_libraries(viamrealsense_test_common
         viamrealsense
         GTest::gtest
         GTest::gtest_main
-        GTest::gmock
+        $<IF:$<TARGET_EXISTS:GTest::gmock>,GTest::gmock,gmock>
         viam-cpp-sdk::viamsdk
 )
 
