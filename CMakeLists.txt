@@ -65,7 +65,7 @@ if (APPLE)
     message(STATUS "Using vendored rsutils: ${RSUTILS_LIB}")
     message(STATUS "Using vendored realsense-file: ${REALSENSE_FILE_LIB}")
 else()
-    list(PREPEND CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+    set(CMAKE_INSTALL_RPATH "$ORIGIN")
     find_package(realsense2 REQUIRED)
 endif()
 

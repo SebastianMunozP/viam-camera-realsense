@@ -65,9 +65,8 @@ class ViamRealsense(ConanFile):
         with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
             self.output.debug(f"Creating temporary directory {tmp_dir}")
             
-            # Create bin and lib directories
+            # Create bin directory
             os.makedirs(os.path.join(tmp_dir, "bin"), exist_ok=True)
-            os.makedirs(os.path.join(tmp_dir, "lib"), exist_ok=True)
 
             self.output.info("Deploying necessary files to module.tar.gz")
             
@@ -81,15 +80,6 @@ class ViamRealsense(ConanFile):
             if self.settings.os == "Macos":
                 copy(self, "run_module_with_sudo.sh", src=os.path.join(self.package_folder, "bin"), dst=os.path.join(tmp_dir, "bin"))
                 
-                # Copy dylibs from all dependencies to lib/
-                for dep in self.dependencies.values():
-                    if dep.package_folder:
-                        copy(self, "*.dylib", src=dep.package_folder, dst=os.path.join(tmp_dir, "lib"), keep_path=False)
-            else:
-                # On Linux, maybe we also want shared libs?
-                for dep in self.dependencies.values():
-                    if dep.package_folder:
-                        copy(self, "*.so*", src=dep.package_folder, dst=os.path.join(tmp_dir, "lib"), keep_path=False)
 
             # Update meta.json entrypoint if using sudo wrapper
             import json
