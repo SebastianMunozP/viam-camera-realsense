@@ -76,7 +76,7 @@ find_package(PkgConfig REQUIRED)
 add_library(viamrealsense src/module/encoding.cpp)
 target_include_directories(viamrealsense
     PUBLIC src/module
- .   
+    
 )
 
 target_compile_features(viamrealsense PUBLIC
