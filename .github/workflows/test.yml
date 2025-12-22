@@ -24,7 +24,6 @@ jobs:
           - os: macos-latest
             container: null
 
-    runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
 
     steps:
