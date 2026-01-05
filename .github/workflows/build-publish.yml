@@ -40,6 +40,7 @@ jobs:
             profile-name: amd64-profile
             platform: linux/amd64
           - os: macos-latest
+            container: null
             platform: darwin/arm64
             artifact-name: module-darwin-arm64
 
