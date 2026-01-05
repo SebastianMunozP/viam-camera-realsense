@@ -8,10 +8,25 @@
 set -euxo pipefail
 
 
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+    SUDO="sudo"
+fi
+
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
 if [[ ${OS} == "linux" ]]; then
-    sudo apt -y update && sudo apt -y upgrade && sudo apt-get install -y \
+    $SUDO apt-get update
+    $SUDO apt-get install -y wget gpg lsb-release
+
+    # Add Kitware repository for up-to-date CMake if on Ubuntu
+    if lsb_release -is | grep -q "Ubuntu"; then
+        $SUDO wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | $SUDO gpg --dearmor - | $SUDO tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+        $SUDO echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | $SUDO tee /etc/apt/sources.list.d/kitware.list >/dev/null
+        $SUDO apt-get update
+    fi
+
+    $SUDO apt-get install -y \
         python3 \
         python3-venv \
         python3-pip \
@@ -27,7 +42,6 @@ if [[ ${OS} == "linux" ]]; then
         git \
         gdb \
         gnupg \
-        gpg \
         less \
         libssl-dev \
         libudev-dev \
@@ -35,6 +49,13 @@ if [[ ${OS} == "linux" ]]; then
         pkg-config \
         software-properties-common \
         wget
+elif [[ ${OS} == "darwin" ]]; then
+    if ! command -v brew >/dev/null 2>&1; then
+        echo "Homebrew not found. Please install it first: https://brew.sh/"
+        exit 1
+    fi
+    # On macOS, these are typically enough for the build
+    brew install cmake pkg-config libusb ninja python
 fi
 
 # Check python3 availability
