@@ -2,7 +2,6 @@
 set -e
 
 # Script to build librealsense for macOS with the specific commit needed for the fix
-# This creates a vendored library that can be committed to the repo
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

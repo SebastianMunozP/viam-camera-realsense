@@ -58,8 +58,7 @@ class ViamRealsense(ConanFile):
         cmake = CMake(self)
         cmake.install()
         # Also package the sudo wrapper
-        if self.settings.os == "Macos":
-            copy(self, "run_module_with_sudo.sh", src=os.path.join(self.export_sources_folder, "bin"), dst=os.path.join(self.package_folder, "bin"))
+        copy(self, "run_module_with_sudo.sh", src=os.path.join(self.export_sources_folder, "bin"), dst=os.path.join(self.package_folder, "bin"))
 
     def deploy(self):
         with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
@@ -76,9 +75,8 @@ class ViamRealsense(ConanFile):
             # Copy meta.json to root
             copy(self, "meta.json", src=self.package_folder, dst=tmp_dir)
             
-            # Copy sudo wrapper from package_folder to bin/ if on macOS
-            if self.settings.os == "Macos":
-                copy(self, "run_module_with_sudo.sh", src=os.path.join(self.package_folder, "bin"), dst=os.path.join(tmp_dir, "bin"))
+            # Copy sudo wrapper from package_folder to bin/
+            copy(self, "run_module_with_sudo.sh", src=os.path.join(self.package_folder, "bin"), dst=os.path.join(tmp_dir, "bin"))
                 
 
             # Update meta.json entrypoint if using sudo wrapper
@@ -87,10 +85,7 @@ class ViamRealsense(ConanFile):
             with open(meta_path, "r") as f:
                 meta = json.load(f)
             
-            if self.settings.os == "Macos":
-                meta["entrypoint"] = "bin/run_module_with_sudo.sh"
-            else:
-                meta["entrypoint"] = "bin/viam-camera-realsense"
+            meta["entrypoint"] = "bin/run_module_with_sudo.sh"
             
             with open(meta_path, "w") as f:
                 json.dump(meta, f, indent=2)
