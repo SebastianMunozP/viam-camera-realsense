@@ -57,9 +57,6 @@ make -j$(sysctl -n hw.ncpu)
 make install
 
 echo ""
-echo "✅ librealsense built successfully!"
+echo "librealsense built successfully!"
 echo "Installation directory: $VENDOR_DIR/librealsense-install"
 echo ""
-echo "Next steps:"
-echo "1. Update CMakeLists.txt to use the vendored library"
-echo "2. Commit vendor/librealsense-install to the repo"

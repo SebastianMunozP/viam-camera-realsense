@@ -1,6 +1,7 @@
 import os
 import tarfile
 import re
+import json
 from tempfile import TemporaryDirectory
 
 from conan import ConanFile
@@ -78,9 +79,7 @@ class ViamRealsense(ConanFile):
             # Copy sudo wrapper from package_folder to bin/
             copy(self, "run_module_with_sudo.sh", src=os.path.join(self.package_folder, "bin"), dst=os.path.join(tmp_dir, "bin"))
                 
-
-            # Update meta.json entrypoint if using sudo wrapper
-            import json
+            # Update meta.json entrypoint to use sudo wrapper
             meta_path = os.path.join(tmp_dir, "meta.json")
             with open(meta_path, "r") as f:
                 meta = json.load(f)

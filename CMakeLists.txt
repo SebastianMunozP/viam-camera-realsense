@@ -19,9 +19,15 @@ if (APPLE)
     set(LIBREALSENSE_VENDOR_DIR "${CMAKE_SOURCE_DIR}/vendor/librealsense-install")
     
     if(NOT EXISTS "${LIBREALSENSE_VENDOR_DIR}")
-        message(FATAL_ERROR 
-            "Vendored librealsense not found at ${LIBREALSENSE_VENDOR_DIR}\n"
-            "Please run: ./bin/build_librealsense_macos.sh")
+        message(STATUS "Vendored librealsense not found at ${LIBREALSENSE_VENDOR_DIR}, building from source")
+        execute_process(
+            COMMAND ./bin/build_librealsense_macos.sh
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            RESULT_VARIABLE result
+        )
+        if(result)
+            message(FATAL_ERROR "Failed to build librealsense")
+        endif()
     endif()
     
     # Find the vendored libraries

@@ -39,6 +39,9 @@ jobs:
             artifact-name: module-amd64
             profile-name: amd64-profile
             platform: linux/amd64
+          - os: macos-latest
+            platform: darwin/arm64
+            artifact-name: module-darwin-arm64
 
     container: ${{ matrix.container }}
 
