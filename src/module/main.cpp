@@ -58,7 +58,7 @@ int serve(int argc, char **argv) try {
   VIAM_SDK_LOG(info) << "[serve] Starting Realsense module";
 
 // Disabling debugs by default, this is required while we get realsense SDK
-// libraries with BUILD_EASYLOGGINGPP enabled in Linux
+// libraries with BUILD_EASYLOGGINGPP enabled on Linux
 // https://viam.atlassian.net/browse/RSDK-13059
 #if defined(__APPLE__)
   for (size_t i = 0; i < argc; i++) {
