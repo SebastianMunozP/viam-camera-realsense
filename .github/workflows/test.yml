@@ -21,12 +21,25 @@ jobs:
             container:
               image: ghcr.io/viam-modules/viam-camera-realsense:amd64
               options: --platform linux/amd64
+          - os: macos-latest
+            container: null
 
     container: ${{ matrix.container }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y make sudo
+          fi
+          make setup
+
+      - name: Install Conan dependencies
+        run: |
+          make conan-install-test
 
       - name: Run the tests
         run: make test-native

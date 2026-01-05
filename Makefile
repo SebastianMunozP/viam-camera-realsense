@@ -8,6 +8,7 @@ UNAME_M := $(shell uname -m)
 # Set architecture-specific paths based on OS
 ifeq ($(UNAME_S),Linux)
     export DEFAULT_PKG_CONFIG_PATH := /usr/lib/$(UNAME_M)-linux-gnu/pkgconfig:/usr/share/pkgconfig
+    NPROC := $(shell nproc)
 else ifeq ($(UNAME_S),Darwin)
     # macOS Homebrew paths
     ifeq ($(UNAME_M),arm64)
@@ -15,6 +16,7 @@ else ifeq ($(UNAME_S),Darwin)
     else
         export DEFAULT_PKG_CONFIG_PATH := /usr/local/lib/pkgconfig
     endif
+    NPROC := $(shell sysctl -n hw.ncpu)
 endif
 
 # Export for sub-processes (like bin/build.sh), does not pollute the parent shell
@@ -45,6 +47,7 @@ conan-install-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install . \
 	-o "&:with_tests=True" \
+	--output-folder=build-conan \
 	--build=missing \
 	$(CONAN_FLAGS) \
 	-s:a "&:build_type=RelWithDebInfo"
@@ -55,8 +58,9 @@ test: conan-install-test conan-build-test
 # Native build targets for CI environments with pre-installed dependencies
 build-native:
 	mkdir -p build-native && cd build-native && \
-	cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
-	make -j$(shell nproc)
+	cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+	$(if $(wildcard $(CURDIR)/build-conan/build/RelWithDebInfo/generators/conan_toolchain.cmake),-DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/build-conan/build/RelWithDebInfo/generators/conan_toolchain.cmake -DCMAKE_PREFIX_PATH=$(CURDIR)/build-conan/build/RelWithDebInfo/generators) && \
+	make -j$(NPROC)
 
 test-native: build-native
 	cd build-native && ctest --output-on-failure
