@@ -38,13 +38,12 @@ jobs:
           key: ${{ runner.os }}-librealsense-${{ hashFiles('bin/build_librealsense_macos.sh', 'CMakeLists.txt') }}
 
       - name: Install dependencies
+        if: runner.os == 'macOS'
         run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            sudo apt-get update && sudo apt-get install -y make sudo
-          fi
           make setup
 
       - name: Install Conan dependencies
+        if: runner.os == 'macOS'
         run: |
           make conan-install-test
 
