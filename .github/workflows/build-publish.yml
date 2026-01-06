@@ -76,7 +76,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: vendor/librealsense-install
-          key: ${{ runner.os }}-librealsense-${{ hashFiles('bin/build_librealsense_macos.sh', 'CMakeLists.txt') }}
+          key: ${{ matrix.os }}-librealsense-${{ hashFiles('bin/build_librealsense_macos.sh', 'CMakeLists.txt') }}
 
       - name: Install dependencies
         run: |
