@@ -63,6 +63,8 @@ class ViamRealsense(ConanFile):
         cmake.install()
         # Also package the sudo wrapper
         copy(self, "run_module_with_sudo.sh", src=os.path.join(self.export_sources_folder, "bin"), dst=os.path.join(self.package_folder, "bin"))
+        # Ensure meta.json is in the package folder
+        copy(self, "meta.json", src=self.export_sources_folder, dst=self.package_folder)
 
     def deploy(self):
         with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:

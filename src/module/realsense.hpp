@@ -373,7 +373,10 @@ public:
 
       viam::sdk::Camera::image_collection response;
       for (auto const &sensor : sensors) {
-        if (sensor == "color" and should_process_color) {
+        if (sensor == "color") {
+          if (!should_process_color) {
+            continue;
+          }
           auto color = fs.get_color_frame();
           response.images.emplace_back(
               encoding::encodeVideoFrameToResponse(color));
@@ -384,7 +387,10 @@ public:
           response.metadata.captured_at = viam::sdk::time_pt{
               std::chrono::duration_cast<std::chrono::nanoseconds>(
                   latestTimestamp)};
-        } else if (sensor == "depth" and should_process_depth) {
+        } else if (sensor == "depth") {
+          if (!should_process_depth) {
+            continue;
+          }
           auto depth = fs.get_depth_frame();
           response.images.emplace_back(
               encoding::encodeDepthFrameToResponse(depth));
