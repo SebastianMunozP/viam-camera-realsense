@@ -8,25 +8,21 @@
 set -euxo pipefail
 
 
-SUDO=""
-if [ "$(id -u)" -ne 0 ]; then
-    SUDO="sudo"
-fi
-
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
 if [[ ${OS} == "linux" ]]; then
-    $SUDO apt-get update
-    $SUDO apt-get install -y wget gpg lsb-release
+    sudo apt-get update
+    sudo apt-get install -y wget gpg lsb-release
 
     # Add Kitware repository for up-to-date CMake if on Ubuntu
+    # This is required for the publish step to work
     if lsb_release -is | grep -q "Ubuntu"; then
-        $SUDO wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | $SUDO gpg --dearmor - | $SUDO tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
-        $SUDO echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | $SUDO tee /etc/apt/sources.list.d/kitware.list >/dev/null
-        $SUDO apt-get update
+        sudo wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | sudo gpg --dearmor - | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+        sudo echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
+        sudo apt-get update
     fi
 
-    $SUDO apt-get install -y \
+    sudo apt-get install -y \
         python3 \
         python3-venv \
         python3-pip \
@@ -47,8 +43,7 @@ if [[ ${OS} == "linux" ]]; then
         libudev-dev \
         ninja-build \
         pkg-config \
-        software-properties-common \
-        wget
+        software-properties-common
 elif [[ ${OS} == "darwin" ]]; then
     if ! command -v brew >/dev/null 2>&1; then
         echo "Homebrew not found. Please install it first: https://brew.sh/"
