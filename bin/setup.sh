@@ -95,6 +95,15 @@ if [ ! -f "./venv/bin/conan" ]; then
   pip install conan
 fi
 
+# Determine Conan OS name
+CONAN_OS="Linux"
+if [[ ${OS} == "darwin" ]]; then
+  CONAN_OS="Macos"
+fi
 
-conan profile detect || echo "Conan is already installed"
+if ! conan profile show -s default >/dev/null 2>&1; then
+  conan profile detect
+  # Force gnu17 which is the standard for Viam C++ binaries
+  conan profile update settings.compiler.cppstd=gnu17 default
+fi
 conan remote add viamconan https://viam.jfrog.io/artifactory/api/conan/viamconan --index 0 || echo "Viam conan remote already exists"
