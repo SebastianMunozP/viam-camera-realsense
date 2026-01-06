@@ -29,6 +29,10 @@ endif
  
 # Common Conan settings to ensure binary cache hits across all build flows
 export CONAN_FLAGS := -s:a build_type=Release -s:a compiler.cppstd=gnu17
+ifeq ($(UNAME_S),Darwin)
+    # Match ConanCenter's pre-built binaries for apple-clang to avoid long builds
+    CONAN_FLAGS += -s:a compiler.version=17
+endif
 
 .PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test build-native test-native
 
@@ -37,7 +41,7 @@ default: module.tar.gz
 conan-build-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan build . \
-	-o with_tests=True \
+	-o "&:with_tests=True" \
 	--output-folder=build-conan \
 	--build=none \
 	$(CONAN_FLAGS)
@@ -45,7 +49,7 @@ conan-build-test:
 conan-install-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install . \
-	-o with_tests=True \
+	-o "&:with_tests=True" \
 	--output-folder=build-conan \
 	--build=missing \
 	$(CONAN_FLAGS)
@@ -74,7 +78,7 @@ setup:
 conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan create . \
-	-o with_tests=False \
+	-o "&:with_tests=False" \
 	$(CONAN_FLAGS) \
 	--build=missing
 
