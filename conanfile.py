@@ -37,8 +37,6 @@ class ViamRealsense(ConanFile):
         check_min_cppstd(self, 17)
 
     def requirements(self):
-        # This version is 
-        # self.requires("viam-cpp-sdk/0.20.1#548747da23ebc8e126ee099e7ee1bc4a")
         self.requires("viam-cpp-sdk/0.20.1")
         # At the moement we are vendoring librealsense for macOS
         if self.settings.os != "Macos":

@@ -90,12 +90,6 @@ if [ ! -f "./venv/bin/conan" ]; then
   pip install conan
 fi
 
-# Determine Conan OS name
-CONAN_OS="Linux"
-if [[ ${OS} == "darwin" ]]; then
-  CONAN_OS="Macos"
-fi
-
 if [ ! -f ~/.conan2/profiles/default ]; then
   conan profile detect
 else
