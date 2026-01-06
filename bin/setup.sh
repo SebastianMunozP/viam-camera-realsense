@@ -103,8 +103,6 @@ fi
 
 if [ ! -f ~/.conan2/profiles/default ]; then
   conan profile detect
-  # Use 17 which matches observed compatible binaries for Apple Clang
-  conan profile update settings.compiler.cppstd=17 default
 else
   echo "Conan profile already exists"
 fi
