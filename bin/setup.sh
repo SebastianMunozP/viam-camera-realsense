@@ -103,8 +103,8 @@ fi
 
 if [ ! -f ~/.conan2/profiles/default ]; then
   conan profile detect
-  # Force gnu17 which is the standard for Viam C++ binaries
-  conan profile update settings.compiler.cppstd=gnu17 default
+  # Use 17 which matches observed compatible binaries for Apple Clang
+  conan profile update settings.compiler.cppstd=17 default
 else
   echo "Conan profile already exists"
 fi
