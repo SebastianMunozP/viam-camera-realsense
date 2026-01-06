@@ -41,7 +41,7 @@ conan-build-test:
 	--output-folder=build-conan \
 	--build=none \
 	$(CONAN_FLAGS) \
-	-s:a "&:build_type=RelWithDebInfo"
+	-s:a "&:build_type=Release"
 
 conan-install-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
@@ -50,16 +50,16 @@ conan-install-test:
 	--output-folder=build-conan \
 	--build=missing \
 	$(CONAN_FLAGS) \
-	-s:a "&:build_type=RelWithDebInfo"
+	-s:a "&:build_type=Release"
 
 test: conan-install-test conan-build-test
-	cd build-conan/build/RelWithDebInfo && . ./generators/conanrun.sh && ctest --output-on-failure
+	cd build-conan/build/Release && . ./generators/conanrun.sh && ctest --output-on-failure
 
 # Native build targets for CI environments with pre-installed dependencies
 build-native:
 	mkdir -p build-native && cd build-native && \
-	cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-	$(if $(wildcard $(CURDIR)/build-conan/build/RelWithDebInfo/generators/conan_toolchain.cmake),-DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/build-conan/build/RelWithDebInfo/generators/conan_toolchain.cmake -DCMAKE_PREFIX_PATH=$(CURDIR)/build-conan/build/RelWithDebInfo/generators) && \
+	cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Release \
+	$(if $(wildcard $(CURDIR)/build-conan/build/Release/generators/conan_toolchain.cmake),-DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/build-conan/build/Release/generators/conan_toolchain.cmake -DCMAKE_PREFIX_PATH=$(CURDIR)/build-conan/build/Release/generators) && \
 	make -j$(NPROC)
 
 test-native: build-native
