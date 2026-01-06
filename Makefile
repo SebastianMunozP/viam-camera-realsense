@@ -37,7 +37,7 @@ default: module.tar.gz
 conan-build-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan build . \
-	-o "&:with_tests=True" \
+	-o with_tests=True \
 	--output-folder=build-conan \
 	--build=none \
 	$(CONAN_FLAGS)
@@ -45,7 +45,7 @@ conan-build-test:
 conan-install-test:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install . \
-	-o "&:with_tests=True" \
+	-o with_tests=True \
 	--output-folder=build-conan \
 	--build=missing \
 	$(CONAN_FLAGS)
@@ -74,7 +74,7 @@ setup:
 conan-pkg:
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan create . \
-	-o "&:with_tests=False" \
+	-o with_tests=False \
 	$(CONAN_FLAGS) \
 	--build=missing
 
