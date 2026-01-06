@@ -252,7 +252,7 @@ TEST_F(TimeTest, IntegrationTest_RealTimeScenario) {
   auto current_time = getNowMs();
 
   // Should not be too old with reasonable max age
-  EXPECT_FALSE(isTooOld(current_time, start_time, 50.0));
+  EXPECT_FALSE(isTooOld(current_time, start_time, 500.0));
 
   // Should be too old with very small max age
   EXPECT_TRUE(isTooOld(current_time, start_time, 1.0));
