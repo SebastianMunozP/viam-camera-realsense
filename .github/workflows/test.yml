@@ -8,7 +8,7 @@ on: pull_request
 jobs:
   run-tests:
     name: Run Tests
-    timeout-minutes: 20
+    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -66,6 +66,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           make setup
+          test -f ./venv/bin/activate && . ./venv/bin/activate && conan profile show
 
       - name: Install Conan dependencies
         if: runner.os == 'macOS'

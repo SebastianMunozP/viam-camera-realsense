@@ -101,9 +101,11 @@ if [[ ${OS} == "darwin" ]]; then
   CONAN_OS="Macos"
 fi
 
-if ! conan profile show -s default >/dev/null 2>&1; then
+if [ ! -f ~/.conan2/profiles/default ]; then
   conan profile detect
   # Force gnu17 which is the standard for Viam C++ binaries
   conan profile update settings.compiler.cppstd=gnu17 default
+else
+  echo "Conan profile already exists"
 fi
 conan remote add viamconan https://viam.jfrog.io/artifactory/api/conan/viamconan --index 0 || echo "Viam conan remote already exists"
