@@ -12,6 +12,7 @@ include(cmake/simd_flags.cmake)
 
 option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" OFF)
 
+# On Apple, we are using the vendored librealsense
 if (APPLE)
     set(CMAKE_INSTALL_RPATH "@loader_path")
     
@@ -30,51 +31,15 @@ if (APPLE)
         endif()
     endif()
     
-    # Find the vendored libraries
-    find_library(REALSENSE2_LIB 
-        NAMES realsense2 librealsense2.a
-        PATHS "${LIBREALSENSE_VENDOR_DIR}/lib"
-        NO_DEFAULT_PATH
-        REQUIRED
-    )
-    
-    find_library(RSUTILS_LIB 
-        NAMES rsutils librsutils.a
-        PATHS "${LIBREALSENSE_VENDOR_DIR}/lib"
-        NO_DEFAULT_PATH
-        REQUIRED
-    )
-    
-    find_library(REALSENSE_FILE_LIB 
-        NAMES realsense-file librealsense-file.a
-        PATHS "${LIBREALSENSE_VENDOR_DIR}/lib"
-        NO_DEFAULT_PATH
-        REQUIRED
-    )
-    
-    # Find system dependencies
-    find_library(IOKIT_FRAMEWORK IOKit)
-    find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
-    find_library(USB_LIB usb-1.0 REQUIRED)
-    
-    # Create imported target
-    add_library(realsense2::realsense2 STATIC IMPORTED)
-    set_target_properties(realsense2::realsense2 PROPERTIES
-        IMPORTED_LOCATION "${REALSENSE2_LIB}"
-        INTERFACE_INCLUDE_DIRECTORIES "${LIBREALSENSE_VENDOR_DIR}/include"
-        INTERFACE_LINK_LIBRARIES "${REALSENSE_FILE_LIB};${RSUTILS_LIB};${USB_LIB};${IOKIT_FRAMEWORK};${COREFOUNDATION_FRAMEWORK}"
-    )
-    
-    message(STATUS "Using vendored librealsense: ${REALSENSE2_LIB}")
-    message(STATUS "Using vendored rsutils: ${RSUTILS_LIB}")
-    message(STATUS "Using vendored realsense-file: ${REALSENSE_FILE_LIB}")
+    # Add vendored dir to prefix path so find_package works
+    list(APPEND CMAKE_PREFIX_PATH "${LIBREALSENSE_VENDOR_DIR}")
 else()
     list(PREPEND CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
-    find_package(realsense2 REQUIRED)
 endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
+find_package(realsense2 REQUIRED)
 find_package(viam-cpp-sdk REQUIRED)
 find_package(libjpeg-turbo CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
