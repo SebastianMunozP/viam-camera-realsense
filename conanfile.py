@@ -83,16 +83,6 @@ class ViamRealsense(ConanFile):
             
             # Copy sudo wrapper from package_folder to bin/
             copy(self, "run_module_with_sudo.sh", src=os.path.join(self.package_folder, "bin"), dst=os.path.join(tmp_dir, "bin"))
-                
-            # Update meta.json entrypoint to use sudo wrapper
-            meta_path = os.path.join(tmp_dir, "meta.json")
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-            
-            meta["entrypoint"] = "bin/run_module_with_sudo.sh"
-            
-            with open(meta_path, "w") as f:
-                json.dump(meta, f, indent=2)
 
             # Ensure executable permissions for scripts and binaries
             os.chmod(os.path.join(tmp_dir, "bin", "run_module_with_sudo.sh"), 0o755)
