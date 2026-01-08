@@ -95,4 +95,12 @@ if [ ! -f ~/.conan2/profiles/default ]; then
 else
   echo "Conan profile already exists"
 fi
+
+# Override cppstd to match CONAN_FLAGS in Makefile (avoid gnu17 default)
+conan config home
+conan profile show default
+sed -i.bak 's/compiler.cppstd=gnu17/compiler.cppstd=17/' ~/.conan2/profiles/default
+echo "Updated cppstd to 17:"
+conan profile show default
+
 conan remote add viamconan https://viam.jfrog.io/artifactory/api/conan/viamconan --index 0 || echo "Viam conan remote already exists"
