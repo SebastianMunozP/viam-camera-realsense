@@ -71,13 +71,6 @@ jobs:
           restore-keys: |
             ${{ matrix.os }}-conan-
 
-      - name: Cache vendored librealsense
-        if: runner.os == 'macOS'
-        uses: actions/cache@v3
-        with:
-          path: vendor/librealsense-install
-          key: ${{ matrix.os }}-librealsense-${{ hashFiles('bin/build_librealsense_macos.sh', 'CMakeLists.txt') }}
-
       - name: Install dependencies
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then

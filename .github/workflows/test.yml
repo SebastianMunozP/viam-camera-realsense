@@ -46,22 +46,6 @@ jobs:
           restore-keys: |
             ${{ matrix.os }}-conan-
 
-      - name: Cache build-native directory
-        if: runner.os == 'macOS'
-        uses: actions/cache@v3
-        with:
-          path: build-native
-          key: ${{ matrix.os }}-build-native-${{ hashFiles('CMakeLists.txt', 'Makefile', 'src/**/*.cpp', 'src/**/*.hpp') }}
-          restore-keys: |
-            ${{ matrix.os }}-build-native-
-
-      - name: Cache vendored librealsense
-        if: runner.os == 'macOS'
-        uses: actions/cache@v3
-        with:
-          path: vendor/librealsense-install
-          key: ${{ matrix.os }}-librealsense-${{ hashFiles('bin/build_librealsense_macos.sh', 'CMakeLists.txt') }}
-
       - name: Install dependencies
         if: runner.os == 'macOS'
         run: |
