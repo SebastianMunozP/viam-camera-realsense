@@ -28,13 +28,7 @@ else
 endif
  
 # Common Conan settings to ensure binary cache hits across all build flows
-export CONAN_FLAGS := -s:a build_type=Release
-ifeq ($(UNAME_S),Darwin)
-    # Match ConanCenter and ViamConan's pre-built binaries for apple-clang to avoid long builds
-    CONAN_FLAGS += -s:a compiler.version=17 -s:a compiler.cppstd=17
-else
-    CONAN_FLAGS += -s:a compiler.cppstd=gnu17
-endif
+export CONAN_FLAGS := -s:a build_type=Release -s:a compiler.cppstd=17
 
 .PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test build-native test-native
 
