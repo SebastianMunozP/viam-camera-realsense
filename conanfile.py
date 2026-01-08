@@ -24,8 +24,8 @@ class ViamRealsense(ConanFile):
         "viam-cpp-sdk/*:shared": False
     }
 
-    # We need to vendor librealsense for macOS, so we include it in exports_sources. Also, we need to include the bin directory for the sudo wrapper and build_librealsense_macos.sh script
-    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*", "vendor/librealsense-install/*", "bin/*"
+    # We include the bin directory for the sudo wrapper
+    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*", "bin/*"
 
     version = "0.0.1"
 
@@ -38,8 +38,9 @@ class ViamRealsense(ConanFile):
 
     def requirements(self):
         self.requires("viam-cpp-sdk/0.20.1")
-        # At the moement we are vendoring librealsense for macOS
-        if self.settings.os != "Macos":
+        if self.settings.os == "Macos":
+            self.requires("librealsense/2.57.0+viam")
+        else:
             self.requires("librealsense/2.56.5")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
         

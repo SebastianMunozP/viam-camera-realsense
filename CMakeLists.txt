@@ -15,24 +15,6 @@ option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" OFF)
 # On Apple, we are using the vendored librealsense
 if (APPLE)
     set(CMAKE_INSTALL_RPATH "@loader_path")
-    
-    # Use vendored librealsense for macOS
-    set(LIBREALSENSE_VENDOR_DIR "${CMAKE_SOURCE_DIR}/vendor/librealsense-install")
-    
-    if(NOT EXISTS "${LIBREALSENSE_VENDOR_DIR}")
-        message(STATUS "Vendored librealsense not found at ${LIBREALSENSE_VENDOR_DIR}, building from source")
-        execute_process(
-            COMMAND ./bin/build_librealsense_macos.sh
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            RESULT_VARIABLE result
-        )
-        if(result)
-            message(FATAL_ERROR "Failed to build librealsense")
-        endif()
-    endif()
-    
-    # Add vendored dir to prefix path so find_package works
-    list(APPEND CMAKE_PREFIX_PATH "${LIBREALSENSE_VENDOR_DIR}")
 else()
     list(PREPEND CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
 endif()
