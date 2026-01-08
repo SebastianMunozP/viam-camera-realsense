@@ -24,8 +24,7 @@ class ViamRealsense(ConanFile):
         "viam-cpp-sdk/*:shared": False
     }
 
-    # We include the bin directory for the sudo wrapper
-    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*", "bin/*"
+    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
 
     version = "0.0.1"
 
@@ -62,8 +61,6 @@ class ViamRealsense(ConanFile):
     def package(self):
         cmake = CMake(self)
         cmake.install()
-        # Ensure meta.json is in the package folder
-        copy(self, "meta.json", src=self.export_sources_folder, dst=self.package_folder)
 
     def deploy(self):
         with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
