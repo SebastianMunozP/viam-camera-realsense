@@ -14,7 +14,7 @@ option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" OFF)
 
 # On Apple, we are using the vendored librealsense
 if (APPLE)
-    set(CMAKE_INSTALL_RPATH "@loader_path")
+    list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/../lib")
 else()
     list(PREPEND CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
 endif()
