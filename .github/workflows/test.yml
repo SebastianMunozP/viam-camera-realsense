@@ -22,7 +22,6 @@ jobs:
               image: ghcr.io/viam-modules/viam-camera-realsense:amd64
               options: --platform linux/amd64
           - os: macos-latest
-            container: null
 
     container: ${{ matrix.container }}
 
