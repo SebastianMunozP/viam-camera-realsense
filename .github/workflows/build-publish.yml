@@ -111,7 +111,6 @@ jobs:
       - name: Upload module to registry
         uses: viamrobotics/upload-module@main
         with:
-          meta-path: meta.json
           module-path: ${{ matrix.artifact-path }}/module.tar.gz
           platform: ${{ matrix.platform }}
           version: ${{ github.ref_name }}
