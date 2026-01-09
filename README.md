@@ -118,12 +118,15 @@ Support for specific hardware is known for the following devices. The table is n
 | RPi 4B Bullseye       |  X   |       |      |
 | Orin Nano JetPack 5.1 |  X   |   X   |  X   |
 | UP 4000               |  X   |       |      |
+| Mac                   |      |  (1)  |      |
+
+(1) Support for Mac is experimental and may not work. It is based on a vendored version of `librealsense` from its development branch that contains experimental support for macOS.
 
 ## Linux distribution recommendation
 
 This module depends on the [`librealsense` SDK](https://github.com/IntelRealSense/librealsense/releases). As of the time of writing, Ubuntu is the only Linux Distro `librealsense` officially supports. The module works on our hardware setups using Bullseye on RPI4, and some setups on Bookworm. However, we recommend adhering to the requirements of the SDK dependency and to use Ubuntu when possible to avoid instability and unexpected behavior.
 
-## Troubleshooting
+### Troubleshooting
 
 If you get an error like "failed to set power state", or "Permission denied", you may need to install the udev rules for when the USB plugs in.
 
@@ -137,6 +140,17 @@ sudo udevadm trigger
 You can also look at the official RealSense troubleshooting guide [here](https://github.com/IntelRealSense/librealsense/wiki/Troubleshooting-Q%26A#q-i-ran-the-udev-rules-script-but-linux-still-get-permission-denied).
 
 The module takes advantage of faster USB ports. Use the (blue) USB 3.0 port on the Raspberry Pi for faster streaming and access to more resolution options.
+
+## MacOS distribution recommendation
+
+The support for MacOS is extremely experimental and may not work. It is based on a [vendored version of `librealsense` from its development branch](https://github.com/realsenseai/librealsense/commit/67d20df877e9a049332ba4e104ba307f6e8b93e6) that contains experimental support for MacOS.
+
+
+### Troubleshooting
+
+If you see errors like `[serve] Realsense module is not running as root`:
+- You must stop the viam-server service with ctrl-C on the terminal where it is running
+- Then run it as root with `sudo viam-server -config <path-to-viam-config>.json`
 
 ## Building the module
 

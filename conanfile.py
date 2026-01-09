@@ -1,7 +1,7 @@
-
 import os
 import tarfile
 import re
+import json
 from tempfile import TemporaryDirectory
 
 from conan import ConanFile
@@ -37,7 +37,10 @@ class ViamRealsense(ConanFile):
 
     def requirements(self):
         self.requires("viam-cpp-sdk/0.20.1")
-        self.requires("librealsense/2.56.5")
+        if self.settings.os == "Macos":
+            self.requires("librealsense/2.57.0+viam")
+        else:
+            self.requires("librealsense/2.56.5")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
         
     def layout(self):
@@ -63,10 +66,12 @@ class ViamRealsense(ConanFile):
         with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
             self.output.debug(f"Creating temporary directory {tmp_dir}")
 
-            self.output.info("Copying viam-camera-realsense binary")
+            self.output.info("Deploying necessary files to module.tar.gz")
+
+            # Copy the main binary to bin/
             copy(self, "viam-camera-realsense", src=self.package_folder, dst=tmp_dir)
 
-            self.output.info("Copying meta.json")
+            # Copy meta.json to root
             copy(self, "meta.json", src=self.package_folder, dst=tmp_dir)
 
             self.output.info("Creating module.tar.gz")

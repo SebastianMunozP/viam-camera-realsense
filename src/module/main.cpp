@@ -57,13 +57,25 @@ int serve(int argc, char **argv) try {
 
   VIAM_SDK_LOG(info) << "[serve] Starting Realsense module";
 
-  // Disabling debugs by default, this is required while we get realsense SDK libraries with BUILD_EASYLOGGINGPP enabled. 
-  // Uncomment to enable: https://viam.atlassian.net/browse/RSDK-12592
-  // for (size_t i = 0; i < argc; i++) {
-  //   if (std::string(argv[i]) == "--log-level=debug") {
-  //     rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
-  //   }
-  // }
+#if defined(__APPLE__)
+  // Log user ID and fail if it is Apple and not root
+  auto uid = getuid();
+  if (uid != 0) {
+    std::cerr << "[serve] Realsense module is not running as root: user ID = "
+              << uid << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  // Enabling zlibrealsense debug logs for Mac only for now, as we don't count
+  // with libraries with BUILD_EASYLOGGINGPP enabled on Linux, which is required
+  // to enable debug logs.
+  // https://viam.atlassian.net/browse/RSDK-13059
+  for (size_t i = 0; i < argc; i++) {
+    if (std::string(argv[i]) == "--log-level=debug") {
+      rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
+    }
+  }
+#endif
 
   auto ctx = std::make_shared<boost::synchronized_value<rs2::context>>();
   // Wrap the context in a RealsenseContext, which will manage the callback for
