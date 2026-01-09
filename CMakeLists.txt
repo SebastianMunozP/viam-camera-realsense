@@ -12,7 +12,6 @@ include(cmake/simd_flags.cmake)
 
 option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" OFF)
 
-# On Apple, we are using the vendored librealsense
 if (APPLE)
     list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/../lib")
 else()
