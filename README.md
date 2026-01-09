@@ -141,30 +141,16 @@ You can also look at the official RealSense troubleshooting guide [here](https:/
 
 The module takes advantage of faster USB ports. Use the (blue) USB 3.0 port on the Raspberry Pi for faster streaming and access to more resolution options.
 
-## macOS distribution recommendation
+## MacOS distribution recommendation
 
-### Permission Setup (Required)
+The support for MacOS is extremely experimental and may not work. It is based on a [vendored version of `librealsense` from its development branch](https://github.com/realsenseai/librealsense/commit/67d20df877e9a049332ba4e104ba307f6e8b93e6) that contains experimental support for MacOS.
 
-The RealSense module requires elevated permissions to access camera hardware on macOS. Run this **once** after installing the module:
-```bash
-curl -fsSL https://raw.githubusercontent.com/viam-modules/viam-camera-realsense/main/install-macos-permissions.sh | sudo bash
-```
-
-Or download and run manually:
-```bash
-wget https://raw.githubusercontent.com/viam-modules/viam-camera-realsense/main/install-macos-permissions.sh
-chmod +x install-macos-permissions.sh
-sudo ./install-macos-permissions.sh
-```
-
-This configures your system to allow the RealSense module to run with necessary privileges without password prompts.
 
 ### Troubleshooting
 
-If you see errors like `sudo: a password is required`:
-- Ensure you've run the permission setup script above
-- Restart viam-server after running the script
-- Check that `/etc/sudoers.d/viam-realsense` exists and has correct permissions
+If you see errors like `[serve] Realsense module is not running as root`:
+- You must stop the viam-server service with ctrl-C on the terminal where it is running
+- Then run it as root with `sudo viam-server -config <path-to-viam-config>.json`
 
 ## Building the module
 

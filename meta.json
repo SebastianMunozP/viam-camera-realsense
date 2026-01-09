@@ -26,5 +26,5 @@
       "linux/arm64"
     ]
   },
-  "entrypoint": "bin/run_module_with_sudo.sh"
+  "entrypoint": "viam-camera-realsense"
 }
