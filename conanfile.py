@@ -24,7 +24,7 @@ class ViamRealsense(ConanFile):
         "viam-cpp-sdk/*:shared": False
     }
 
-    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*"
+    exports_sources = "CMakeLists.txt", "LICENSE", "src/*", "cmake/*", "meta.json", "test/*", "bin/*"
 
     version = "0.0.1"
 
@@ -61,16 +61,38 @@ class ViamRealsense(ConanFile):
     def package(self):
         cmake = CMake(self)
         cmake.install()
+        # Also package the sudo wrapper
+        copy(self, "run_module_with_sudo.sh", src=os.path.join(self.export_sources_folder, "bin"), dst=os.path.join(self.package_folder, "bin"))
 
     def deploy(self):
         with TemporaryDirectory(dir=self.deploy_folder) as tmp_dir:
             self.output.debug(f"Creating temporary directory {tmp_dir}")
 
-            self.output.info("Copying viam-camera-realsense binary")
-            copy(self, "viam-camera-realsense", src=self.package_folder, dst=tmp_dir)
+            # Create bin directory
+            os.makedirs(os.path.join(tmp_dir, "bin"), exist_ok=True)
 
-            self.output.info("Copying meta.json")
+            self.output.info("Deploying necessary files to module.tar.gz")
+
+            # Copy the main binary to bin/
+            copy(self, "viam-camera-realsense", src=self.package_folder, dst=os.path.join(tmp_dir, "bin"))
+
+            # Copy meta.json to root
             copy(self, "meta.json", src=self.package_folder, dst=tmp_dir)
+
+            # Copy sudo wrapper from package_folder to bin/
+            copy(self, "run_module_with_sudo.sh", src=os.path.join(self.package_folder, "bin"), dst=os.path.join(tmp_dir, "bin"))
+
+            # Ensure executable permissions for scripts and binaries
+            os.chmod(os.path.join(tmp_dir, "bin", "run_module_with_sudo.sh"), 0o755)
+            os.chmod(os.path.join(tmp_dir, "bin", "viam-camera-realsense"), 0o755)
+
+            self.output.info("Creating module.tar.gz")
+            with tarfile.open(os.path.join(self.deploy_folder, "module.tar.gz"), "w|gz") as tar:
+                tar.add(tmp_dir, arcname=".", recursive=True)
+
+                self.output.info("module.tar.gz contents:")
+                for mem in tar.getmembers():
+                    self.output.info(mem.name)
 
             self.output.info("Creating module.tar.gz")
             with tarfile.open(os.path.join(self.deploy_folder, "module.tar.gz"), "w|gz") as tar:

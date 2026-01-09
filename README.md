@@ -126,7 +126,7 @@ Support for specific hardware is known for the following devices. The table is n
 
 This module depends on the [`librealsense` SDK](https://github.com/IntelRealSense/librealsense/releases). As of the time of writing, Ubuntu is the only Linux Distro `librealsense` officially supports. The module works on our hardware setups using Bullseye on RPI4, and some setups on Bookworm. However, we recommend adhering to the requirements of the SDK dependency and to use Ubuntu when possible to avoid instability and unexpected behavior.
 
-## Troubleshooting
+### Troubleshooting
 
 If you get an error like "failed to set power state", or "Permission denied", you may need to install the udev rules for when the USB plugs in.
 
@@ -140,6 +140,31 @@ sudo udevadm trigger
 You can also look at the official RealSense troubleshooting guide [here](https://github.com/IntelRealSense/librealsense/wiki/Troubleshooting-Q%26A#q-i-ran-the-udev-rules-script-but-linux-still-get-permission-denied).
 
 The module takes advantage of faster USB ports. Use the (blue) USB 3.0 port on the Raspberry Pi for faster streaming and access to more resolution options.
+
+## macOS distribution recommendation
+
+### Permission Setup (Required)
+
+The RealSense module requires elevated permissions to access camera hardware on macOS. Run this **once** after installing the module:
+```bash
+curl -fsSL https://raw.githubusercontent.com/viam-modules/viam-camera-realsense/main/install-macos-permissions.sh | sudo bash
+```
+
+Or download and run manually:
+```bash
+wget https://raw.githubusercontent.com/viam-modules/viam-camera-realsense/main/install-macos-permissions.sh
+chmod +x install-macos-permissions.sh
+sudo ./install-macos-permissions.sh
+```
+
+This configures your system to allow the RealSense module to run with necessary privileges without password prompts.
+
+### Troubleshooting
+
+If you see errors like `sudo: a password is required`:
+- Ensure you've run the permission setup script above
+- Restart viam-server after running the script
+- Check that `/etc/sudoers.d/viam-realsense` exists and has correct permissions
 
 ## Building the module
 
