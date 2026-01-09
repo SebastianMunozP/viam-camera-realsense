@@ -90,10 +90,5 @@ if [ ! -f "./venv/bin/conan" ]; then
   pip install conan
 fi
 
-if [ ! -f ~/.conan2/profiles/default ]; then
-  conan profile detect
-else
-  echo "Conan profile already exists"
-fi
-
+conan profile detect || echo "Conan is already installed"
 conan remote add viamconan https://viam.jfrog.io/artifactory/api/conan/viamconan --index 0 || echo "Viam conan remote already exists"
