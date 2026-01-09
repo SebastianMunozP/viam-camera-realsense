@@ -383,7 +383,7 @@ public:
           std::uint64_t timestamp =
               static_cast<std::uint64_t>(std::llround(color.get_timestamp()));
 
-          std::chrono::microseconds latestTimestamp(timestamp);
+          std::chrono::milliseconds latestTimestamp(timestamp);
           response.metadata.captured_at = viam::sdk::time_pt{
               std::chrono::duration_cast<std::chrono::nanoseconds>(
                   latestTimestamp)};
@@ -397,7 +397,7 @@ public:
           std::uint64_t timestamp =
               static_cast<std::uint64_t>(std::llround(depth.get_timestamp()));
 
-          std::chrono::microseconds latestTimestamp(timestamp);
+          std::chrono::milliseconds latestTimestamp(timestamp);
           response.metadata.captured_at = viam::sdk::time_pt{
               std::chrono::duration_cast<std::chrono::nanoseconds>(
                   latestTimestamp)};
@@ -431,7 +431,7 @@ public:
         // use the older of the two timestamps
         std::uint64_t timestamp = std::min(depthTS, colorTS);
 
-        std::chrono::microseconds latestTimestamp(timestamp);
+        std::chrono::milliseconds latestTimestamp(timestamp);
         response.metadata.captured_at = viam::sdk::time_pt{
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 latestTimestamp)};
