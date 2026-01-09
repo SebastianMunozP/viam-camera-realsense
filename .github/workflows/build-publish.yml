@@ -102,6 +102,9 @@ jobs:
             platform: darwin/arm64
             artifact-path: ./artifacts/darwin-arm64/
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download module artifact
         uses: actions/download-artifact@v4
         with:
@@ -111,6 +114,7 @@ jobs:
       - name: Upload module to registry
         uses: viamrobotics/upload-module@main
         with:
+          meta-path: meta.json
           module-path: ${{ matrix.artifact-path }}/module.tar.gz
           platform: ${{ matrix.platform }}
           version: ${{ github.ref_name }}
