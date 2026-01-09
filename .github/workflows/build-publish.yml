@@ -1,9 +1,7 @@
 name: Build module.tar.gz and upload to registry
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 on:
   release:
     types: [published]
@@ -14,15 +12,12 @@ on:
         default: main
         description: realsense module branch to run on
   pull_request:
-
-
 permissions:
   id-token: write
   contents: read
-
 jobs:
-  module:
-    name: Intel RealSense module.tar.gz
+  build:
+    name: Build Intel RealSense module.tar.gz
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -31,34 +26,29 @@ jobs:
             container:
               image: ubuntu:22.04
             artifact-name: module-arm64
-            profile-name: arm64-profile
             platform: linux/arm64
           - os: ubuntu-22.04
             container:
               image: ubuntu:22.04
             artifact-name: module-amd64
-            profile-name: amd64-profile
             platform: linux/amd64
-
+          - os: macos-latest
+            platform: darwin/arm64
+            artifact-name: module-darwin-arm64
     container: ${{ matrix.container }}
-
     steps:
       - name: Set checkout ref (release)
         if: github.event_name == 'release'
         run: echo "CHECKOUT_REF=${{ github.ref_name }}" >> $GITHUB_ENV
-
       - name: Set checkout ref (dispatch)
         if: github.event_name == 'workflow_dispatch'
         run: echo "CHECKOUT_REF=${{ inputs.ref }}" >> $GITHUB_ENV
-
       - name: Test var set
         run: echo $CHECKOUT_REF
-
       - name: Check out code
         uses: actions/checkout@v3
         with:
           ref: ${{ env.CHECKOUT_REF }}
-
       - name: Restore cached libraries
         uses: actions/cache@v3
         with:
@@ -66,24 +56,15 @@ jobs:
           key: ${{ matrix.os }}-conan-${{ hashFiles('**/conanfile.py') }}
           restore-keys: |
             ${{ matrix.os }}-conan-
-
-      - name: Install dependencies
       - name: Install dependencies
         run: |
-          apt-get update
-          apt-get -y install sudo wget gpg
-
-          sudo wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | sudo gpg --dearmor - | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
-          sudo echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main' | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
-
-          apt-get update
-          apt-get -y install cmake=3.25.2-0kitware1ubuntu22.04.1 cmake-data=3.25.2-0kitware1ubuntu22.04.1
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            apt-get update && apt-get install -y make sudo
+          fi
           make setup
-
       - name: Build
         run: |
           make module.tar.gz
-
       - name: Upload module artifact
         if: github.event_name == 'release'
         uses: actions/upload-artifact@v4
@@ -91,8 +72,26 @@ jobs:
           name: ${{ matrix.artifact-name }}
           path: module.tar.gz
 
+  upload:
+    name: Upload modules to registry
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - artifact-name: module-arm64
+            platform: linux/arm64
+          - artifact-name: module-amd64
+            platform: linux/amd64
+          - artifact-name: module-darwin-arm64
+            platform: darwin/arm64
+    steps:
+      - name: Download module artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
       - name: Upload module to registry
-        if: github.event_name == 'release'
         uses: viamrobotics/upload-module@main
         with:
           platform: ${{ matrix.platform }}
