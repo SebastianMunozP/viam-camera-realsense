@@ -21,8 +21,8 @@ permissions:
   contents: read
 
 jobs:
-  module:
-    name: Intel RealSense module.tar.gz
+  build:
+    name: Build Intel RealSense module.tar.gz
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -31,20 +31,16 @@ jobs:
             container:
               image: ubuntu:22.04
             artifact-name: module-arm64
-            profile-name: arm64-profile
             platform: linux/arm64
           - os: ubuntu-22.04
             container:
               image: ubuntu:22.04
             artifact-name: module-amd64
-            profile-name: amd64-profile
             platform: linux/amd64
           - os: macos-latest
             platform: darwin/arm64
             artifact-name: module-darwin-arm64
-
     container: ${{ matrix.container }}
-
     steps:
       - name: Set checkout ref (release)
         if: github.event_name == 'release'
@@ -88,10 +84,35 @@ jobs:
           name: ${{ matrix.artifact-name }}
           path: module.tar.gz
 
+  upload:
+    name: Upload modules to registry
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - artifact-name: module-arm64
+            platform: linux/arm64
+            artifact-path: ./artifacts/linux-arm64/
+          - artifact-name: module-amd64
+            platform: linux/amd64
+            artifact-path: ./artifacts/linux-amd64/
+          - artifact-name: module-darwin-arm64
+            platform: darwin/arm64
+            artifact-path: ./artifacts/darwin-arm64/
+    steps:
+      - name: Download module artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+
       - name: Upload module to registry
-        if: github.event_name == 'release'
         uses: viamrobotics/upload-module@main
         with:
+          meta-path: meta.json
+          module-path: ${{ matrix.artifact-path }}/module.tar.gz
           platform: ${{ matrix.platform }}
           version: ${{ github.ref_name }}
           key-id: ${{ secrets.viam_key_id}}
