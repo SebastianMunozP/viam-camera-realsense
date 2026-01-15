@@ -61,8 +61,11 @@ int serve(int argc, char **argv) try {
   // Log user ID and fail if it is Apple and not root
   auto uid = getuid();
   if (uid != 0) {
-    std::cerr << "[serve] Realsense module is not running as root: user ID = "
-              << uid << std::endl;
+    std::cerr << "[serve] Realsense module is not running as root (user ID = "
+              << uid
+              << "), initialize viam-server with sudo: sudo viam-server "
+                 "-config <path_to_config>"
+              << std::endl;
     return EXIT_FAILURE;
   }
 
