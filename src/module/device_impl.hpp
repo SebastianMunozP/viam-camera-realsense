@@ -22,6 +22,21 @@ namespace device {
 #define VIAM_DEVICE_LOG(logger, level) VIAM_SDK_LOG_IMPL(logger, level)
 
 /********************** UTILITIES ************************/
+template <typename SensorT>
+void enableGlobalTimestamp(SensorT &sensor, viam::sdk::LogSource &logger) {
+  if (sensor.supports(RS2_OPTION_GLOBAL_TIME_ENABLED)) {
+    try {
+      sensor.set_option(RS2_OPTION_GLOBAL_TIME_ENABLED, 1.0);
+      VIAM_DEVICE_LOG(logger, info) << "[enableGlobalTimestamp] Enabled "
+                                       "Global Timestamp for sensor";
+    } catch (const std::exception &e) {
+      VIAM_DEVICE_LOG(logger, error)
+          << "[enableGlobalTimestamp] Failed to enable Global Timestamp: "
+          << e.what();
+    }
+  }
+}
+
 template <typename DeviceT>
 std::optional<std::string> getCameraModel(std::shared_ptr<DeviceT> dev) {
   if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
@@ -224,8 +239,10 @@ createSingleSensorConfig(std::shared_ptr<DeviceT> dev,
 
   typename decltype(sensors)::value_type sensor;
   for (auto &s : sensors) {
-    if (s.template is<SensorT>())
+    if (s.template is<SensorT>()) {
       sensor = s;
+      enableGlobalTimestamp(sensor, logger);
+    }
   }
 
   VIAM_DEVICE_LOG(logger, info)
@@ -274,10 +291,14 @@ std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev,
   typename decltype(sensors)::value_type color_sensor;
   typename decltype(sensors)::value_type depth_sensor;
   for (auto &s : sensors) {
-    if (s.template is<ColorSensorT>())
+    if (s.template is<ColorSensorT>()) {
       color_sensor = s;
-    if (s.template is<DepthSensorT>())
+      enableGlobalTimestamp(color_sensor, logger);
+    }
+    if (s.template is<DepthSensorT>()) {
       depth_sensor = s;
+      enableGlobalTimestamp(depth_sensor, logger);
+    }
   }
 
   // Get stream profiles
