@@ -22,13 +22,38 @@ namespace device {
 #define VIAM_DEVICE_LOG(logger, level) VIAM_SDK_LOG_IMPL(logger, level)
 
 /********************** UTILITIES ************************/
+
+enum class SensorType { depth, color, unknown };
+
+template <typename SensorT> SensorType get_sensor_type(SensorT const &sensor) {
+  if (sensor.template is<rs2::depth_sensor>()) {
+    return SensorType::depth;
+  } else if (sensor.template is<rs2::color_sensor>()) {
+    return SensorType::color;
+  }
+  return SensorType::unknown;
+}
+
+std::string sensor_type_to_string(SensorType const sensor_type) {
+  switch (sensor_type) {
+  case SensorType::depth:
+    return "depth";
+  case SensorType::color:
+    return "color";
+  case SensorType::unknown:
+    return "unknown";
+  }
+}
+
 template <typename SensorT>
 void enableGlobalTimestamp(SensorT &sensor, viam::sdk::LogSource &logger) {
   if (sensor.supports(RS2_OPTION_GLOBAL_TIME_ENABLED)) {
     try {
+      auto sensor_type = get_sensor_type(sensor);
       sensor.set_option(RS2_OPTION_GLOBAL_TIME_ENABLED, 1.0);
-      VIAM_DEVICE_LOG(logger, info) << "[enableGlobalTimestamp] Enabled "
-                                       "Global Timestamp for sensor";
+      VIAM_DEVICE_LOG(logger, info)
+          << "[enableGlobalTimestamp] Enabled Global Timestamp for sensor: "
+          << sensor_type_to_string(sensor_type);
     } catch (const std::exception &e) {
       VIAM_DEVICE_LOG(logger, error)
           << "[enableGlobalTimestamp] Failed to enable Global Timestamp: "

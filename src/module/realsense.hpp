@@ -23,10 +23,13 @@ static constexpr std::uint64_t MAX_FRAME_AGE_MS =
     1e3; // time until a frame is considered stale, in miliseconds (equal to 1
 static constexpr size_t MAX_GRPC_MESSAGE_SIZE =
     33554432; // 32MB gRPC message size limit
-
 static constexpr std::uint64_t MAX_FRAME_SET_TIME_DIFF_MS =
     2; // max time difference between frames in a frameset to be considered
        // simultaneous, in miliseconds (equal to 2 ms)
+static constexpr std::uint64_t TIMESTAMP_WARNING_LOG_INTERVAL_MS =
+    60000; // 1
+           // minute
+
 const std::string service_name = "viam_realsense";
 
 const std::string kColorSourceName = "color";
@@ -413,21 +416,35 @@ public:
           should_process_depth) {
         auto const color = fs.get_color_frame();
         auto const depth = fs.get_depth_frame();
-        auto const timeDiff = static_cast<std::uint64_t>(std::llround(
+        auto const timeDiffMs = static_cast<std::uint64_t>(std::llround(
             std::abs(color.get_timestamp() - depth.get_timestamp())));
         auto const colorTS =
             static_cast<std::uint64_t>(std::llround(color.get_timestamp()));
         auto const depthTS =
             static_cast<std::uint64_t>(std::llround(depth.get_timestamp()));
-        if (timeDiff > MAX_FRAME_SET_TIME_DIFF_MS) {
-          VIAM_RESOURCE_LOG(error)
-              << "color and depth timestamps differ more than "
-              << MAX_FRAME_SET_TIME_DIFF_MS
-              << "ms, defaulting to the "
-                 "older of the two"
-              << "color timestamp was " << colorTS << " depth timestamp was "
-              << depthTS;
+        // log if the timestamps differ more than MAX_FRAME_SET_TIME_DIFF_MS,
+        // at most once every TIMESTAMP_WARNING_LOG_INTERVAL_MS at warning
+        // level and always at debug level
+        if (timeDiffMs > MAX_FRAME_SET_TIME_DIFF_MS) {
+          std::uint64_t now_ms = time::getNowMs();
+          if (now_ms - last_timestamp_warning_log_time_ms_ >
+              TIMESTAMP_WARNING_LOG_INTERVAL_MS) {
+            last_timestamp_warning_log_time_ms_ = now_ms;
+            VIAM_RESOURCE_LOG(warn)
+                << "color and depth timestamps differ by " << timeDiffMs
+                << "ms, using older timestamp. "
+                   "(This warning throttled to once per "
+                << TIMESTAMP_WARNING_LOG_INTERVAL_MS
+                << "s; see debug for all"
+                   " occurrences)";
+          } else {
+            VIAM_RESOURCE_LOG(debug)
+                << "color and depth timestamps differ by " << timeDiffMs
+                << "ms, using older timestamp. color: " << colorTS
+                << "ms depth: " << depthTS << "ms";
+          }
         }
+
         // use the older of the two timestamps
         std::uint64_t timestamp = std::min(depthTS, colorTS);
 
@@ -749,6 +766,7 @@ private:
   std::shared_ptr<boost::synchronized_value<std::unordered_set<std::string>>>
       assigned_serials_;
   boost::synchronized_value<bool> physical_camera_assigned_;
+  std::uint64_t last_timestamp_warning_log_time_ms_{};
 
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<SynchronizedContextT>> realsense_ctx_;
