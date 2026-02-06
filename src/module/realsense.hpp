@@ -24,7 +24,7 @@ static constexpr std::uint64_t MAX_FRAME_AGE_MS =
 static constexpr size_t MAX_GRPC_MESSAGE_SIZE =
     33554432; // 32MB gRPC message size limit
 static constexpr std::uint64_t MAX_FRAME_SET_TIME_DIFF_MS =
-    2; // max time difference between frames in a frameset to be considered
+    0; // max time difference between frames in a frameset to be considered
        // simultaneous, in miliseconds (equal to 2 ms)
 static constexpr std::uint64_t TIMESTAMP_WARNING_LOG_INTERVAL_MS =
     60000; // 1
@@ -434,7 +434,7 @@ public:
                 << "color and depth timestamps differ by " << timeDiffMs
                 << "ms, using older timestamp. "
                    "(This warning throttled to once per "
-                << TIMESTAMP_WARNING_LOG_INTERVAL_MS
+                << TIMESTAMP_WARNING_LOG_INTERVAL_MS / 1000
                 << "s; see debug for all"
                    " occurrences)";
           } else {
@@ -513,7 +513,7 @@ public:
         }
 
         data = encoding::encodeRGBPointsToPCD(
-            my_dev->point_cloud_filter->process(my_dev->align->process(fs)),
+            my_dev->point_cloud_filter->process(fs),
             logger_);
       } // End scope for my_dev lock
 

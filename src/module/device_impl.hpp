@@ -40,7 +40,7 @@ std::string sensor_type_to_string(SensorType const sensor_type) {
     return "depth";
   case SensorType::color:
     return "color";
-  case SensorType::unknown:
+  default:
     return "unknown";
   }
 }
@@ -57,6 +57,22 @@ void enableGlobalTimestamp(SensorT &sensor, viam::sdk::LogSource &logger) {
     } catch (const std::exception &e) {
       VIAM_DEVICE_LOG(logger, error)
           << "[enableGlobalTimestamp] Failed to enable Global Timestamp: "
+          << e.what();
+    }
+  }
+
+  if (sensor.supports(RS2_OPTION_AUTO_EXPOSURE_PRIORITY)) {
+    try {
+      auto sensor_type = get_sensor_type(sensor);
+      // Disable auto-exposure priority to ensure constant FPS
+      sensor.set_option(RS2_OPTION_AUTO_EXPOSURE_PRIORITY, 0.0);
+      VIAM_DEVICE_LOG(logger, info)
+          << "[enableGlobalTimestamp] Disabled Auto-Exposure Priority "
+             "(constant FPS) for sensor: "
+          << sensor_type_to_string(sensor_type);
+    } catch (const std::exception &e) {
+      VIAM_DEVICE_LOG(logger, warn)
+          << "[enableGlobalTimestamp] Failed to disable Auto-Exposure Priority: "
           << e.what();
     }
   }
@@ -159,20 +175,26 @@ void printDeviceInfo(DeviceT const &dev, viam::sdk::LogSource &logger) {
 
 /********************** CALLBACKS ************************/
 
-template <typename FrameT, typename FrameSetT, typename ViamConfigT>
+template <typename FrameT, typename FrameSetT, typename ViamConfigT,
+          typename AlignT = rs2::align>
 void frameCallback(
     FrameT const &frame, std::uint64_t const maxFrameAgeMs,
     std::shared_ptr<boost::synchronized_value<FrameSetT>> &frame_set_,
-    ViamConfigT const &viamConfig) {
+    ViamConfigT const &viamConfig, std::shared_ptr<AlignT> align) {
   // With callbacks, all synchronized stream will arrive in a single
   // frameset
   int expected_frame_count = viamConfig.sensors.size();
-  auto frameset = frame.template as<FrameSetT>();
-  if (not frameset or frameset.size() != expected_frame_count) {
+  auto initial_frameset = frame.template as<FrameSetT>();
+  if (not initial_frameset or initial_frameset.size() != expected_frame_count) {
     std::cerr << "[frame_callback] got count other than "
-              << expected_frame_count << ": " << frameset.size() << std::endl;
+              << expected_frame_count << ": " << initial_frameset.size() << std::endl;
     return;
   }
+
+  // Align the frameset if align-to-color is enabled (which it is by default in
+  // our config)
+  auto frameset = align ? align->process(initial_frameset) : initial_frameset;
+
   double nowMs = time::getNowMs();
   auto color_frame = frameset.get_color_frame();
   if (not color_frame and utils::contains("color", viamConfig.sensors)) {
@@ -546,10 +568,31 @@ void startDevice(
     }
 
     dev_ptr->config->enable_device(serialNumber);
-    dev_ptr->pipe->start(*dev_ptr->config, [maxFrameAgeMs, &frameSetStorage,
-                                            viamConfig](auto const &frame) {
-      frameCallback(frame, maxFrameAgeMs, frameSetStorage, viamConfig);
-    });
+    auto align = dev_ptr->align;
+    auto profile =
+        dev_ptr->pipe->start(*dev_ptr->config, [maxFrameAgeMs, &frameSetStorage,
+                                                viamConfig, align](auto const &frame) {
+          frameCallback(frame, maxFrameAgeMs, frameSetStorage, viamConfig, align);
+        });
+
+    try {
+      auto device = profile.get_device();
+      auto sensors = device.query_sensors();
+      for (auto &sensor : sensors) {
+        if (sensor.template is<rs2::depth_sensor>()) {
+          auto depth_sensor = sensor.template as<rs2::depth_sensor>();
+          if (depth_sensor.supports(RS2_OPTION_INTER_CAM_SYNC_MODE)) {
+            // Set to Master mode (1) to drive timing
+            depth_sensor.set_option(RS2_OPTION_INTER_CAM_SYNC_MODE, 1.0);
+            VIAM_DEVICE_LOG(logger, info)
+                << "[startDevice] Hardware inter-camera sync enabled (Master)";
+          }
+        }
+      }
+    } catch (const std::exception &e) {
+      VIAM_DEVICE_LOG(logger, warn)
+          << "[startDevice] Could not enable hardware sync: " << e.what();
+    }
     dev_ptr->started = true;
   } // End scope for dev_ptr lock
   VIAM_DEVICE_LOG(logger, info)

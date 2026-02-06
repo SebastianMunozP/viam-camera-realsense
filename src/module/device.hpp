@@ -61,11 +61,12 @@ void deviceChangedCallback(
     boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_storage,
     std::uint64_t maxFrameAgeMs);
 
-template <typename FrameT, typename FrameSetT, typename ViamConfigT>
+template <typename FrameT, typename FrameSetT, typename ViamConfigT,
+          typename AlignT = rs2::align>
 void frameCallback(
     FrameT const &frame, std::uint64_t const maxFrameAgeMs,
     boost::synchronized_value<std::shared_ptr<FrameSetT>> &frame_set_,
-    ViamConfigT const &viamConfig);
+    ViamConfigT const &viamConfig, std::shared_ptr<AlignT> align);
 
 /********************** DEVICE LIFECYCLE ************************/
 template <typename ViamConfigT, typename ViamDeviceT = ViamRSDevice<>,
