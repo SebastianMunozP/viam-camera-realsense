@@ -24,7 +24,7 @@ static constexpr std::uint64_t MAX_FRAME_AGE_MS =
 static constexpr size_t MAX_GRPC_MESSAGE_SIZE =
     33554432; // 32MB gRPC message size limit
 static constexpr std::uint64_t MAX_FRAME_SET_TIME_DIFF_MS =
-    0; // max time difference between frames in a frameset to be considered
+    2; // max time difference between frames in a frameset to be considered
        // simultaneous, in miliseconds (equal to 2 ms)
 static constexpr std::uint64_t TIMESTAMP_WARNING_LOG_INTERVAL_MS =
     60000; // 1
@@ -305,6 +305,7 @@ public:
   viam::sdk::ProtoStruct
   do_command(const viam::sdk::ProtoStruct &command) override {
     VIAM_RESOURCE_LOG(error) << "do_command not implemented";
+
     return viam::sdk::ProtoStruct();
   }
 

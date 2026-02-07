@@ -21,8 +21,6 @@ namespace device {
 // Helper macro to use resource logging with explicit logger
 #define VIAM_DEVICE_LOG(logger, level) VIAM_SDK_LOG_IMPL(logger, level)
 
-/********************** UTILITIES ************************/
-
 enum class SensorType { depth, color, unknown };
 
 template <typename SensorT> SensorType get_sensor_type(SensorT const &sensor) {
@@ -46,7 +44,7 @@ std::string sensor_type_to_string(SensorType const sensor_type) {
 }
 
 template <typename SensorT>
-void enableGlobalTimestamp(SensorT &sensor, viam::sdk::LogSource &logger) {
+void enableGlobalTimestamp(SensorT& sensor, viam::sdk::LogSource &logger) {
   if (sensor.supports(RS2_OPTION_GLOBAL_TIME_ENABLED)) {
     try {
       auto sensor_type = get_sensor_type(sensor);
@@ -60,19 +58,29 @@ void enableGlobalTimestamp(SensorT &sensor, viam::sdk::LogSource &logger) {
           << e.what();
     }
   }
+}
 
+template <typename SensorT>
+void disableAutoExposurePriority(SensorT& sensor, viam::sdk::LogSource &logger) {
+  // Only disable auto-exposure priority for color sensors
+  if (get_sensor_type(sensor) != SensorType::color) {
+    return;
+  }
+  // CRITICAL: Disable auto-exposure priority to maintain frame sync.
+  // When enabled, RGB sensor drops frames to adjust exposure, breaking
+  // temporal alignment with depth (causes 5-20ms timestamp drift).
+  // Tradeoff: slightly worse exposure in changing light conditions,
+  // but tight temporal sync (mostly <5ms) between color and depth.
   if (sensor.supports(RS2_OPTION_AUTO_EXPOSURE_PRIORITY)) {
     try {
-      auto sensor_type = get_sensor_type(sensor);
       // Disable auto-exposure priority to ensure constant FPS
       sensor.set_option(RS2_OPTION_AUTO_EXPOSURE_PRIORITY, 0.0);
       VIAM_DEVICE_LOG(logger, info)
-          << "[enableGlobalTimestamp] Disabled Auto-Exposure Priority "
-             "(constant FPS) for sensor: "
-          << sensor_type_to_string(sensor_type);
+          << "[disableAutoExposurePriority] Disabled Auto-Exposure Priority "
+             "(constant FPS) for color sensor";
     } catch (const std::exception &e) {
       VIAM_DEVICE_LOG(logger, warn)
-          << "[enableGlobalTimestamp] Failed to disable Auto-Exposure Priority: "
+          << "[disableAutoExposurePriority] Failed to disable Auto-Exposure Priority: "
           << e.what();
     }
   }
@@ -193,7 +201,9 @@ void frameCallback(
 
   // Align the frameset if align-to-color is enabled (which it is by default in
   // our config)
-  auto frameset = align ? align->process(initial_frameset) : initial_frameset;
+  // auto frameset = align ? align->process(initial_frameset) : initial_frameset;
+  auto frameset = initial_frameset;
+
 
   double nowMs = time::getNowMs();
   auto color_frame = frameset.get_color_frame();
@@ -338,13 +348,13 @@ std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev,
   typename decltype(sensors)::value_type color_sensor;
   typename decltype(sensors)::value_type depth_sensor;
   for (auto &s : sensors) {
+    enableGlobalTimestamp(s, logger);
     if (s.template is<ColorSensorT>()) {
       color_sensor = s;
-      enableGlobalTimestamp(color_sensor, logger);
+      disableAutoExposurePriority(color_sensor, logger);
     }
     if (s.template is<DepthSensorT>()) {
       depth_sensor = s;
-      enableGlobalTimestamp(depth_sensor, logger);
     }
   }
 
@@ -569,30 +579,11 @@ void startDevice(
 
     dev_ptr->config->enable_device(serialNumber);
     auto align = dev_ptr->align;
-    auto profile =
-        dev_ptr->pipe->start(*dev_ptr->config, [maxFrameAgeMs, &frameSetStorage,
+    dev_ptr->pipe->start(*dev_ptr->config, [maxFrameAgeMs, &frameSetStorage,
                                                 viamConfig, align](auto const &frame) {
           frameCallback(frame, maxFrameAgeMs, frameSetStorage, viamConfig, align);
         });
 
-    try {
-      auto device = profile.get_device();
-      auto sensors = device.query_sensors();
-      for (auto &sensor : sensors) {
-        if (sensor.template is<rs2::depth_sensor>()) {
-          auto depth_sensor = sensor.template as<rs2::depth_sensor>();
-          if (depth_sensor.supports(RS2_OPTION_INTER_CAM_SYNC_MODE)) {
-            // Set to Master mode (1) to drive timing
-            depth_sensor.set_option(RS2_OPTION_INTER_CAM_SYNC_MODE, 1.0);
-            VIAM_DEVICE_LOG(logger, info)
-                << "[startDevice] Hardware inter-camera sync enabled (Master)";
-          }
-        }
-      }
-    } catch (const std::exception &e) {
-      VIAM_DEVICE_LOG(logger, warn)
-          << "[startDevice] Could not enable hardware sync: " << e.what();
-    }
     dev_ptr->started = true;
   } // End scope for dev_ptr lock
   VIAM_DEVICE_LOG(logger, info)
