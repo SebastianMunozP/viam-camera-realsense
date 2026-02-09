@@ -5,6 +5,7 @@
 #include <viam/sdk/log/logging.hpp>
 
 #include "device.hpp"
+#include "log_capture.hpp"
 #include "realsense.hpp"
 #include "sensors.hpp"
 
@@ -19,13 +20,6 @@ using ::testing::Invoke;
 using ::testing::NiceMock;
 using ::testing::Return;
 using ::testing::StrictMock;
-
-// Mock logger for testing
-class MockLogger : public viam::sdk::LogSource {
-public:
-  MOCK_METHOD(void, log,
-              (viam::sdk::log_level level, const std::string &message));
-};
 
 namespace realsense {
 namespace device {
@@ -183,6 +177,9 @@ TEST_F(DeviceTest, GetCameraModel_InvalidNameFormat_ReturnsNullopt) {
 
 // Test printDeviceInfo function
 TEST_F(DeviceTest, PrintDeviceInfo_ValidDevice_LogsInfo) {
+  test_utils::LogCaptureFixture log_capture;
+  viam::sdk::LogSource logger;
+
   // Setup expectations for supported info types
   EXPECT_CALL(*mock_device_, supports(RS2_CAMERA_INFO_NAME))
       .WillOnce(Return(true));
@@ -261,9 +258,28 @@ TEST_F(DeviceTest, PrintDeviceInfo_ValidDevice_LogsInfo) {
   EXPECT_CALL(*mock_device_, get_info(RS2_CAMERA_INFO_IP_ADDRESS))
       .WillOnce(Return("IP Address Info"));
 
-  // This test mainly ensures no exceptions are thrown
-  MockLogger logger;
+  // Execute - should not throw and should log device info
   EXPECT_NO_THROW(printDeviceInfo(*mock_device_, logger));
+
+  // Verify logs were produced
+  auto all_logs = log_capture.get_records();
+  EXPECT_GT(all_logs.size(), 0) << "printDeviceInfo should produce info logs";
+
+  // Verify no errors were logged
+  auto error_logs = log_capture.get_error_logs();
+  EXPECT_EQ(error_logs.size(), 0) << "Should not log errors for valid device";
+
+  // Verify device info is in the logs
+  bool found_device_info = false;
+  for (const auto& log : all_logs) {
+    if (log.message.find("DeviceInfo") != std::string::npos ||
+        log.message.find("Intel RealSense D435") != std::string::npos ||
+        log.message.find("123456789") != std::string::npos) {
+      found_device_info = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_device_info) << "Should log device information";
 }
 
 // Test SensorTypeTraits
@@ -280,9 +296,11 @@ TEST_F(DeviceTest, SensorTypeTraits_DepthSensor_CorrectValues) {
 // Test checkIfMatchingColorDepthProfiles
 TEST_F(DeviceTest,
        CheckIfMatchingColorDepthProfiles_MatchingProfiles_ReturnsTrue) {
+  test_utils::LogCaptureFixture log_capture;
+  viam::sdk::LogSource logger;
+
   MockVideoStreamProfile color_profile;
   MockVideoStreamProfile depth_profile;
-  MockLogger logger;
 
   // Setup matching profiles
   EXPECT_CALL(color_profile, width()).WillRepeatedly(Return(640));
@@ -297,15 +315,33 @@ TEST_F(DeviceTest,
   bool result =
       checkIfMatchingColorDepthProfiles(color_profile, depth_profile, logger);
 
-  // Verify
+  // Verify function result
   EXPECT_TRUE(result);
+
+  // Verify info log with resolution details
+  auto all_logs = log_capture.get_records();
+  EXPECT_GT(all_logs.size(), 0) << "Should log matching profile info";
+
+  // Verify the log contains resolution/fps info
+  bool found_profile_info = false;
+  for (const auto& log : all_logs) {
+    if (log.message.find("640") != std::string::npos &&
+        log.message.find("480") != std::string::npos &&
+        log.message.find("30") != std::string::npos) {
+      found_profile_info = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_profile_info) << "Should log profile dimensions";
 }
 
 TEST_F(DeviceTest,
        CheckIfMatchingColorDepthProfiles_DifferentResolution_ReturnsFalse) {
+  test_utils::LogCaptureFixture log_capture;
+  viam::sdk::LogSource logger;
+
   MockVideoStreamProfile color_profile;
   MockVideoStreamProfile depth_profile;
-  MockLogger logger;
 
   // Setup non-matching profiles
   EXPECT_CALL(color_profile, width()).WillRepeatedly(Return(640));
@@ -320,8 +356,12 @@ TEST_F(DeviceTest,
   bool result =
       checkIfMatchingColorDepthProfiles(color_profile, depth_profile, logger);
 
-  // Verify
+  // Verify function result
   EXPECT_FALSE(result);
+
+  // Verify NO logs are produced for non-matching profiles
+  auto all_logs = log_capture.get_records();
+  EXPECT_EQ(all_logs.size(), 0) << "Should not log for non-matching profiles";
 }
 
 // Test ViamRSDevice structure
@@ -352,6 +392,9 @@ TEST_F(DeviceTest, ViamRSDevice_SetValues_StateUpdated) {
 
 // Test destroyDevice function
 TEST_F(DeviceTest, DestroyDevice_ValidDevice_ReturnsTrue) {
+  test_utils::LogCaptureFixture log_capture;
+  viam::sdk::LogSource logger;
+
   // Create a test device
   auto device = std::make_shared<boost::synchronized_value<ViamRSDevice<>>>();
   {
@@ -366,26 +409,67 @@ TEST_F(DeviceTest, DestroyDevice_ValidDevice_ReturnsTrue) {
   }
 
   // Execute
-  MockLogger logger;
   bool result = destroyDevice(device, logger);
 
-  // Verify
+  // Verify function result
   EXPECT_TRUE(result);
   EXPECT_EQ(device, nullptr);
+
+  // Verify logs - device not started, so should NOT have "stopping pipe" log
+  auto all_logs = log_capture.get_records();
+  EXPECT_GT(all_logs.size(), 0) << "Should log destruction process";
+
+  // Verify no errors
+  auto error_logs = log_capture.get_error_logs();
+  EXPECT_EQ(error_logs.size(), 0) << "Should not log errors for valid device";
+
+  // Verify expected INFO logs (destroying, clearing resources, destroyed)
+  // Should NOT contain "stopping pipe" since started=false
+  bool found_destroying = false;
+  bool found_stopping = false;
+  bool found_destroyed = false;
+
+  for (const auto& log : all_logs) {
+    if (log.message.find("destroying") != std::string::npos &&
+        log.message.find("test123") != std::string::npos) {
+      found_destroying = true;
+    }
+    if (log.message.find("stopping pipe") != std::string::npos) {
+      found_stopping = true;
+    }
+    if (log.message.find("device destroyed") != std::string::npos) {
+      found_destroyed = true;
+    }
+  }
+
+  EXPECT_TRUE(found_destroying) << "Should log 'destroying device'";
+  EXPECT_FALSE(found_stopping) << "Should NOT log 'stopping pipe' when device not started";
+  EXPECT_TRUE(found_destroyed) << "Should log 'device destroyed'";
 }
 
 TEST_F(DeviceTest, DestroyDevice_NullDevice_ReturnsFalse) {
+  test_utils::LogCaptureFixture log_capture;
+  viam::sdk::LogSource logger;
+
   std::shared_ptr<boost::synchronized_value<ViamRSDevice<>>> device = nullptr;
 
   // Execute
-  MockLogger logger;
   bool result = destroyDevice(device, logger);
 
-  // Verify
+  // Verify function result
   EXPECT_FALSE(result);
+
+  // Verify error log for null device
+  auto error_logs = log_capture.get_error_logs();
+  ASSERT_EQ(error_logs.size(), 1) << "Should log error for null device";
+  EXPECT_THAT(error_logs[0].message,
+              ::testing::HasSubstr("trying to destroy an unexistent device"));
 }
 
 TEST_F(DeviceTest, DestroyDevice_StartedDevice_StopsAndDestroys) {
+  test_utils::LogCaptureFixture log_capture;
+  viam::sdk::LogSource logger;
+
   // Create a test device that's started
   auto device = std::make_shared<boost::synchronized_value<
       ViamRSDevice<rs2::device, MockPipeline, MockAlign, MockConfig>>>();
@@ -401,12 +485,41 @@ TEST_F(DeviceTest, DestroyDevice_StartedDevice_StopsAndDestroys) {
   }
 
   // Execute
-  MockLogger logger;
   bool result = destroyDevice(device, logger);
 
-  // Verify
+  // Verify function result
   EXPECT_TRUE(result);
   EXPECT_EQ(device, nullptr);
+
+  // Verify logs - device WAS started, so SHOULD have "stopping pipe" log
+  auto all_logs = log_capture.get_records();
+  EXPECT_GT(all_logs.size(), 0) << "Should log stop and destruction process";
+
+  // Verify no errors
+  auto error_logs = log_capture.get_error_logs();
+  EXPECT_EQ(error_logs.size(), 0) << "Should not log errors for valid started device";
+
+  // Verify expected INFO logs (destroying, stopping pipe, clearing, destroyed)
+  bool found_destroying = false;
+  bool found_stopping = false;
+  bool found_destroyed = false;
+
+  for (const auto& log : all_logs) {
+    if (log.message.find("destroying") != std::string::npos &&
+        log.message.find("test123") != std::string::npos) {
+      found_destroying = true;
+    }
+    if (log.message.find("stopping pipe") != std::string::npos) {
+      found_stopping = true;
+    }
+    if (log.message.find("device destroyed") != std::string::npos) {
+      found_destroyed = true;
+    }
+  }
+
+  EXPECT_TRUE(found_destroying) << "Should log 'destroying device'";
+  EXPECT_TRUE(found_stopping) << "Should log 'stopping pipe' when device was started";
+  EXPECT_TRUE(found_destroyed) << "Should log 'device destroyed'";
 }
 
 } // namespace test

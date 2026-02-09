@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "device.hpp"
+#include "log_capture.hpp"
 #include "realsense.hpp"
 #include <viam/sdk/common/instance.hpp>
 #include <viam/sdk/components/camera.hpp>
@@ -9,13 +10,6 @@
 #include <viam/sdk/log/logging.hpp>
 
 #include <librealsense2/rs.hpp>
-
-// Mock logger for testing
-class MockLogger : public viam::sdk::LogSource {
-public:
-  MOCK_METHOD(void, log,
-              (viam::sdk::log_level level, const std::string &message));
-};
 
 namespace realsense {
 namespace device {
@@ -360,6 +354,8 @@ TEST_F(RealsenseTest, DoCommandReturnsEmptyStruct) {
 
   // do_command should return an empty ProtoStruct since it's not implemented
   EXPECT_TRUE(result.empty());
+  // Note: This logs an error via camera's internal logger (VIAM_RESOURCE_LOG)
+  // which uses the Dependencies logger, not directly testable with LogCaptureFixture
 }
 
 TEST_F(RealsenseTest, GetGeometriesReturnsExpectedGeometry) {
