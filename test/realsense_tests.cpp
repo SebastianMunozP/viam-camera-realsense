@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "device.hpp"
+#include "log_capture.hpp"
 #include "realsense.hpp"
 #include <viam/sdk/common/instance.hpp>
 #include <viam/sdk/components/camera.hpp>
@@ -9,13 +10,6 @@
 #include <viam/sdk/log/logging.hpp>
 
 #include <librealsense2/rs.hpp>
-
-// Mock logger for testing
-class MockLogger : public viam::sdk::LogSource {
-public:
-  MOCK_METHOD(void, log,
-              (viam::sdk::log_level level, const std::string &message));
-};
 
 namespace realsense {
 namespace device {
@@ -390,7 +384,8 @@ TEST(RealsenseStaticTest, ModelExists) {
 TEST(RsResourceConfigTest, ConstructorSetsCorrectValues) {
   std::string serial = "test_serial_123";
   std::string name = "test_camera";
-  std::vector<std::string> sensors = {"color", "depth"};
+  std::vector<sensors::SensorType> sensors = {sensors::SensorType::color,
+                                              sensors::SensorType::depth};
   std::optional<int> width = 640;
   std::optional<int> height = 480;
 

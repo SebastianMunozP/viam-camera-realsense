@@ -4,3 +4,4 @@ viam-camera-realsense
 build
 .vscode
 venv
+.venv

@@ -1,14 +1,12 @@
 #pragma once
 
+#include "sensors.hpp"
 #include "time.hpp"
 #include "utils.hpp"
 
 #include <iostream>
 #include <memory>
-#include <mutex>
-#include <optional>
 #include <string>
-#include <unordered_set>
 
 #include <viam/sdk/log/logging.hpp>
 
@@ -22,6 +20,64 @@ namespace device {
 #define VIAM_DEVICE_LOG(logger, level) VIAM_SDK_LOG_IMPL(logger, level)
 
 /********************** UTILITIES ************************/
+
+template <typename SensorT>
+void enableGlobalTimestamp(SensorT &sensor, viam::sdk::LogSource &logger) {
+  if (sensor.supports(RS2_OPTION_GLOBAL_TIME_ENABLED)) {
+    try {
+      auto sensor_type = sensors::get_sensor_type(sensor, logger);
+      if (sensor_type == sensors::SensorType::unknown) {
+        throw std::runtime_error("Unknown sensor type");
+      }
+      sensor.set_option(RS2_OPTION_GLOBAL_TIME_ENABLED, 1.0);
+      VIAM_DEVICE_LOG(logger, info)
+          << "[enableGlobalTimestamp] Enabled Global Timestamp for sensor: "
+          << sensors::sensor_type_to_string(sensor_type, logger);
+    } catch (const std::exception &e) {
+      VIAM_DEVICE_LOG(logger, error)
+          << "[enableGlobalTimestamp] Failed to enable Global Timestamp: "
+          << e.what();
+    }
+  }
+}
+
+template <typename SensorT>
+void disableAutoExposurePriority(SensorT &sensor,
+                                 viam::sdk::LogSource &logger) {
+  try {
+    auto sensor_type = sensors::get_sensor_type(sensor, logger);
+    if (sensor_type == sensors::SensorType::unknown) {
+      throw std::runtime_error("Unknown sensor type");
+    }
+    // Only disable auto-exposure priority for color sensors
+    if (sensor_type != sensors::SensorType::color) {
+      return;
+    }
+    // CRITICAL: Disable auto-exposure priority to maintain frame sync.
+    // When enabled, RGB sensor drops frames to adjust exposure, breaking
+    // temporal alignment with depth (causes 5-20ms timestamp drift).
+    // Tradeoff: slightly worse exposure in changing light conditions,
+    // but tight temporal sync (mostly <5ms) between color and depth.
+    if (sensor.supports(RS2_OPTION_AUTO_EXPOSURE_PRIORITY)) {
+      try {
+        // Disable auto-exposure priority to ensure constant FPS
+        sensor.set_option(RS2_OPTION_AUTO_EXPOSURE_PRIORITY, 0.0);
+        VIAM_DEVICE_LOG(logger, info)
+            << "[disableAutoExposurePriority] Disabled Auto-Exposure Priority "
+               "(constant FPS) for color sensor";
+      } catch (const std::exception &e) {
+        VIAM_DEVICE_LOG(logger, warn) << "[disableAutoExposurePriority] Failed "
+                                         "to disable Auto-Exposure Priority: "
+                                      << e.what();
+      }
+    }
+  } catch (const std::exception &e) {
+    VIAM_DEVICE_LOG(logger, error)
+        << "[disableAutoExposurePriority] Failed to get sensor type: "
+        << e.what();
+  }
+}
+
 template <typename DeviceT>
 std::optional<std::string> getCameraModel(std::shared_ptr<DeviceT> dev) {
   if (not dev->supports(RS2_CAMERA_INFO_NAME)) {
@@ -127,19 +183,29 @@ void frameCallback(
   // With callbacks, all synchronized stream will arrive in a single
   // frameset
   int expected_frame_count = viamConfig.sensors.size();
-  auto frameset = frame.template as<FrameSetT>();
-  if (not frameset or frameset.size() != expected_frame_count) {
+  auto initial_frameset = frame.template as<FrameSetT>();
+  if (not initial_frameset or initial_frameset.size() != expected_frame_count) {
     std::cerr << "[frame_callback] got count other than "
-              << expected_frame_count << ": " << frameset.size() << std::endl;
+              << expected_frame_count << ": " << initial_frameset.size()
+              << std::endl;
     return;
   }
+
+  // Align the frameset if align-to-color is enabled (which it is by default in
+  // our config)
+  // auto frameset = align ? align->process(initial_frameset) :
+  // initial_frameset;
+  auto frameset = initial_frameset;
+
   double nowMs = time::getNowMs();
   auto color_frame = frameset.get_color_frame();
-  if (not color_frame and utils::contains("color", viamConfig.sensors)) {
+  if (not color_frame and
+      utils::contains(sensors::SensorType::color, viamConfig.sensors)) {
     std::cerr << "[frame_callback] no color frame" << std::endl;
     return;
   }
-  if (color_frame and not utils::contains("color", viamConfig.sensors)) {
+  if (color_frame and
+      not utils::contains(sensors::SensorType::color, viamConfig.sensors)) {
     std::cerr << "[frame_callback] received color frame when not expected"
               << std::endl;
     return;
@@ -154,11 +220,13 @@ void frameCallback(
   }
 
   auto depth_frame = frameset.get_depth_frame();
-  if (not depth_frame and utils::contains("depth", viamConfig.sensors)) {
+  if (not depth_frame and
+      utils::contains(sensors::SensorType::depth, viamConfig.sensors)) {
     std::cerr << "[frame_callback] no depth frame" << std::endl;
     return;
   }
-  if (depth_frame and not utils::contains("depth", viamConfig.sensors)) {
+  if (depth_frame and
+      not utils::contains(sensors::SensorType::depth, viamConfig.sensors)) {
     std::cerr << "[frame_callback] received depth frame when not expected"
               << std::endl;
     return;
@@ -224,8 +292,10 @@ createSingleSensorConfig(std::shared_ptr<DeviceT> dev,
 
   typename decltype(sensors)::value_type sensor;
   for (auto &s : sensors) {
-    if (s.template is<SensorT>())
+    if (s.template is<SensorT>()) {
       sensor = s;
+      enableGlobalTimestamp(sensor, logger);
+    }
   }
 
   VIAM_DEVICE_LOG(logger, info)
@@ -274,10 +344,14 @@ std::shared_ptr<ConfigT> createSwD2CAlignConfig(std::shared_ptr<DeviceT> dev,
   typename decltype(sensors)::value_type color_sensor;
   typename decltype(sensors)::value_type depth_sensor;
   for (auto &s : sensors) {
-    if (s.template is<ColorSensorT>())
+    enableGlobalTimestamp(s, logger);
+    if (s.template is<ColorSensorT>()) {
       color_sensor = s;
-    if (s.template is<DepthSensorT>())
+      disableAutoExposurePriority(color_sensor, logger);
+    }
+    if (s.template is<DepthSensorT>()) {
       depth_sensor = s;
+    }
   }
 
   // Get stream profiles
@@ -323,8 +397,8 @@ std::shared_ptr<ConfigT> createConfig(std::shared_ptr<DeviceT> device,
                                       viam::sdk::LogSource &logger) {
   std::shared_ptr<rs2::config> config = nullptr;
 
-  if (utils::contains("color", viamConfig.sensors) and
-      utils::contains("depth", viamConfig.sensors)) {
+  if (utils::contains(sensors::SensorType::color, viamConfig.sensors) and
+      utils::contains(sensors::SensorType::depth, viamConfig.sensors)) {
     VIAM_DEVICE_LOG(logger, info)
         << "[createConfig] Creating config with color and "
            "depth sensors";
@@ -334,14 +408,14 @@ std::shared_ptr<ConfigT> createConfig(std::shared_ptr<DeviceT> device,
             device, viamConfig, logger);
 
   } else if (viamConfig.sensors.size() == 1 &&
-             utils::contains("color", viamConfig.sensors)) {
+             utils::contains(sensors::SensorType::color, viamConfig.sensors)) {
     VIAM_DEVICE_LOG(logger, info)
         << "[createConfig] Creating config with color sensor";
     config = createSingleSensorConfig<DeviceT, ConfigT, ColorSensorT,
                                       VideoStreamProfileT, ViamConfigT>(
         device, viamConfig, logger);
   } else if (viamConfig.sensors.size() == 1 &&
-             utils::contains("depth", viamConfig.sensors)) {
+             utils::contains(sensors::SensorType::depth, viamConfig.sensors)) {
     VIAM_DEVICE_LOG(logger, info)
         << "[createConfig] Creating config with depth sensor";
     config = createSingleSensorConfig<DeviceT, ConfigT, DepthSensorT,
@@ -504,6 +578,7 @@ void startDevice(
                                             viamConfig](auto const &frame) {
       frameCallback(frame, maxFrameAgeMs, frameSetStorage, viamConfig);
     });
+
     dev_ptr->started = true;
   } // End scope for dev_ptr lock
   VIAM_DEVICE_LOG(logger, info)
