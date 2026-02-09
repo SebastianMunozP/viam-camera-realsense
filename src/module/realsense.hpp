@@ -1,6 +1,7 @@
 #pragma once
 #include "device.hpp"
 #include "encoding.hpp"
+#include "sensors.hpp"
 #include "time.hpp"
 #include "utils.hpp"
 #include <viam/sdk/components/camera.hpp>
@@ -101,7 +102,7 @@ private:
 struct RsResourceConfig {
   std::string resource_name{};
   std::string serial_number{};
-  std::vector<std::string> sensors{};
+  std::vector<sensors::SensorType> sensors{};
   std::optional<int> width{};
   std::optional<int> height{};
 
@@ -109,12 +110,12 @@ struct RsResourceConfig {
 
   explicit RsResourceConfig(std::string const &serial_number,
                             std::string const &resource_name,
-                            std::vector<std::string> const &sensors,
+                            std::vector<sensors::SensorType> const &sensors,
                             std::optional<int> width = std::nullopt,
                             std::optional<int> height = std::nullopt)
       : serial_number(serial_number), resource_name(resource_name),
         sensors(sensors), width(width), height(height) {}
-  std::string getMainSensor() const {
+  sensors::SensorType getMainSensor() const {
     if (sensors.empty()) {
       throw std::invalid_argument("sensors list is empty");
     }
@@ -318,22 +319,23 @@ public:
         VIAM_RESOURCE_LOG(error) << "[get_image] no frameset available";
         throw std::runtime_error("no frameset available");
       }
-      if (config_->getMainSensor() == "color") {
+      if (config_->getMainSensor() == sensors::SensorType::color) {
         auto fs = latest_frameset_->get();
         time::throwIfTooOld(
             time::getNowMs(), fs.get_color_frame().get_timestamp(),
             MAX_FRAME_AGE_MS, "no recent color frame: check USB connection");
         VIAM_RESOURCE_LOG(debug) << "[get_image] end";
         return encoding::encodeVideoFrameToResponse(fs.get_color_frame());
-      } else if (config_->getMainSensor() == "depth") {
+      } else if (config_->getMainSensor() == sensors::SensorType::depth) {
         auto fs = latest_frameset_->get();
         time::throwIfTooOld(
             time::getNowMs(), fs.get_depth_frame().get_timestamp(),
             MAX_FRAME_AGE_MS, "no recent depth frame: check USB connection");
         return encoding::encodeDepthFrameToResponse(fs.get_depth_frame());
       } else {
-        throw std::invalid_argument("unknown main sensor: " +
-                                    config_->getMainSensor());
+        throw std::invalid_argument(
+            "unknown main sensor: " +
+            sensors::sensor_type_to_string(config_->getMainSensor()));
       }
 
     } catch (const std::exception &e) {
@@ -373,11 +375,11 @@ public:
       std::string serial_number = config_->serial_number;
       auto fs = latest_frameset_->get();
 
-      std::vector<std::string> sensors = config_->sensors;
+      std::vector<sensors::SensorType> sensors = config_->sensors;
 
       viam::sdk::Camera::image_collection response;
       for (auto const &sensor : sensors) {
-        if (sensor == "color") {
+        if (sensor == sensors::SensorType::color) {
           if (!should_process_color) {
             continue;
           }
@@ -391,7 +393,7 @@ public:
           response.metadata.captured_at = viam::sdk::time_pt{
               std::chrono::duration_cast<std::chrono::nanoseconds>(
                   latestTimestamp)};
-        } else if (sensor == "depth") {
+        } else if (sensor == sensors::SensorType::depth) {
           if (!should_process_depth) {
             continue;
           }
@@ -406,15 +408,16 @@ public:
               std::chrono::duration_cast<std::chrono::nanoseconds>(
                   latestTimestamp)};
         } else {
-          throw std::invalid_argument("unknown sensor: " + sensor);
+          throw std::invalid_argument("unknown sensor: " +
+                                      sensors::sensor_type_to_string(sensor));
         }
       }
 
       // if both color and depth are requested, use the older timestamp of the
       // two
-      if (utils::contains("color", sensors) and
-          utils::contains("depth", sensors) and should_process_color and
-          should_process_depth) {
+      if (utils::contains(sensors::SensorType::color, sensors) and
+          utils::contains(sensors::SensorType::depth, sensors) and
+          should_process_color and should_process_depth) {
         auto const color = fs.get_color_frame();
         auto const depth = fs.get_depth_frame();
         auto const timeDiffMs = static_cast<std::uint64_t>(std::llround(
@@ -514,8 +517,7 @@ public:
         }
 
         data = encoding::encodeRGBPointsToPCD(
-            my_dev->point_cloud_filter->process(fs),
-            logger_);
+            my_dev->point_cloud_filter->process(fs), logger_);
       } // End scope for my_dev lock
 
       if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
@@ -607,7 +609,7 @@ public:
           throw std::invalid_argument(buffer.str());
         }
 
-        if (config_->getMainSensor() == "color") {
+        if (config_->getMainSensor() == sensors::SensorType::color) {
           auto color_stream = my_dev->pipe->get_active_profile()
                                   .get_stream(RS2_STREAM_COLOR)
                                   .as<rs2::video_stream_profile>();
@@ -616,7 +618,7 @@ public:
           }
           auto props = color_stream.get_intrinsics();
           fillResp(response, props);
-        } else if (config_->getMainSensor() == "depth") {
+        } else if (config_->getMainSensor() == sensors::SensorType::depth) {
           auto depth_stream = my_dev->pipe->get_active_profile()
                                   .get_stream(RS2_STREAM_DEPTH)
                                   .as<rs2::video_stream_profile>();
@@ -904,9 +906,15 @@ private:
       serial = attrs["serial_number"].get_unchecked<std::string>();
     }
     auto sensors_list = attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
-    std::vector<std::string> sensors;
+    std::vector<sensors::SensorType> sensors;
     for (const auto &sensor : sensors_list) {
-      sensors.push_back(sensor.get_unchecked<std::string>());
+      auto sensor_type =
+          sensors::string_to_sensor_type(sensor.get_unchecked<std::string>());
+      if (sensor_type == sensors::SensorType::unknown) {
+        throw std::runtime_error("Invalid sensor type: " +
+                                 sensor.get_unchecked<std::string>());
+      }
+      sensors.push_back(sensor_type);
     }
     std::optional<int> width;
     if (attrs.count("width_px")) {

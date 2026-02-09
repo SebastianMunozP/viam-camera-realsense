@@ -5,9 +5,9 @@
 
 namespace utils {
 
-template <typename ContainerT>
-inline bool contains(std::string const &str, ContainerT const &container) {
-  return boost::range::find(container, str) != boost::end(container);
+template <typename ElementT, typename ContainerT>
+inline bool contains(ElementT const &element, ContainerT const &container) {
+  return boost::range::find(container, element) != boost::end(container);
 }
 
 // Helper function to create a safe view from RealSense frame data
