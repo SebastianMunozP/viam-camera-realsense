@@ -1,3 +1,4 @@
+#include <boost/algorithm/string.hpp>
 #include <librealsense2/rs.hpp>
 
 #pragma once
@@ -19,9 +20,10 @@ std::string sensor_type_to_string(SensorType const sensor_type) {
 }
 
 SensorType string_to_sensor_type(std::string const &sensor_type) {
-  if (sensor_type == "depth") {
+  auto const sensor_type_lower = boost::algorithm::to_lower_copy(sensor_type);
+  if (sensor_type_lower == "depth") {
     return SensorType::depth;
-  } else if (sensor_type == "color") {
+  } else if (sensor_type_lower == "color") {
     return SensorType::color;
   }
   return SensorType::unknown;
