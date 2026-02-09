@@ -431,9 +431,16 @@ public:
         // level and always at debug level
         if (timeDiffMs > MAX_FRAME_SET_TIME_DIFF_MS) {
           std::uint64_t now_ms = time::getNowMs();
-          if (now_ms - last_timestamp_warning_log_time_ms_ >
-              TIMESTAMP_WARNING_LOG_INTERVAL_MS) {
-            last_timestamp_warning_log_time_ms_ = now_ms;
+          bool should_warn = false;
+          {
+            auto guard = last_timestamp_warning_log_time_ms_.synchronize();
+            if (now_ms - *guard > TIMESTAMP_WARNING_LOG_INTERVAL_MS) {
+              *guard = now_ms;
+              should_warn = true;
+            }
+          }
+
+          if (should_warn) {
             VIAM_RESOURCE_LOG(warn)
                 << "color and depth timestamps differ by " << timeDiffMs
                 << "ms, using older timestamp. "
@@ -769,7 +776,7 @@ private:
   std::shared_ptr<boost::synchronized_value<std::unordered_set<std::string>>>
       assigned_serials_;
   boost::synchronized_value<bool> physical_camera_assigned_;
-  std::uint64_t last_timestamp_warning_log_time_ms_{};
+  boost::synchronized_value<std::uint64_t> last_timestamp_warning_log_time_ms_;
 
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<SynchronizedContextT>> realsense_ctx_;
