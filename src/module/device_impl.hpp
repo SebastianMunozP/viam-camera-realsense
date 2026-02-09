@@ -175,12 +175,11 @@ void printDeviceInfo(DeviceT const &dev, viam::sdk::LogSource &logger) {
 
 /********************** CALLBACKS ************************/
 
-template <typename FrameT, typename FrameSetT, typename ViamConfigT,
-          typename AlignT = rs2::align>
+template <typename FrameT, typename FrameSetT, typename ViamConfigT>
 void frameCallback(
     FrameT const &frame, std::uint64_t const maxFrameAgeMs,
     std::shared_ptr<boost::synchronized_value<FrameSetT>> &frame_set_,
-    ViamConfigT const &viamConfig, std::shared_ptr<AlignT> align) {
+    ViamConfigT const &viamConfig) {
   // With callbacks, all synchronized stream will arrive in a single
   // frameset
   int expected_frame_count = viamConfig.sensors.size();
@@ -575,11 +574,9 @@ void startDevice(
     }
 
     dev_ptr->config->enable_device(serialNumber);
-    auto align = dev_ptr->align;
     dev_ptr->pipe->start(*dev_ptr->config, [maxFrameAgeMs, &frameSetStorage,
-                                            viamConfig,
-                                            align](auto const &frame) {
-      frameCallback(frame, maxFrameAgeMs, frameSetStorage, viamConfig, align);
+                                            viamConfig](auto const &frame) {
+      frameCallback(frame, maxFrameAgeMs, frameSetStorage, viamConfig);
     });
 
     dev_ptr->started = true;
