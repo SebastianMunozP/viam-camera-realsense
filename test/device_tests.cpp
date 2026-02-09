@@ -107,7 +107,9 @@ protected:
     test_config_ =
         RsResourceConfig(serial_number_, // serial_number
                          "camera1",      // name
-                         std::vector<realsense::sensors::SensorType>{realsense::sensors::SensorType::color, realsense::sensors::SensorType::depth}, // sensors
+                         std::vector<realsense::sensors::SensorType>{
+                             realsense::sensors::SensorType::color,
+                             realsense::sensors::SensorType::depth}, // sensors
                          std::optional<int>{640},                    // width
                          std::optional<int>{480}                     // height
         );

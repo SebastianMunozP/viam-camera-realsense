@@ -391,7 +391,7 @@ TEST(RsResourceConfigTest, ConstructorSetsCorrectValues) {
   std::string serial = "test_serial_123";
   std::string name = "test_camera";
   std::vector<sensors::SensorType> sensors = {sensors::SensorType::color,
-                                             sensors::SensorType::depth};
+                                              sensors::SensorType::depth};
   std::optional<int> width = 640;
   std::optional<int> height = 480;
 

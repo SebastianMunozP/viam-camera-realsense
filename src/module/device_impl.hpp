@@ -25,11 +25,14 @@ template <typename SensorT>
 void enableGlobalTimestamp(SensorT &sensor, viam::sdk::LogSource &logger) {
   if (sensor.supports(RS2_OPTION_GLOBAL_TIME_ENABLED)) {
     try {
-      auto sensor_type = sensors::get_sensor_type(sensor);
+      auto sensor_type = sensors::get_sensor_type(sensor, logger);
+      if (sensor_type == sensors::SensorType::unknown) {
+        throw std::runtime_error("Unknown sensor type");
+      }
       sensor.set_option(RS2_OPTION_GLOBAL_TIME_ENABLED, 1.0);
       VIAM_DEVICE_LOG(logger, info)
           << "[enableGlobalTimestamp] Enabled Global Timestamp for sensor: "
-          << sensors::sensor_type_to_string(sensor_type);
+          << sensors::sensor_type_to_string(sensor_type, logger);
     } catch (const std::exception &e) {
       VIAM_DEVICE_LOG(logger, error)
           << "[enableGlobalTimestamp] Failed to enable Global Timestamp: "
@@ -41,27 +44,37 @@ void enableGlobalTimestamp(SensorT &sensor, viam::sdk::LogSource &logger) {
 template <typename SensorT>
 void disableAutoExposurePriority(SensorT &sensor,
                                  viam::sdk::LogSource &logger) {
-  // Only disable auto-exposure priority for color sensors
-  if (sensors::get_sensor_type(sensor) != sensors::SensorType::color) {
-    return;
-  }
-  // CRITICAL: Disable auto-exposure priority to maintain frame sync.
-  // When enabled, RGB sensor drops frames to adjust exposure, breaking
-  // temporal alignment with depth (causes 5-20ms timestamp drift).
-  // Tradeoff: slightly worse exposure in changing light conditions,
-  // but tight temporal sync (mostly <5ms) between color and depth.
-  if (sensor.supports(RS2_OPTION_AUTO_EXPOSURE_PRIORITY)) {
-    try {
-      // Disable auto-exposure priority to ensure constant FPS
-      sensor.set_option(RS2_OPTION_AUTO_EXPOSURE_PRIORITY, 0.0);
-      VIAM_DEVICE_LOG(logger, info)
-          << "[disableAutoExposurePriority] Disabled Auto-Exposure Priority "
-             "(constant FPS) for color sensor";
-    } catch (const std::exception &e) {
-      VIAM_DEVICE_LOG(logger, warn) << "[disableAutoExposurePriority] Failed "
-                                       "to disable Auto-Exposure Priority: "
-                                    << e.what();
+  try {
+    auto sensor_type = sensors::get_sensor_type(sensor, logger);
+    if (sensor_type == sensors::SensorType::unknown) {
+      throw std::runtime_error("Unknown sensor type");
     }
+    // Only disable auto-exposure priority for color sensors
+    if (sensor_type != sensors::SensorType::color) {
+      return;
+    }
+    // CRITICAL: Disable auto-exposure priority to maintain frame sync.
+    // When enabled, RGB sensor drops frames to adjust exposure, breaking
+    // temporal alignment with depth (causes 5-20ms timestamp drift).
+    // Tradeoff: slightly worse exposure in changing light conditions,
+    // but tight temporal sync (mostly <5ms) between color and depth.
+    if (sensor.supports(RS2_OPTION_AUTO_EXPOSURE_PRIORITY)) {
+      try {
+        // Disable auto-exposure priority to ensure constant FPS
+        sensor.set_option(RS2_OPTION_AUTO_EXPOSURE_PRIORITY, 0.0);
+        VIAM_DEVICE_LOG(logger, info)
+            << "[disableAutoExposurePriority] Disabled Auto-Exposure Priority "
+               "(constant FPS) for color sensor";
+      } catch (const std::exception &e) {
+        VIAM_DEVICE_LOG(logger, warn) << "[disableAutoExposurePriority] Failed "
+                                         "to disable Auto-Exposure Priority: "
+                                      << e.what();
+      }
+    }
+  } catch (const std::exception &e) {
+    VIAM_DEVICE_LOG(logger, error)
+        << "[disableAutoExposurePriority] Failed to get sensor type: "
+        << e.what();
   }
 }
 
