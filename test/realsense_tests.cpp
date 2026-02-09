@@ -354,8 +354,6 @@ TEST_F(RealsenseTest, DoCommandReturnsEmptyStruct) {
 
   // do_command should return an empty ProtoStruct since it's not implemented
   EXPECT_TRUE(result.empty());
-  // Note: This logs an error via camera's internal logger (VIAM_RESOURCE_LOG)
-  // which uses the Dependencies logger, not directly testable with LogCaptureFixture
 }
 
 TEST_F(RealsenseTest, GetGeometriesReturnsExpectedGeometry) {
