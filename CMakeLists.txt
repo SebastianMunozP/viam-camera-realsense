@@ -23,12 +23,19 @@ find_package(Threads REQUIRED)
 find_package(realsense2 REQUIRED)
 find_package(viam-cpp-sdk REQUIRED)
 find_package(libjpeg-turbo CONFIG REQUIRED)
+find_package(CURL REQUIRED)
+find_package(libzip REQUIRED)
 find_package(PkgConfig REQUIRED)
 
-add_library(viamrealsense src/module/encoding.cpp)
+add_library(viamrealsense
+    src/module/encoding.cpp
+    src/module/zip_utils.cpp
+    src/module/download_utils.cpp
+    src/module/firmware_update.cpp
+)
 target_include_directories(viamrealsense
     PUBLIC src/module
-    
+
 )
 
 target_compile_features(viamrealsense PUBLIC
@@ -39,6 +46,8 @@ target_link_libraries(viamrealsense
         viam-cpp-sdk::viamsdk
         realsense2::realsense2
         libjpeg-turbo::turbojpeg-static
+        CURL::libcurl
+        libzip::zip
     PRIVATE
         ${CMAKE_DL_LIBS}
 )

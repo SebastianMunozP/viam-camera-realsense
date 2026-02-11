@@ -1,18 +1,23 @@
 #pragma once
 #include "device.hpp"
+#include "download_utils.hpp"
 #include "encoding.hpp"
+#include "firmware_update.hpp"
 #include "sensors.hpp"
 #include "time.hpp"
 #include "utils.hpp"
+#include "zip_utils.hpp"
 #include <viam/sdk/components/camera.hpp>
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
 
 #include <librealsense2/rs.hpp>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -132,7 +137,7 @@ struct DeviceFunctions {
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
       viam::sdk::LogSource &)>
       destroyDevice;
-  std::function<void(const rs2::device &, viam::sdk::LogSource &)>
+  std::function<void(std::shared_ptr<rs2::device>, viam::sdk::LogSource &)>
       printDeviceInfo;
   std::function<
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>(
@@ -305,9 +310,29 @@ public:
 
   viam::sdk::ProtoStruct
   do_command(const viam::sdk::ProtoStruct &command) override {
-    VIAM_RESOURCE_LOG(error) << "do_command not implemented";
+    VIAM_RESOURCE_LOG(info) << "[do_command] Received command";
 
-    return viam::sdk::ProtoStruct();
+    try {
+      // Check if command contains "firmware_update"
+      if (command.count("firmware_update")) {
+        return handleFirmwareUpdate(command);
+      }
+      if (command.count("get_info")) {
+        return handleGetInfo(command);
+      }
+
+      VIAM_RESOURCE_LOG(error) << "[do_command] Unknown command";
+      viam::sdk::ProtoStruct response;
+      response["error"] =
+          "Unknown command. Supported commands: firmware_update";
+      return response;
+
+    } catch (const std::exception &e) {
+      VIAM_RESOURCE_LOG(error) << "[do_command] Error: " << e.what();
+      viam::sdk::ProtoStruct response;
+      response["error"] = std::string("Command failed: ") + e.what();
+      return response;
+    }
   }
 
   viam::sdk::Camera::raw_image
@@ -779,6 +804,7 @@ private:
       assigned_serials_;
   boost::synchronized_value<bool> physical_camera_assigned_;
   boost::synchronized_value<std::uint64_t> last_timestamp_warning_log_time_ms_;
+  boost::synchronized_value<bool> firmware_update_in_progress_;
 
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<SynchronizedContextT>> realsense_ctx_;
@@ -786,6 +812,14 @@ private:
   void deviceChangedCallback(rs2::event_information &info) {
     std::cout << "[deviceChangedCallback] Device connection status changed"
               << std::endl;
+
+    // Skip callback if firmware update is in progress
+    if (firmware_update_in_progress_.get()) {
+      VIAM_RESOURCE_LOG(info) << "[deviceChangedCallback] Ignoring device "
+                                 "change during firmware update";
+      return;
+    }
+
     try {
       std::string const required_serial_number = config_->serial_number;
       { // Begin scope for current_device lock
@@ -818,6 +852,222 @@ private:
     }
   }
 
+  // Firmware update helper methods (now in separate modules)
+
+  viam::sdk::ProtoStruct
+  handleFirmwareUpdate(const viam::sdk::ProtoStruct &command) {
+    VIAM_RESOURCE_LOG(info)
+        << "[handleFirmwareUpdate] Starting firmware update";
+
+    viam::sdk::ProtoStruct response;
+
+    // Set flag to prevent device change callback from interfering
+    firmware_update_in_progress_ = true;
+
+    try {
+      if (!command.at("firmware_update").is_a<viam::sdk::ProtoStruct>()) {
+        response["success"] = false;
+        response["error"] =
+            std::string("Firmware update command is not a ProtoStruct");
+        VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update "
+                                    "command is not a ProtoStruct";
+        firmware_update_in_progress_ = false;
+        return response;
+      }
+      // Extract firmware update parameters
+      auto fw_update_cmd =
+          command.at("firmware_update").get<viam::sdk::ProtoStruct>();
+
+      // Check if device is available
+      if (!device_) {
+        response["success"] = false;
+        response["error"] =
+            std::string("Firmware update failed: No device available");
+        VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update "
+                                    "failed: No device available";
+        firmware_update_in_progress_ = false;
+        return response;
+      }
+
+      // Get firmware data - either from URL or local file
+      std::vector<uint8_t> firmware_data;
+
+      if (fw_update_cmd->count("firmware_url")) {
+        // Download from URL
+        std::string firmware_url =
+            *fw_update_cmd->at("firmware_url").get<std::string>();
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Firmware URL: " << firmware_url;
+        firmware_data =
+            viam::realsense::download_utils::downloadFirmwareFromURL(
+                firmware_url, logger_);
+
+        // Check if it's a ZIP file and extract if needed
+        if (viam::realsense::zip_utils::isZipFile(firmware_data)) {
+          VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Detected ZIP "
+                                     "file, extracting .bin file";
+          firmware_data = viam::realsense::zip_utils::extractBinFromZip(
+              firmware_data, logger_);
+        } else {
+          VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware "
+                                   "update failed: firmware data is not a ZIP "
+                                    "file";
+          response["success"] = false;
+          response["error"] =
+              std::string("Firmware update failed: firmware data is not a ZIP "
+                          "file");
+          firmware_update_in_progress_ = false;
+          return response;
+        }
+      } else {
+        response["success"] = false;
+        response["error"] =
+            std::string("Firmware update failed: firmware_url is required");
+        firmware_update_in_progress_ = false;
+        return response;
+      }
+
+      VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Firmware data size: "
+                              << firmware_data.size() << " bytes";
+
+      // Stop the device before firmware update
+      VIAM_RESOURCE_LOG(info)
+          << "[handleFirmwareUpdate] Stopping device before update";
+      if (!device_funcs_.stopDevice(device_, this->logger_)) {
+        response["success"] = false;
+        response["error"] = std::string("Firmware update failed: Failed to "
+                                        "stop device before firmware update");
+        firmware_update_in_progress_ = false;
+        return response;
+      }
+
+      // Get the rs2::device and check if it supports firmware updates
+      std::shared_ptr<rs2::device> rs_device;
+      {
+        auto device_guard = device_->synchronize();
+        rs_device = device_guard->device;
+      }
+
+      if (!rs_device) {
+        response["success"] = false;
+        response["error"] =
+            std::string("Firmware update failed: Device pointer is null");
+        firmware_update_in_progress_ = false;
+        return response;
+      }
+
+      // Check if device is updatable
+      if (!rs_device->is<rs2::updatable>()) {
+        response["success"] = false;
+        response["error"] = std::string(
+            "Firmware update failed: Device does not support firmware updates");
+        firmware_update_in_progress_ = false;
+        return response;
+      }
+
+      auto updatable_device = rs_device->as<rs2::updatable>();
+
+      // Check firmware compatibility
+      VIAM_RESOURCE_LOG(info)
+          << "[handleFirmwareUpdate] Checking firmware compatibility";
+      if (!updatable_device.check_firmware_compatibility(firmware_data)) {
+        response["success"] = false;
+        response["error"] = std::string("Firmware update failed: Firmware is "
+                                        "not compatible with this device");
+        firmware_update_in_progress_ = false;
+        return response;
+      }
+
+      // Enter update state
+      VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Entering update state";
+      updatable_device.enter_update_state();
+
+      // Wait for device to reconnect in update mode
+      VIAM_RESOURCE_LOG(info)
+          << "[handleFirmwareUpdate] Waiting for device to enter update mode";
+      std::this_thread::sleep_for(std::chrono::seconds(5));
+
+      // Query for update device
+      auto device_list = realsense_ctx_->query_devices();
+      rs2::update_device update_dev;
+      bool found_update_device = false;
+
+      for (size_t i = 0; i < device_list.size(); i++) {
+        auto dev = device_list[i];
+        if (dev.template is<rs2::update_device>()) {
+          update_dev = dev.template as<rs2::update_device>();
+          found_update_device = true;
+          VIAM_RESOURCE_LOG(info)
+              << "[handleFirmwareUpdate] Found update device";
+          break;
+        }
+      }
+
+      if (!found_update_device) {
+        response["success"] = false;
+        response["error"] = std::string(
+            "Firmware update failed: Failed to find device in update mode");
+        firmware_update_in_progress_ = false;
+        return response;
+      }
+
+      // Perform the firmware update with progress tracking
+      VIAM_RESOURCE_LOG(info)
+          << "[handleFirmwareUpdate] Starting firmware update process";
+      update_dev.update(firmware_data, [this](const float progress) {
+        int percent = static_cast<int>(progress * 100);
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Progress: " << percent << "%";
+      });
+
+      VIAM_RESOURCE_LOG(info)
+          << "[handleFirmwareUpdate] Firmware update completed successfully";
+
+      // Reset device state to allow reinitialization after reboot
+      VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Resetting device "
+                                 "state for reinitialization";
+      if (device_) {
+        { // Begin scope for device_guard lock
+          auto device_guard = device_->synchronize();
+          { // Begin scope for serials_guard lock
+            auto serials_guard = assigned_serials_->synchronize();
+            serials_guard->erase(device_guard->serial_number);
+          } // End scope for serials_guard lock
+        } // End scope for device_guard lock
+      }
+      device_ = nullptr;
+      physical_camera_assigned_ = false;
+
+      response["success"] = true;
+      response["message"] = "Firmware update completed successfully. Device "
+                            "will reconnect shortly.";
+
+    } catch (const std::exception &e) {
+      VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Error: " << e.what();
+      response["success"] = false;
+      response["error"] = std::string("Firmware update failed: ") + e.what();
+    }
+
+    // Clear flag to re-enable device change callback
+    firmware_update_in_progress_ = false;
+    VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Firmware update process "
+                               "finished, re-enabling device change callback";
+
+    return response;
+  }
+
+  viam::sdk::ProtoStruct handleGetInfo(const viam::sdk::ProtoStruct &command) {
+    viam::sdk::ProtoStruct response;
+
+    auto device_guard = device_->synchronize();
+    auto const device_info =
+        device::getDeviceInfo(device_guard->device, logger_);
+    for (auto const &[key, value] : device_info) {
+      response[key] = value;
+    }
+    return response;
+  }
+
   template <typename DeviceListT>
   bool assign_and_initialize_device(DeviceListT const &device_list) {
     if (physical_camera_assigned_) {
@@ -845,9 +1095,9 @@ private:
                                     "Successfully accessed device at index "
                                  << i;
 
-        device_funcs_.printDeviceInfo(dev, this->logger_);
-
         auto dev_ptr = std::make_shared<std::decay_t<decltype(dev)>>(dev);
+        device_funcs_.printDeviceInfo(dev_ptr, this->logger_);
+
         std::string connected_device_serial_number =
             dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
@@ -953,8 +1203,9 @@ private:
               return device::destroyDevice(device, logger);
             },
         .printDeviceInfo =
-            [](const auto &dev, viam::sdk::LogSource &logger) {
-              device::printDeviceInfo(dev, logger);
+            [](std::shared_ptr<rs2::device> dev_ptr,
+               viam::sdk::LogSource &logger) {
+              device::printDeviceInfo(dev_ptr, logger);
             },
         .createDevice =
             [](std::string const &serial, std::shared_ptr<rs2::device> dev_ptr,

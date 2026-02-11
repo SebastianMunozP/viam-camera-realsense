@@ -98,70 +98,143 @@ std::optional<std::string> getCameraModel(std::shared_ptr<DeviceT> dev) {
 }
 
 template <typename DeviceT>
-void printDeviceInfo(DeviceT const &dev, viam::sdk::LogSource &logger) {
+std::unordered_map<std::string, std::string>
+getDeviceInfo(std::shared_ptr<DeviceT> dev, viam::sdk::LogSource &logger) {
+  std::unordered_map<std::string, std::string> device_info;
   try {
     std::stringstream info;
-    if (dev.supports(RS2_CAMERA_INFO_NAME)) {
+    if (dev->supports(RS2_CAMERA_INFO_NAME)) {
+      device_info["name"] = dev->get_info(RS2_CAMERA_INFO_NAME);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
+      device_info["serial_number"] =
+          dev->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_PRODUCT_LINE)) {
+      device_info["product_line"] = dev->get_info(RS2_CAMERA_INFO_PRODUCT_LINE);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_PRODUCT_ID)) {
+      device_info["product_id"] = dev->get_info(RS2_CAMERA_INFO_PRODUCT_ID);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
+      device_info["usb_type_descriptor"] =
+          dev->get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_FIRMWARE_VERSION)) {
+      device_info["firmware_version"] =
+          dev->get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
+      device_info["recommended_firmware_version"] =
+          dev->get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
+      device_info["firmware_update_id"] =
+          dev->get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_PHYSICAL_PORT)) {
+      device_info["physical_port"] =
+          dev->get_info(RS2_CAMERA_INFO_PHYSICAL_PORT);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_DEBUG_OP_CODE)) {
+      device_info["debug_op_code"] =
+          dev->get_info(RS2_CAMERA_INFO_DEBUG_OP_CODE);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_ADVANCED_MODE)) {
+      device_info["advanced_mode"] =
+          dev->get_info(RS2_CAMERA_INFO_ADVANCED_MODE);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_CAMERA_LOCKED)) {
+      device_info["camera_locked"] =
+          dev->get_info(RS2_CAMERA_INFO_CAMERA_LOCKED);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER)) {
+      device_info["asic_serial_number"] =
+          dev->get_info(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_DFU_DEVICE_PATH)) {
+      device_info["dfu_device_path"] =
+          dev->get_info(RS2_CAMERA_INFO_DFU_DEVICE_PATH);
+    }
+    if (dev->supports(RS2_CAMERA_INFO_IP_ADDRESS)) {
+      device_info["ip_address"] = dev->get_info(RS2_CAMERA_INFO_IP_ADDRESS);
+    }
+  } catch (const std::exception &e) {
+    VIAM_DEVICE_LOG(logger, error)
+        << "[printDeviceInfo] Failed to retrieve device info with error: "
+        << e.what()
+        << ". Device may be in an invalid state or have firmware compatibility "
+           "issues.";
+  }
+  return device_info;
+}
+
+template <typename DeviceT>
+void printDeviceInfo(std::shared_ptr<DeviceT> dev_ptr,
+                     viam::sdk::LogSource &logger) {
+  try {
+    auto const device_info = getDeviceInfo(dev_ptr, logger);
+    std::stringstream info;
+    if (device_info.count("name")) {
       info << "DeviceInfo:\n"
-           << "  Name:                           "
-           << dev.get_info(RS2_CAMERA_INFO_NAME) << std::endl;
-    }
-    if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
-      info << "  Serial Number:                  "
-           << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
-    }
-    if (dev.supports(RS2_CAMERA_INFO_PRODUCT_LINE)) {
-      info << "  Product Line:                   "
-           << dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE) << std::endl;
-    }
-    if (dev.supports(RS2_CAMERA_INFO_PRODUCT_ID)) {
-      info << "  Product ID:                      "
-           << dev.get_info(RS2_CAMERA_INFO_PRODUCT_ID) << std::endl;
-    }
-    if (dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
-      info << "  USB Type Descriptor:            "
-           << dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR) << std::endl;
-    }
-    if (dev.supports(RS2_CAMERA_INFO_FIRMWARE_VERSION)) {
-      info << "  Firmware Version:               "
-           << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION) << std::endl;
-    }
-    if (dev.supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
-      info << "  Recommended Firmware Version:   "
-           << dev.get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)
+           << "  Name:                           " << device_info.at("name")
            << std::endl;
     }
-    if (dev.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
-      info << "  Firmware Update ID:   "
-           << dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID) << std::endl;
+    if (device_info.count("serial_number")) {
+      info << "  Serial Number:                  "
+           << device_info.at("serial_number") << std::endl;
     }
-    if (dev.supports(RS2_CAMERA_INFO_PHYSICAL_PORT)) {
-      info << "  Physical Port:   "
-           << dev.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT) << std::endl;
+    if (device_info.count("product_line")) {
+      info << "  Product Line:                   "
+           << device_info.at("product_line") << std::endl;
     }
-    if (dev.supports(RS2_CAMERA_INFO_DEBUG_OP_CODE)) {
-      info << "  Debug OP Code:   "
-           << dev.get_info(RS2_CAMERA_INFO_DEBUG_OP_CODE) << std::endl;
+    if (device_info.count("product_id")) {
+      info << "  Product ID:                      "
+           << device_info.at("product_id") << std::endl;
     }
-    if (dev.supports(RS2_CAMERA_INFO_ADVANCED_MODE)) {
-      info << "  Advanced Mode:   "
-           << dev.get_info(RS2_CAMERA_INFO_ADVANCED_MODE) << std::endl;
+    if (device_info.count("usb_type_descriptor")) {
+      info << "  USB Type Descriptor:            "
+           << device_info.at("usb_type_descriptor") << std::endl;
     }
-    if (dev.supports(RS2_CAMERA_INFO_CAMERA_LOCKED)) {
-      info << "  Camera Locked:   "
-           << dev.get_info(RS2_CAMERA_INFO_CAMERA_LOCKED) << std::endl;
+    if (device_info.count("firmware_version")) {
+      info << "  Firmware Version:               "
+           << device_info.at("firmware_version") << std::endl;
     }
-    if (dev.supports(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER)) {
+    if (device_info.count("recommended_firmware_version")) {
+      info << "  Recommended Firmware Version:   "
+           << device_info.at("recommended_firmware_version") << std::endl;
+    }
+    if (device_info.count("firmware_update_id")) {
+      info << "  Firmware Update ID:   " << device_info.at("firmware_update_id")
+           << std::endl;
+    }
+    if (device_info.count("physical_port")) {
+      info << "  Physical Port:   " << device_info.at("physical_port")
+           << std::endl;
+    }
+    if (device_info.count("debug_op_code")) {
+      info << "  Debug OP Code:   " << device_info.at("debug_op_code")
+           << std::endl;
+    }
+    if (device_info.count("advanced_mode")) {
+      info << "  Advanced Mode:   " << device_info.at("advanced_mode")
+           << std::endl;
+    }
+    if (device_info.count("camera_locked")) {
+      info << "  Camera Locked:   " << device_info.at("camera_locked")
+           << std::endl;
+    }
+    if (device_info.count("asic_serial_number")) {
       info << "  ASIC Serial Number:             "
-           << dev.get_info(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER) << std::endl;
+           << device_info.at("asic_serial_number") << std::endl;
     }
-    if (dev.supports(RS2_CAMERA_INFO_DFU_DEVICE_PATH)) {
+    if (device_info.count("dfu_device_path")) {
       info << "  DFU Device Path:            "
-           << dev.get_info(RS2_CAMERA_INFO_DFU_DEVICE_PATH) << std::endl;
+           << device_info.at("dfu_device_path") << std::endl;
     }
-    if (dev.supports(RS2_CAMERA_INFO_IP_ADDRESS)) {
-      info << "  IP Address:            "
-           << dev.get_info(RS2_CAMERA_INFO_IP_ADDRESS) << std::endl;
+    if (device_info.count("ip_address")) {
+      info << "  IP Address:            " << device_info.at("ip_address")
+           << std::endl;
     }
     VIAM_DEVICE_LOG(logger, info) << info.str();
   } catch (const std::exception &e) {

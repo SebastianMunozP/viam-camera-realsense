@@ -2,6 +2,11 @@ name: Publish Docker
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: false
+        default: 'main'
   push:
     branches:
       - 'main'
