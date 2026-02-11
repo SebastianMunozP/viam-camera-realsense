@@ -51,7 +51,7 @@ public:
       bool, destroyDevice,
       (std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &),
       ());
-  MOCK_METHOD(void, printDeviceInfo, (std::shared_ptr<rs2::device>, viam::sdk::LogSource &), ());
+  MOCK_METHOD(void, printDeviceInfo, (const rs2::device &), ());
   MOCK_METHOD(std::shared_ptr<device::ViamRSDevice<>>, createDevice,
               (const std::string &, std::shared_ptr<rs2::device>,
                const std::unordered_set<std::string> &,
@@ -89,8 +89,8 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
         return mock->destroyDevice(device);
       },
       .printDeviceInfo =
-          [mock](std::shared_ptr<rs2::device> dev, viam::sdk::LogSource &logger) {
-            mock->printDeviceInfo(dev, logger);
+          [mock](const auto &dev, viam::sdk::LogSource &) {
+            mock->printDeviceInfo(dev);
           },
       .createDevice =
           [mock](const std::string &serial,
@@ -149,9 +149,8 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
         return true;
       },
       .printDeviceInfo =
-          [](std::shared_ptr<rs2::device> dev, viam::sdk::LogSource &logger) {
+          [](const auto &dev, viam::sdk::LogSource &) {
             std::cout << "Mock: printDeviceInfo called" << std::endl;
-            // Note: Can't call get_info() on mock rs2::device as it requires valid internal handle
           },
       .createDevice =
           [](const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
@@ -426,7 +425,7 @@ TEST_F(RealsenseTest, ReconfigureWithSameSerialNumber_StrictOrdering) {
     InSequence seq;
 
     // Constructor sequence
-    EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_, _)).Times(1);
+    EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_)).Times(1);
     EXPECT_CALL(*mock_device_funcs, createDevice("test_device_123456", _, _, _))
         .Times(1)
         .WillOnce(Return(mock_device_1)); // Return a valid mock device
@@ -495,7 +494,7 @@ TEST_F(RealsenseTest, ReconfigureWithNewSerialNumber_StrictOrdering) {
     InSequence seq;
 
     // Constructor sequence
-    EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_, _)).Times(1);
+    EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_)).Times(1);
     EXPECT_CALL(*mock_device_funcs, createDevice("test_device_123456", _, _, _))
         .Times(1)
         .WillOnce(Return(mock_device_1)); // Return a valid mock device
@@ -510,7 +509,7 @@ TEST_F(RealsenseTest, ReconfigureWithNewSerialNumber_StrictOrdering) {
     EXPECT_CALL(*mock_device_funcs, destroyDevice(_))
         .Times(1)
         .WillOnce(Return(true));
-    EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_, _)).Times(1);
+    EXPECT_CALL(*mock_device_funcs, printDeviceInfo(_)).Times(1);
     EXPECT_CALL(*mock_device_funcs, createDevice("new_device_789", _, _, _))
         .Times(1)
         .WillOnce(Return(mock_device_2)); // Return a valid mock device

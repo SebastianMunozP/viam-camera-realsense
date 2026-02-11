@@ -317,9 +317,6 @@ public:
       if (command.count("firmware_update")) {
         return handleFirmwareUpdate(command);
       }
-      if (command.count("get_info")) {
-        return handleGetInfo(command);
-      }
 
       VIAM_RESOURCE_LOG(error) << "[do_command] Unknown command";
       viam::sdk::ProtoStruct response;
@@ -1056,18 +1053,6 @@ private:
     return response;
   }
 
-  viam::sdk::ProtoStruct handleGetInfo(const viam::sdk::ProtoStruct &command) {
-    viam::sdk::ProtoStruct response;
-
-    auto device_guard = device_->synchronize();
-    auto const device_info =
-        device::getDeviceInfo(device_guard->device, logger_);
-    for (auto const &[key, value] : device_info) {
-      response[key] = value;
-    }
-    return response;
-  }
-
   template <typename DeviceListT>
   bool assign_and_initialize_device(DeviceListT const &device_list) {
     if (physical_camera_assigned_) {
@@ -1096,7 +1081,6 @@ private:
                                  << i;
 
         auto dev_ptr = std::make_shared<std::decay_t<decltype(dev)>>(dev);
-        device_funcs_.printDeviceInfo(dev_ptr, this->logger_);
 
         std::string connected_device_serial_number =
             dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
@@ -1205,7 +1189,7 @@ private:
         .printDeviceInfo =
             [](std::shared_ptr<rs2::device> dev_ptr,
                viam::sdk::LogSource &logger) {
-              device::printDeviceInfo(dev_ptr, logger);
+              device::printDeviceInfo(*dev_ptr, logger);
             },
         .createDevice =
             [](std::string const &serial, std::shared_ptr<rs2::device> dev_ptr,
