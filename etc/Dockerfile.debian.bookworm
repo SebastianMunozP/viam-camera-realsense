@@ -20,6 +20,7 @@ RUN apt-get -y --no-install-recommends install \
     less \
     libabsl-dev \
     libboost-all-dev \
+    libcurl4-openssl-dev \
     libgrpc++-dev \
     libprotobuf-dev \
     libssl-dev \
@@ -27,6 +28,7 @@ RUN apt-get -y --no-install-recommends install \
     libusb-1.0-0-dev \
     libudev-dev \
     libgtk-3-dev \
+    libzip-dev \
     ninja-build \
     pkg-config \
     protobuf-compiler-grpc \
