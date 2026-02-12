@@ -1,6 +1,6 @@
 #include "../src/module/utils.hpp"
-#include <gtest/gtest.h>
 #include <atomic>
+#include <gtest/gtest.h>
 
 // Mock C-style cleanup functions for testing
 namespace {
@@ -10,31 +10,29 @@ std::atomic<int> cleanup_call_count{0};
 std::atomic<int> cleanup_with_error_call_count{0};
 
 // Simple cleanup function that takes a pointer
-void mock_cleanup(int* ptr) {
+void mock_cleanup(int *ptr) {
   if (ptr) {
     cleanup_call_count++;
   }
 }
 
 // Cleanup function with error code parameter
-void mock_cleanup_with_error(int* ptr, int* error_out) {
+void mock_cleanup_with_error(int *ptr, int *error_out) {
   if (ptr) {
     cleanup_with_error_call_count++;
     if (error_out) {
-      *error_out = 0;  // Success
+      *error_out = 0; // Success
     }
   }
 }
 
 // Helper to create a resource
-int* create_resource() {
-  return new int(42);
-}
+int *create_resource() { return new int(42); }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 class CleanupPtrTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     cleanup_call_count = 0;
     cleanup_with_error_call_count = 0;
@@ -62,21 +60,21 @@ TEST_F(CleanupPtrTest, NullPointer_DoesNotCallCleanup) {
 
 TEST_F(CleanupPtrTest, MoveConstructor_TransfersOwnership) {
   utils::CleanupPtr<mock_cleanup> ptr1(create_resource());
-  int* raw_ptr = ptr1.get();
+  int *raw_ptr = ptr1.get();
 
   utils::CleanupPtr<mock_cleanup> ptr2(std::move(ptr1));
 
-  EXPECT_EQ(ptr1.get(), nullptr);  // Original is now empty
-  EXPECT_EQ(ptr2.get(), raw_ptr);  // New pointer owns the resource
-  EXPECT_EQ(cleanup_call_count, 0);  // Not cleaned up yet
+  EXPECT_EQ(ptr1.get(), nullptr);   // Original is now empty
+  EXPECT_EQ(ptr2.get(), raw_ptr);   // New pointer owns the resource
+  EXPECT_EQ(cleanup_call_count, 0); // Not cleaned up yet
 
   ptr2.reset();
-  EXPECT_EQ(cleanup_call_count, 1);  // Cleaned up once
+  EXPECT_EQ(cleanup_call_count, 1); // Cleaned up once
 }
 
 TEST_F(CleanupPtrTest, MoveAssignment_TransfersOwnership) {
   utils::CleanupPtr<mock_cleanup> ptr1(create_resource());
-  int* raw_ptr = ptr1.get();
+  int *raw_ptr = ptr1.get();
 
   utils::CleanupPtr<mock_cleanup> ptr2(create_resource());
   EXPECT_EQ(cleanup_call_count, 0);
@@ -93,26 +91,26 @@ TEST_F(CleanupPtrTest, Reset_CleansUpAndAcceptsNewPointer) {
   utils::CleanupPtr<mock_cleanup> ptr(create_resource());
   EXPECT_NE(ptr.get(), nullptr);
 
-  int* new_resource = create_resource();
+  int *new_resource = create_resource();
   ptr.reset(new_resource);
 
-  EXPECT_EQ(cleanup_call_count, 1);  // Old resource cleaned up
+  EXPECT_EQ(cleanup_call_count, 1); // Old resource cleaned up
   EXPECT_EQ(ptr.get(), new_resource);
 
   ptr.reset();
-  EXPECT_EQ(cleanup_call_count, 2);  // New resource cleaned up
+  EXPECT_EQ(cleanup_call_count, 2); // New resource cleaned up
   EXPECT_EQ(ptr.get(), nullptr);
 }
 
 TEST_F(CleanupPtrTest, Release_ReturnsPointerWithoutCleanup) {
   utils::CleanupPtr<mock_cleanup> ptr(create_resource());
-  int* raw_ptr = ptr.get();
+  int *raw_ptr = ptr.get();
 
-  int* released = ptr.release();
+  int *released = ptr.release();
 
   EXPECT_EQ(released, raw_ptr);
   EXPECT_EQ(ptr.get(), nullptr);
-  EXPECT_EQ(cleanup_call_count, 0);  // Not cleaned up
+  EXPECT_EQ(cleanup_call_count, 0); // Not cleaned up
 
   // Manual cleanup required
   delete released;
@@ -129,7 +127,7 @@ TEST_F(CleanupPtrTest, BoolConversion_CorrectlyIndicatesOwnership) {
 }
 
 TEST_F(CleanupPtrTest, Dereference_AccessesUnderlyingValue) {
-  int* resource = new int(123);
+  int *resource = new int(123);
   utils::CleanupPtr<mock_cleanup> ptr(resource);
 
   EXPECT_EQ(*ptr, 123);
@@ -142,7 +140,7 @@ TEST_F(CleanupPtrTest, ExceptionSafety_CleansUpOnException) {
     utils::CleanupPtr<mock_cleanup> ptr(create_resource());
     EXPECT_EQ(cleanup_call_count, 0);
     throw std::runtime_error("Test exception");
-  } catch (const std::runtime_error&) {
+  } catch (const std::runtime_error &) {
     // Exception caught
   }
 
