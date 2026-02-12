@@ -1,16 +1,10 @@
 #include "zip_utils.hpp"
+#include "utils.hpp"
 #include <cstring>
-#include <stdexcept>
-#include <zlib.h>
-
-// The following includes are for extractBinFromZip2 (libzip-based
-// implementation) Uncomment if you want to use extractBinFromZip2 instead of
-// extractBinFromZip
-#include <boost/callable_traits.hpp>
-#include <memory>
 #include <sstream>
-#include <tuple>
+#include <stdexcept>
 #include <zip.h>
+#include <zlib.h>
 
 namespace viam {
 namespace realsense {
@@ -39,21 +33,8 @@ bool isZipFile(const std::vector<uint8_t> &data) {
  * Drawback: Additional dependency
  */
 
-template <auto cleanup_fp> struct Cleanup {
-  using pointer_type = std::tuple_element_t<
-      0, boost::callable_traits::args_t<decltype(cleanup_fp)>>;
-  using value_type = std::remove_pointer_t<pointer_type>;
-
-  void operator()(pointer_type p) {
-    if (p != nullptr) {
-      cleanup_fp(p);
-    }
-  }
-};
-
-template <auto cleanup_fp>
-using CleanupPtr = std::unique_ptr<typename Cleanup<cleanup_fp>::value_type,
-                                   Cleanup<cleanup_fp>>;
+// Use CleanupPtr from utils.hpp for RAII management
+using utils::CleanupPtr;
 
 std::vector<uint8_t> extractBinFromZip(const std::vector<uint8_t> &zip_data,
                                        viam::sdk::LogSource &logger) {

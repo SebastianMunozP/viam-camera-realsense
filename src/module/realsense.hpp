@@ -1074,6 +1074,8 @@ private:
       auto device_list = realsense_ctx_->query_devices();
       rs2::update_device update_dev;
       bool found_update_device = false;
+      rs2::device fallback_update_dev;
+      bool has_fallback = false;
 
       for (size_t i = 0; i < device_list.size(); i++) {
         auto dev = device_list[i];
@@ -1097,11 +1099,27 @@ private:
                   << ")";
             }
           } else {
-            VIAM_RESOURCE_LOG(warn)
+            // Device in update mode doesn't support serial number query
+            // Save as fallback in case we don't find a match
+            VIAM_RESOURCE_LOG(info)
                 << "[handleFirmwareUpdate] Found update device without serial "
-                   "number support";
+                   "number support (DFU mode) - will use if no exact match";
+            if (!has_fallback) {
+              fallback_update_dev = dev;
+              has_fallback = true;
+            }
           }
         }
+      }
+
+      // If we didn't find a device with matching serial, but found an update
+      // device without serial support, use it (likely the device we updated)
+      if (!found_update_device && has_fallback) {
+        update_dev = fallback_update_dev.template as<rs2::update_device>();
+        found_update_device = true;
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Using update device without serial "
+               "number support (DFU mode)";
       }
 
       if (!found_update_device) {
