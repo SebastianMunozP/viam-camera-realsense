@@ -377,7 +377,7 @@ TEST_F(RealsenseTest, FirmwareUpdate_AutoDetect_ReturnsRecommendedVersion) {
       createFullyMockedDeviceFunctions(), assigned_serials_);
 
   ProtoStruct command;
-  command["firmware_update"] = "";  // Empty string for auto-detect
+  command["firmware_update"] = ""; // Empty string for auto-detect
   auto result = camera.do_command(command);
 
   // Should return error with recommended version info (since URL mapping
@@ -397,7 +397,7 @@ TEST_F(RealsenseTest, FirmwareUpdate_InvalidType) {
       createFullyMockedDeviceFunctions(), assigned_serials_);
 
   ProtoStruct command;
-  command["firmware_update"] = 123;  // Invalid type (should be string)
+  command["firmware_update"] = 123; // Invalid type (should be string)
   auto result = camera.do_command(command);
 
   // Should return error for invalid type
