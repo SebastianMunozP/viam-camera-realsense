@@ -34,6 +34,16 @@ jobs:
         run: |
           make setup
           test -f ./venv/bin/activate && . ./venv/bin/activate && conan profile show
+      
+      - name: Lint
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          make lint
+          if ! git diff --quiet; then
+            echo -e "\033[31mError: lint make target produced changes. Please run 'make lint' locally and commit the results.\033[0m"
+            git diff
+            exit 1
+          fi
 
       - name: Install Conan dependencies
         if: runner.os == 'macOS'
