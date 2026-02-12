@@ -335,7 +335,16 @@ public:
       // Check if command contains "firmware_update"
       if (command.count("firmware_update")) {
         VIAM_RESOURCE_LOG(info) << "[do_command] Received firmware_update";
+#ifdef __APPLE__
+        // Firmware update is not supported on macOS yet
+        viam::sdk::ProtoStruct response;
+        response["success"] = false;
+        response["error"] = "Firmware update is not supported on macOS";
+        VIAM_RESOURCE_LOG(error) << "[do_command] Firmware update not supported on macOS";
+        return response;
+#else
         return handleFirmwareUpdate(command);
+#endif
       }
 
       VIAM_RESOURCE_LOG(error) << "[do_command] Unknown command";
@@ -955,15 +964,29 @@ private:
                                  "serial number: "
                               << device_serial_number;
 
-      viam::realsense::firmware_update::updateFirmware(
+      auto update_result = viam::realsense::firmware_update::updateFirmware(
           rs_device, device_serial_number, firmware_url, realsense_ctx_,
           logger_);
-      device_ = nullptr;
-      physical_camera_assigned_ = false;
 
-      response["success"] = true;
-      response["message"] = "Firmware update completed successfully. Device "
-                            "will reconnect shortly.";
+      // Check if firmware update succeeded
+      if (update_result.first) {
+        // Success - clear device assignment
+        device_ = nullptr;
+        physical_camera_assigned_ = false;
+
+        response["success"] = true;
+        response["message"] = update_result.second.count("message")
+            ? update_result.second.at("message")
+            : "Firmware update completed successfully. Device will reconnect shortly.";
+      } else {
+        // Failure - return error
+        response["success"] = false;
+        response["error"] = update_result.second.count("error")
+            ? update_result.second.at("error")
+            : "Firmware update failed";
+        VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] "
+                                 << response["error"].get<std::string>();
+      }
 
     } catch (const std::exception &e) {
       VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Error: " << e.what();

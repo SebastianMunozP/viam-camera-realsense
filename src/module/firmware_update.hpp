@@ -44,9 +44,10 @@ std::optional<std::string> getFirmwareURLForVersion(const std::string &version);
  * @param firmware_url The URL of the firmware file
  * @param logger The logger to use for logging
  * @throws std::runtime_error if firmware update fails
+ * @return pair<bool, map> - first is success flag, second contains message/error
  */
 template <typename RealsenseContextT>
-std::pair<bool, std::unordered_map<std::string, std::string>>
+[[nodiscard]] std::pair<bool, std::unordered_map<std::string, std::string>>
 updateFirmware(std::shared_ptr<rs2::device> rs_device,
                std::string const &device_serial_number,
                std::string firmware_url,
