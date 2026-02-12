@@ -137,8 +137,7 @@ struct DeviceFunctions {
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
       viam::sdk::LogSource &)>
       destroyDevice;
-  std::function<void(std::shared_ptr<rs2::device>, viam::sdk::LogSource &)>
-      printDeviceInfo;
+  std::function<void(const rs2::device &, viam::sdk::LogSource &)> printDeviceInfo;
   std::function<
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>(
           std::string const &, std::shared_ptr<rs2::device>,
@@ -310,11 +309,12 @@ public:
 
   viam::sdk::ProtoStruct
   do_command(const viam::sdk::ProtoStruct &command) override {
-    VIAM_RESOURCE_LOG(info) << "[do_command] Received command";
+    VIAM_RESOURCE_LOG(info) << "[do_command] Received do_command";
 
     try {
       // Check if command contains "firmware_update"
       if (command.count("firmware_update")) {
+        VIAM_RESOURCE_LOG(info) << "[do_command] Received firmware_update";
         return handleFirmwareUpdate(command);
       }
 
@@ -1187,9 +1187,9 @@ private:
               return device::destroyDevice(device, logger);
             },
         .printDeviceInfo =
-            [](std::shared_ptr<rs2::device> dev_ptr,
+            [](auto const& dev,
                viam::sdk::LogSource &logger) {
-              device::printDeviceInfo(*dev_ptr, logger);
+              device::printDeviceInfo(dev, logger);
             },
         .createDevice =
             [](std::string const &serial, std::shared_ptr<rs2::device> dev_ptr,

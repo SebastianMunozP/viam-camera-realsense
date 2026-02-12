@@ -49,6 +49,9 @@ struct ViamRSDevice {
   std::shared_ptr<ConfigT> config{};
 };
 
+/********************** UTILITIES ************************/
+template <typename DeviceT> void printDeviceInfo(DeviceT const& dev);
+
 /********************** CALLBACKS ************************/
 template <typename EventInformationT, typename ViamDeviceT, typename FrameSetT>
 void deviceChangedCallback(
