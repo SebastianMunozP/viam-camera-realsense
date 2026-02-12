@@ -16,8 +16,10 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -852,6 +854,21 @@ private:
 
   // Firmware update helper methods (now in separate modules)
 
+  // Get firmware download URL for a given version
+  std::optional<std::string> getFirmwareURLForVersion(const std::string &version) {
+    // Mapping of known firmware versions to download URLs
+    static const std::unordered_map<std::string, std::string> firmware_url_map = {
+        {"5.17.0.10", "https://realsenseai.com/wp-content/uploads/2025/07/d400_series_production_fw_5_17_0_10.zip"},
+        // Add more firmware versions here as they become available
+    };
+
+    auto it = firmware_url_map.find(version);
+    if (it != firmware_url_map.end()) {
+      return it->second;
+    }
+    return std::nullopt;
+  }
+
   viam::sdk::ProtoStruct
   handleFirmwareUpdate(const viam::sdk::ProtoStruct &command) {
     VIAM_RESOURCE_LOG(info)
@@ -863,19 +880,6 @@ private:
     firmware_update_in_progress_ = true;
 
     try {
-      if (!command.at("firmware_update").is_a<viam::sdk::ProtoStruct>()) {
-        response["success"] = false;
-        response["error"] =
-            std::string("Firmware update command is not a ProtoStruct");
-        VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update "
-                                    "command is not a ProtoStruct";
-        firmware_update_in_progress_ = false;
-        return response;
-      }
-      // Extract firmware update parameters
-      auto fw_update_cmd =
-          command.at("firmware_update").get<viam::sdk::ProtoStruct>();
-
       // Check if device is available
       if (!device_) {
         response["success"] = false;
@@ -887,41 +891,109 @@ private:
         return response;
       }
 
-      // Get firmware data - either from URL or local file
-      std::vector<uint8_t> firmware_data;
+      // Parse firmware_update parameter - expects a string
+      auto &fw_param = command.at("firmware_update");
 
-      if (fw_update_cmd->count("firmware_url")) {
-        // Download from URL
-        std::string firmware_url =
-            *fw_update_cmd->at("firmware_url").get<std::string>();
+      if (!fw_param.is_a<std::string>()) {
+        response["success"] = false;
+        response["error"] =
+            std::string("Firmware update command must be a string");
+        VIAM_RESOURCE_LOG(error)
+            << "[handleFirmwareUpdate] Invalid firmware_update parameter type "
+               "(expected string)";
+        firmware_update_in_progress_ = false;
+        return response;
+      }
+
+      std::string firmware_url = *fw_param.get<std::string>();
+      VIAM_RESOURCE_LOG(info)
+          << "[handleFirmwareUpdate] Firmware URL parameter: "
+          << (firmware_url.empty() ? "(auto-detect)" : firmware_url);
+
+      // Handle auto-detect mode (empty string)
+      if (firmware_url.empty()) {
         VIAM_RESOURCE_LOG(info)
-            << "[handleFirmwareUpdate] Firmware URL: " << firmware_url;
-        firmware_data =
-            viam::realsense::download_utils::downloadFirmwareFromURL(
-                firmware_url, logger_);
+            << "[handleFirmwareUpdate] Auto-detect mode: querying device for "
+               "recommended firmware";
 
-        // Check if it's a ZIP file and extract if needed
-        if (viam::realsense::zip_utils::isZipFile(firmware_data)) {
-          VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Detected ZIP "
-                                     "file, extracting .bin file";
-          firmware_data = viam::realsense::zip_utils::extractBinFromZip(
-              firmware_data, logger_);
-        } else {
-          VIAM_RESOURCE_LOG(error)
-              << "[handleFirmwareUpdate] Firmware "
-                 "update failed: firmware data is not a ZIP "
-                 "file";
+        std::shared_ptr<rs2::device> rs_device;
+        {
+          auto locked_device = device_->synchronize();
+          rs_device = locked_device->device;
+        }
+
+        if (!rs_device) {
           response["success"] = false;
           response["error"] =
-              std::string("Firmware update failed: firmware data is not a ZIP "
-                          "file");
+              std::string("Firmware update failed: Device pointer is null");
           firmware_update_in_progress_ = false;
           return response;
         }
+
+        // Check if device supports recommended firmware version
+        if (!rs_device->supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
+          response["success"] = false;
+          response["error"] = std::string(
+              "Auto-detect failed: Device does not provide recommended "
+              "firmware version information. Please specify the firmware URL "
+              "directly using: {\"firmware_update\": "
+              "\"https://your-firmware-url.zip\"}");
+          VIAM_RESOURCE_LOG(error)
+              << "[handleFirmwareUpdate] Device does not support "
+                 "RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION";
+          firmware_update_in_progress_ = false;
+          return response;
+        }
+
+        std::string recommended_version =
+            rs_device->get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION);
+        VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Device recommended "
+                                   "firmware version: "
+                                << recommended_version;
+
+        // Look up URL for recommended version
+        auto firmware_url_opt = getFirmwareURLForVersion(recommended_version);
+        if (!firmware_url_opt.has_value()) {
+          response["success"] = false;
+          response["error"] =
+              std::string("Auto-detect found recommended firmware version ") +
+              recommended_version +
+              ", but no download URL mapping is available for this version. "
+              "Please specify the firmware URL directly using: "
+              "{\"firmware_update\": \"https://your-firmware-url.zip\"}";
+          response["recommended_version"] = recommended_version;
+          VIAM_RESOURCE_LOG(info)
+              << "[handleFirmwareUpdate] Recommended version: "
+              << recommended_version << " (no URL mapping available)";
+          firmware_update_in_progress_ = false;
+          return response;
+        }
+
+        firmware_url = *firmware_url_opt;
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Auto-detected firmware URL: "
+            << firmware_url << " for version " << recommended_version;
+      }
+
+      // Download firmware from URL
+      VIAM_RESOURCE_LOG(info)
+          << "[handleFirmwareUpdate] Firmware URL: " << firmware_url;
+      std::vector<uint8_t> firmware_data =
+          viam::realsense::download_utils::downloadFirmwareFromURL(firmware_url,
+                                                                    logger_);
+
+      // Check if it's a ZIP file and extract if needed
+      if (viam::realsense::zip_utils::isZipFile(firmware_data)) {
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Detected ZIP file, extracting .bin file";
+        firmware_data =
+            viam::realsense::zip_utils::extractBinFromZip(firmware_data, logger_);
       } else {
+        VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update "
+                                    "failed: firmware data is not a ZIP file";
         response["success"] = false;
-        response["error"] =
-            std::string("Firmware update failed: firmware_url is required");
+        response["error"] = std::string(
+            "Firmware update failed: firmware data is not a ZIP file");
         firmware_update_in_progress_ = false;
         return response;
       }

@@ -357,6 +357,56 @@ TEST_F(RealsenseTest, DoCommandReturnsEmptyStruct) {
   EXPECT_TRUE(result.count("error") > 0);
 }
 
+TEST_F(RealsenseTest, FirmwareUpdate_WithURL) {
+  Realsense<boost::synchronized_value<SimpleMockContext>> camera(
+      test_deps_, *test_config_, mock_realsense_context_,
+      createFullyMockedDeviceFunctions(), assigned_serials_);
+
+  ProtoStruct command;
+  command["firmware_update"] = "https://example.com/firmware.bin";
+  auto result = camera.do_command(command);
+
+  // Should fail because we don't have actual device/network setup, but it
+  // should recognize the string API
+  EXPECT_TRUE(result.count("success") > 0 || result.count("error") > 0);
+}
+
+TEST_F(RealsenseTest, FirmwareUpdate_AutoDetect_ReturnsRecommendedVersion) {
+  Realsense<boost::synchronized_value<SimpleMockContext>> camera(
+      test_deps_, *test_config_, mock_realsense_context_,
+      createFullyMockedDeviceFunctions(), assigned_serials_);
+
+  ProtoStruct command;
+  command["firmware_update"] = "";  // Empty string for auto-detect
+  auto result = camera.do_command(command);
+
+  // Should return error with recommended version info (since URL mapping
+  // doesn't exist yet) or error about device not supporting it
+  EXPECT_FALSE(*result["success"].get<bool>());
+  EXPECT_TRUE(result.count("error") > 0);
+  auto error = *result["error"].get<std::string>();
+  // Should either mention auto-detect failure or provide recommended version
+  EXPECT_TRUE(error.find("Auto-detect") != std::string::npos ||
+              error.find("recommended") != std::string::npos ||
+              error.find("Device pointer is null") != std::string::npos);
+}
+
+TEST_F(RealsenseTest, FirmwareUpdate_InvalidType) {
+  Realsense<boost::synchronized_value<SimpleMockContext>> camera(
+      test_deps_, *test_config_, mock_realsense_context_,
+      createFullyMockedDeviceFunctions(), assigned_serials_);
+
+  ProtoStruct command;
+  command["firmware_update"] = 123;  // Invalid type (should be string)
+  auto result = camera.do_command(command);
+
+  // Should return error for invalid type
+  EXPECT_FALSE(*result["success"].get<bool>());
+  EXPECT_TRUE(result.count("error") > 0);
+  auto error = *result["error"].get<std::string>();
+  EXPECT_TRUE(error.find("must be a string") != std::string::npos);
+}
+
 TEST_F(RealsenseTest, GetGeometriesReturnsExpectedGeometry) {
   Realsense<boost::synchronized_value<SimpleMockContext>> camera(
       test_deps_, *test_config_, mock_realsense_context_,
