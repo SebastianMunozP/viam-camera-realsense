@@ -151,6 +151,11 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
       .printDeviceInfo =
           [](const auto &dev, viam::sdk::LogSource &) {
             std::cout << "Mock: printDeviceInfo called" << std::endl;
+            if constexpr (std::is_same_v<std::decay_t<decltype(dev)>,
+                                         MockRsDevice>) {
+              std::cout << "Mock device serial: " << dev.get_serial()
+                        << std::endl;
+            }
           },
       .createDevice =
           [](const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,

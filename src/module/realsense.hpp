@@ -1085,7 +1085,6 @@ private:
         device_funcs_.printDeviceInfo(dev, this->logger_);
 
         auto dev_ptr = std::make_shared<std::decay_t<decltype(dev)>>(dev);
-
         std::string connected_device_serial_number =
             dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
@@ -1191,7 +1190,7 @@ private:
               return device::destroyDevice(device, logger);
             },
         .printDeviceInfo =
-            [](auto const &dev, viam::sdk::LogSource &logger) {
+            [](const auto &dev, viam::sdk::LogSource &logger) {
               device::printDeviceInfo(dev, logger);
             },
         .createDevice =
