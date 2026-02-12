@@ -115,7 +115,8 @@ std::vector<uint8_t> extractBinFromZip(const std::vector<uint8_t> &zip_data,
   CleanupPtr<zip_fclose> binFile(zip_fopen(zip, binFileName, 0));
   if (!binFile) {
     std::ostringstream buffer;
-    buffer << "failed to open the firmware bin file: " << zip_error_strerror(zip_file_get_error(binFile.get()));
+    buffer << "failed to open the firmware bin file: "
+           << zip_error_strerror(zip_file_get_error(binFile.get()));
     VIAM_SDK_LOG_IMPL(logger, error) << buffer.str();
     throw std::runtime_error(buffer.str());
   }
@@ -124,7 +125,8 @@ std::vector<uint8_t> extractBinFromZip(const std::vector<uint8_t> &zip_data,
   zip_stat_init(&stats);
   if (zip_stat(zip, binFileName, 0, &stats) != 0) {
     std::ostringstream buffer;
-    buffer << "failed to stat file: " << zip_error_strerror(zip_file_get_error(binFile.get()));
+    buffer << "failed to stat file: "
+           << zip_error_strerror(zip_file_get_error(binFile.get()));
     throw std::invalid_argument(buffer.str());
   }
 

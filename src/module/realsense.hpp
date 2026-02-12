@@ -137,7 +137,8 @@ struct DeviceFunctions {
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> &,
       viam::sdk::LogSource &)>
       destroyDevice;
-  std::function<void(const rs2::device &, viam::sdk::LogSource &)> printDeviceInfo;
+  std::function<void(const rs2::device &, viam::sdk::LogSource &)>
+      printDeviceInfo;
   std::function<
       std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>(
           std::string const &, std::shared_ptr<rs2::device>,
@@ -906,9 +907,10 @@ private:
           firmware_data = viam::realsense::zip_utils::extractBinFromZip(
               firmware_data, logger_);
         } else {
-          VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware "
-                                   "update failed: firmware data is not a ZIP "
-                                    "file";
+          VIAM_RESOURCE_LOG(error)
+              << "[handleFirmwareUpdate] Firmware "
+                 "update failed: firmware data is not a ZIP "
+                 "file";
           response["success"] = false;
           response["error"] =
               std::string("Firmware update failed: firmware data is not a ZIP "
@@ -1189,8 +1191,7 @@ private:
               return device::destroyDevice(device, logger);
             },
         .printDeviceInfo =
-            [](auto const& dev,
-               viam::sdk::LogSource &logger) {
+            [](auto const &dev, viam::sdk::LogSource &logger) {
               device::printDeviceInfo(dev, logger);
             },
         .createDevice =

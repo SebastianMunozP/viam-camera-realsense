@@ -50,7 +50,7 @@ struct ViamRSDevice {
 };
 
 /********************** UTILITIES ************************/
-template <typename DeviceT> void printDeviceInfo(DeviceT const& dev);
+template <typename DeviceT> void printDeviceInfo(DeviceT const &dev);
 
 /********************** CALLBACKS ************************/
 template <typename EventInformationT, typename ViamDeviceT, typename FrameSetT>
