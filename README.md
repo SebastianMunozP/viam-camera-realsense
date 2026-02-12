@@ -104,6 +104,89 @@ A source is only returned if it is **both** listed in the `sensors` attribute of
 You can view the data your camera streams live on the **CONTROL** tab of the Viam app.
 For more information, see [Control Machines](https://docs.viam.com/fleet/control/).
 
+### Firmware Update
+
+The RealSense module supports updating camera firmware through the `do_command` API. This allows you to:
+- Install bug fixes and performance improvements
+- Ensure consistent firmware versions across multiple devices
+- Recover from firmware issues
+
+> [!WARNING]
+> **DO NOT DISCONNECT THE CAMERA DURING A FIRMWARE UPDATE!** Interrupting the update process can brick your device.
+
+#### Usage
+
+Use the `do_command` method with the following command structure:
+
+**Option 1: Auto-detect recommended firmware (recommended)**
+```json
+{
+  "firmware_update": ""
+}
+```
+
+Setting `firmware_update` to an empty string will automatically detect your camera's current firmware version and install the recommended update if available.
+
+**Option 2: Specify firmware URL**
+```json
+{
+  "firmware_update": "https://example.com/firmware.zip"
+}
+```
+
+You can specify a direct URL to a firmware `.zip` file containing the firmware binary.
+
+#### Supported Auto-detect Versions
+
+The following firmware versions are supported for auto-detect mode:
+
+| Version | Device Series | URL |
+|---------|---------------|-----|
+| 5.17.0.10 | D400 Series | [Download](https://realsenseai.com/wp-content/uploads/2025/07/d400_series_production_fw_5_17_0_10.zip) |
+
+#### Example using Python SDK
+
+```python
+from viam.components.camera import Camera
+
+# Get the camera component
+camera = Camera.from_robot(robot, "myRealSense")
+
+# Option 1: Auto-detect and install recommended firmware
+result = await camera.do_command({"firmware_update": ""})
+
+# Option 2: Install specific firmware from URL
+result = await camera.do_command({
+    "firmware_update": "https://realsenseai.com/wp-content/uploads/2025/07/d400_series_production_fw_5_17_0_10.zip"
+})
+```
+
+#### Important Notes
+
+- **⚠️ DO NOT DISCONNECT**: Never disconnect the camera during a firmware update. This can permanently damage the device.
+- **Firmware format**: Only `.zip` files containing firmware binaries are supported.
+- **Single camera updates**: Only update one camera at a time. If you have multiple RealSense cameras, perform updates sequentially.
+- **Update process**: The camera will enter DFU (Device Firmware Update) mode during the update. This is normal and may take several minutes to complete.
+- **Camera unavailable during update**: The camera will not be available for streaming during the firmware update process.
+- **Recovery mode**: If your camera is stuck in recovery/DFU mode, the module can still update it.
+- **One-time operation**: The firmware update is a one-time operation. Once complete, the camera will automatically reboot with the new firmware.
+
+#### Update Process
+
+1. Check your current firmware version by viewing the module logs on startup
+2. **Ensure the camera is securely connected** and will not be disconnected during the update
+3. Call `do_command` with the `firmware_update` parameter
+4. Monitor the module logs to track update progress
+5. Wait for the update to complete (typically 2-5 minutes)
+6. The camera will automatically reboot and be ready to use with the new firmware
+
+#### Troubleshooting
+
+- **Update fails**: Check the module logs for detailed error messages. Ensure the camera is properly connected and not in use by other applications.
+- **Camera stuck in DFU mode**: The module can update cameras in DFU/recovery mode. Call `do_command` with the `firmware_update` parameter again to retry.
+- **Network issues**: Firmware downloads require internet connectivity. Ensure your machine can reach the firmware URL.
+- **USB connection**: Use a high-quality USB 3.0 cable and port for reliable firmware updates.
+
 ### Locally install the module
 
 If you are using a Linux machine, and do not want to use the Viam registry, you can [download the module code from the registry](https://app.viam.com/module/viam/realsense) and use it directly on your machine.
