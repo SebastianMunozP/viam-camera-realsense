@@ -70,6 +70,15 @@ public:
                        << instances_->size() << ")";
   }
 
+  // Clear the devices changed callback (e.g., during firmware update)
+  void clearDevicesChangedCallback() {
+    auto rs_context = rs_context_->synchronize();
+    rs_context->set_devices_changed_callback([](rs2::event_information &) {});
+  }
+
+  // Restore the default devices changed callback
+  void restoreDevicesChangedCallback() { setupCallback(); }
+
 private:
   std::shared_ptr<SynchronizedContextT> rs_context_;
   boost::synchronized_value<
@@ -804,7 +813,6 @@ private:
       assigned_serials_;
   boost::synchronized_value<bool> physical_camera_assigned_;
   boost::synchronized_value<std::uint64_t> last_timestamp_warning_log_time_ms_;
-  boost::synchronized_value<bool> firmware_update_in_progress_;
 
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<SynchronizedContextT>> realsense_ctx_;
@@ -812,13 +820,6 @@ private:
   void deviceChangedCallback(rs2::event_information &info) {
     std::cout << "[deviceChangedCallback] Device connection status changed"
               << std::endl;
-
-    // Skip callback if firmware update is in progress
-    if (firmware_update_in_progress_.get()) {
-      VIAM_RESOURCE_LOG(info) << "[deviceChangedCallback] Ignoring device "
-                                 "change during firmware update";
-      return;
-    }
 
     try {
       std::string const required_serial_number = config_->serial_number;
@@ -879,8 +880,14 @@ private:
 
     viam::sdk::ProtoStruct response;
 
-    // Set flag to prevent device change callback from interfering
-    firmware_update_in_progress_ = true;
+    // Temporarily clear the device change callback to prevent interference
+    // It will be automatically restored when this scope exits
+    realsense_ctx_->clearDevicesChangedCallback();
+    auto callback_restorer = std::shared_ptr<void>(nullptr, [this](void *) {
+      realsense_ctx_->restoreDevicesChangedCallback();
+      VIAM_RESOURCE_LOG(info)
+          << "[handleFirmwareUpdate] Restored device change callback";
+    });
 
     try {
       // Check if device is available
@@ -890,7 +897,6 @@ private:
             std::string("Firmware update failed: No device available");
         VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update "
                                     "failed: No device available";
-        firmware_update_in_progress_ = false;
         return response;
       }
 
@@ -904,7 +910,6 @@ private:
         VIAM_RESOURCE_LOG(error)
             << "[handleFirmwareUpdate] Invalid firmware_update parameter type "
                "(expected string)";
-        firmware_update_in_progress_ = false;
         return response;
       }
 
@@ -929,7 +934,6 @@ private:
           response["success"] = false;
           response["error"] =
               std::string("Firmware update failed: Device pointer is null");
-          firmware_update_in_progress_ = false;
           return response;
         }
 
@@ -945,7 +949,6 @@ private:
           VIAM_RESOURCE_LOG(error)
               << "[handleFirmwareUpdate] Device does not support "
                  "RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION";
-          firmware_update_in_progress_ = false;
           return response;
         }
 
@@ -970,7 +973,6 @@ private:
           VIAM_RESOURCE_LOG(info)
               << "[handleFirmwareUpdate] Recommended version: "
               << recommended_version << " (no URL mapping available)";
-          firmware_update_in_progress_ = false;
           return response;
         }
 
@@ -999,7 +1001,6 @@ private:
         response["success"] = false;
         response["error"] = std::string(
             "Firmware update failed: firmware data is not a ZIP file");
-        firmware_update_in_progress_ = false;
         return response;
       }
 
@@ -1013,7 +1014,6 @@ private:
         response["success"] = false;
         response["error"] = std::string("Firmware update failed: Failed to "
                                         "stop device before firmware update");
-        firmware_update_in_progress_ = false;
         return response;
       }
 
@@ -1030,7 +1030,6 @@ private:
         response["success"] = false;
         response["error"] =
             std::string("Firmware update failed: Device pointer is null");
-        firmware_update_in_progress_ = false;
         return response;
       }
 
@@ -1043,7 +1042,6 @@ private:
         response["success"] = false;
         response["error"] = std::string(
             "Firmware update failed: Device does not support firmware updates");
-        firmware_update_in_progress_ = false;
         return response;
       }
 
@@ -1056,7 +1054,6 @@ private:
         response["success"] = false;
         response["error"] = std::string("Firmware update failed: Firmware is "
                                         "not compatible with this device");
-        firmware_update_in_progress_ = false;
         return response;
       }
 
@@ -1127,7 +1124,6 @@ private:
         response["error"] =
             std::string("Firmware update failed: Failed to find device ") +
             device_serial_number + " in update mode";
-        firmware_update_in_progress_ = false;
         return response;
       }
 
@@ -1168,10 +1164,7 @@ private:
       response["error"] = std::string("Firmware update failed: ") + e.what();
     }
 
-    // Clear flag to re-enable device change callback
-    firmware_update_in_progress_ = false;
-    VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Firmware update process "
-                               "finished, re-enabling device change callback";
+    // Callback will be automatically restored by callback_restorer destructor
 
     return response;
   }
