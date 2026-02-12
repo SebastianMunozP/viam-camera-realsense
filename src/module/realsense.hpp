@@ -76,6 +76,14 @@ public:
     rs_context->set_devices_changed_callback([](rs2::event_information &) {});
   }
 
+  // Set a custom devices changed callback (e.g., for firmware update event
+  // detection)
+  template <typename CallbackT>
+  void setDevicesChangedCallback(CallbackT callback) {
+    auto rs_context = rs_context_->synchronize();
+    rs_context->set_devices_changed_callback(callback);
+  }
+
   // Restore the default devices changed callback
   void restoreDevicesChangedCallback() { setupCallback(); }
 
@@ -872,7 +880,6 @@ private:
     }
     return std::nullopt;
   }
-
   viam::sdk::ProtoStruct
   handleFirmwareUpdate(const viam::sdk::ProtoStruct &command) {
     VIAM_RESOURCE_LOG(info)
@@ -880,17 +887,17 @@ private:
 
     viam::sdk::ProtoStruct response;
 
-    // Temporarily clear the device change callback to prevent interference
-    // It will be automatically restored when this scope exits
-    realsense_ctx_->clearDevicesChangedCallback();
-    auto callback_restorer = std::shared_ptr<void>(nullptr, [this](void *) {
-      realsense_ctx_->restoreDevicesChangedCallback();
-      VIAM_RESOURCE_LOG(info)
-          << "[handleFirmwareUpdate] Restored device change callback";
-    });
-
     try {
-      // Check if device is available
+
+      // Temporarily clear the device change callback to prevent interference
+      // It will be automatically restored when this scope exits
+      realsense_ctx_->clearDevicesChangedCallback();
+      auto callback_restorer = std::shared_ptr<void>(nullptr, [this](void *) {
+        realsense_ctx_->restoreDevicesChangedCallback();
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Restored device change callback";
+      });
+
       if (!device_) {
         response["success"] = false;
         response["error"] =
@@ -917,95 +924,6 @@ private:
       VIAM_RESOURCE_LOG(info)
           << "[handleFirmwareUpdate] Firmware URL parameter: "
           << (firmware_url.empty() ? "(auto-detect)" : firmware_url);
-
-      // Handle auto-detect mode (empty string)
-      if (firmware_url.empty()) {
-        VIAM_RESOURCE_LOG(info)
-            << "[handleFirmwareUpdate] Auto-detect mode: querying device for "
-               "recommended firmware";
-
-        std::shared_ptr<rs2::device> rs_device;
-        {
-          auto locked_device = device_->synchronize();
-          rs_device = locked_device->device;
-        }
-
-        if (!rs_device) {
-          response["success"] = false;
-          response["error"] =
-              std::string("Firmware update failed: Device pointer is null");
-          return response;
-        }
-
-        // Check if device supports recommended firmware version
-        if (!rs_device->supports(
-                RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
-          response["success"] = false;
-          response["error"] = std::string(
-              "Auto-detect failed: Device does not provide recommended "
-              "firmware version information. Please specify the firmware URL "
-              "directly using: {\"firmware_update\": "
-              "\"https://your-firmware-url.zip\"}");
-          VIAM_RESOURCE_LOG(error)
-              << "[handleFirmwareUpdate] Device does not support "
-                 "RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION";
-          return response;
-        }
-
-        std::string const recommended_version =
-            rs_device->get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION);
-        VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Device recommended "
-                                   "firmware version: "
-                                << recommended_version;
-
-        // Look up URL for recommended version
-        auto const firmware_url_opt =
-            getFirmwareURLForVersion(recommended_version);
-        if (!firmware_url_opt.has_value()) {
-          response["success"] = false;
-          response["error"] =
-              std::string("Auto-detect found recommended firmware version ") +
-              recommended_version +
-              ", but no download URL mapping is available for this version. "
-              "Please specify the firmware URL directly using: "
-              "{\"firmware_update\": \"https://your-firmware-url.zip\"}";
-          response["recommended_version"] = recommended_version;
-          VIAM_RESOURCE_LOG(info)
-              << "[handleFirmwareUpdate] Recommended version: "
-              << recommended_version << " (no URL mapping available)";
-          return response;
-        }
-
-        firmware_url = *firmware_url_opt;
-        VIAM_RESOURCE_LOG(info)
-            << "[handleFirmwareUpdate] Auto-detected firmware URL: "
-            << firmware_url << " for version " << recommended_version;
-      }
-
-      // Download firmware from URL
-      VIAM_RESOURCE_LOG(info)
-          << "[handleFirmwareUpdate] Firmware URL: " << firmware_url;
-      std::vector<uint8_t> firmware_data =
-          viam::realsense::download_utils::downloadFirmwareFromURL(firmware_url,
-                                                                   logger_);
-
-      // Check if it's a ZIP file and extract if needed
-      if (viam::realsense::zip_utils::isZipFile(firmware_data)) {
-        VIAM_RESOURCE_LOG(info)
-            << "[handleFirmwareUpdate] Detected ZIP file, extracting .bin file";
-        firmware_data = viam::realsense::zip_utils::extractBinFromZip(
-            firmware_data, logger_);
-      } else {
-        VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update "
-                                    "failed: firmware data is not a ZIP file";
-        response["success"] = false;
-        response["error"] = std::string(
-            "Firmware update failed: firmware data is not a ZIP file");
-        return response;
-      }
-
-      VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Firmware data size: "
-                              << firmware_data.size() << " bytes";
 
       // Stop the device before firmware update
       VIAM_RESOURCE_LOG(info)
@@ -1037,120 +955,9 @@ private:
                                  "serial number: "
                               << device_serial_number;
 
-      // Check if device is updatable
-      if (!rs_device->is<rs2::updatable>()) {
-        response["success"] = false;
-        response["error"] = std::string(
-            "Firmware update failed: Device does not support firmware updates");
-        return response;
-      }
-
-      auto updatable_device = rs_device->as<rs2::updatable>();
-
-      // Check firmware compatibility
-      VIAM_RESOURCE_LOG(info)
-          << "[handleFirmwareUpdate] Checking firmware compatibility";
-      if (!updatable_device.check_firmware_compatibility(firmware_data)) {
-        response["success"] = false;
-        response["error"] = std::string("Firmware update failed: Firmware is "
-                                        "not compatible with this device");
-        return response;
-      }
-
-      // Enter update state
-      VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Entering update state";
-      updatable_device.enter_update_state();
-
-      // Wait for device to reconnect in update mode
-      VIAM_RESOURCE_LOG(info)
-          << "[handleFirmwareUpdate] Waiting for device to enter update mode";
-      std::this_thread::sleep_for(std::chrono::seconds(5));
-
-      // Query for update device - match by serial number to ensure we update
-      // the correct device when multiple devices are connected
-      auto device_list = realsense_ctx_->query_devices();
-      rs2::update_device update_dev;
-      bool found_update_device = false;
-      rs2::device fallback_update_dev;
-      bool has_fallback = false;
-
-      for (size_t i = 0; i < device_list.size(); i++) {
-        auto dev = device_list[i];
-        if (dev.template is<rs2::update_device>()) {
-          // Check if this is the device we're looking for by serial number
-          if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
-            std::string found_serial =
-                dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-            if (found_serial == device_serial_number) {
-              update_dev = dev.template as<rs2::update_device>();
-              found_update_device = true;
-              VIAM_RESOURCE_LOG(info)
-                  << "[handleFirmwareUpdate] Found update device with serial: "
-                  << found_serial;
-              break;
-            } else {
-              VIAM_RESOURCE_LOG(info)
-                  << "[handleFirmwareUpdate] Skipping update device with "
-                     "different serial: "
-                  << found_serial << " (looking for " << device_serial_number
-                  << ")";
-            }
-          } else {
-            // Device in update mode doesn't support serial number query
-            // Save as fallback in case we don't find a match
-            VIAM_RESOURCE_LOG(info)
-                << "[handleFirmwareUpdate] Found update device without serial "
-                   "number support (DFU mode) - will use if no exact match";
-            if (!has_fallback) {
-              fallback_update_dev = dev;
-              has_fallback = true;
-            }
-          }
-        }
-      }
-
-      // If we didn't find a device with matching serial, but found an update
-      // device without serial support, use it (likely the device we updated)
-      if (!found_update_device && has_fallback) {
-        update_dev = fallback_update_dev.template as<rs2::update_device>();
-        found_update_device = true;
-        VIAM_RESOURCE_LOG(info)
-            << "[handleFirmwareUpdate] Using update device without serial "
-               "number support (DFU mode)";
-      }
-
-      if (!found_update_device) {
-        response["success"] = false;
-        response["error"] =
-            std::string("Firmware update failed: Failed to find device ") +
-            device_serial_number + " in update mode";
-        return response;
-      }
-
-      // Perform the firmware update with progress tracking
-      VIAM_RESOURCE_LOG(info)
-          << "[handleFirmwareUpdate] Starting firmware update process";
-      update_dev.update(firmware_data, [this](const float progress) {
-        int percent = static_cast<int>(progress * 100);
-        VIAM_RESOURCE_LOG(info)
-            << "[handleFirmwareUpdate] Progress: " << percent << "%";
-      });
-
-      VIAM_RESOURCE_LOG(info)
-          << "[handleFirmwareUpdate] Firmware update completed successfully";
-
-      // Reset device state to allow reinitialization after reboot
-      VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Resetting device "
-                                 "state for reinitialization";
-      if (device_) {
-        { // Begin scope for device_guard lock
-          auto device_guard = device_->synchronize();
-          { // Begin scope for serials_guard lock
-            auto serials_guard = assigned_serials_->synchronize();
-            serials_guard->erase(device_guard->serial_number);
-          } // End scope for serials_guard lock
-        } // End scope for device_guard lock
-      }
+      viam::realsense::firmware_update::updateFirmware(
+          rs_device, device_serial_number, firmware_url, realsense_ctx_,
+          logger_);
       device_ = nullptr;
       physical_camera_assigned_ = false;
 
