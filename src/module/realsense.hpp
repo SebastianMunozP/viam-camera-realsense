@@ -1080,6 +1080,8 @@ private:
                                     "Successfully accessed device at index "
                                  << i;
 
+        device_funcs_.printDeviceInfo(dev, this->logger_);
+
         auto dev_ptr = std::make_shared<std::decay_t<decltype(dev)>>(dev);
 
         std::string connected_device_serial_number =

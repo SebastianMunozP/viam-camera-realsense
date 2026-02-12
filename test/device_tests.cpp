@@ -390,7 +390,7 @@ TEST_F(DeviceTest, PrintDeviceInfo_ValidDevice_LogsInfo) {
       .WillOnce(Return("IP Address Info"));
 
   // Execute - should not throw and should log device info
-  EXPECT_NO_THROW(printDeviceInfo(mock_device_, logger));
+  EXPECT_NO_THROW(printDeviceInfo(*mock_device_, logger));
 
   // Verify logs were produced
   auto all_logs = log_capture.get_records();
