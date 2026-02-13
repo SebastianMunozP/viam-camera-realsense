@@ -111,6 +111,9 @@ The RealSense module supports updating camera firmware through the `do_command` 
 - Ensure consistent firmware versions across multiple devices
 - Recover from firmware issues
 
+> [!NOTE]
+> Firmware update is currently supported on **Linux only**. macOS support is not yet available.
+
 > [!WARNING]
 > **DO NOT DISCONNECT THE CAMERA DURING A FIRMWARE UPDATE!** Interrupting the update process can brick your device.
 
@@ -168,7 +171,7 @@ result = await camera.do_command({
 - **Single camera updates**: Only update one camera at a time. If you have multiple RealSense cameras, perform updates sequentially.
 - **Update process**: The camera will enter DFU (Device Firmware Update) mode during the update. This is normal and may take several minutes to complete.
 - **Camera unavailable during update**: The camera will not be available for streaming during the firmware update process.
-- **Recovery mode**: If your camera is stuck in recovery/DFU mode, the module can still update it.
+- **Recovery mode support**: The Discovery service automatically detects cameras in recovery/DFU mode and creates them as separate camera components with a `-recovery` suffix. To update a recovery device, you must provide an explicit firmware URL (auto-detect is not supported for recovery devices).
 - **One-time operation**: The firmware update is a one-time operation. Once complete, the camera will automatically reboot with the new firmware.
 
 #### Update Process
@@ -180,12 +183,113 @@ result = await camera.do_command({
 5. Wait for the update to complete (typically 2-5 minutes)
 6. The camera will automatically reboot and be ready to use with the new firmware
 
-#### Troubleshooting
+#### Troubleshooting Firmware Updates
 
-- **Update fails**: Check the module logs for detailed error messages. Ensure the camera is properly connected and not in use by other applications.
-- **Camera stuck in DFU mode**: The module can update cameras in DFU/recovery mode. Call `do_command` with the `firmware_update` parameter again to retry.
-- **Network issues**: Firmware downloads require internet connectivity. Ensure your machine can reach the firmware URL.
-- **USB connection**: Use a high-quality USB 3.0 cable and port for reliable firmware updates.
+##### Camera Stuck in Recovery/DFU Mode
+
+If a firmware update is interrupted (power loss, disconnection, etc.), your camera may be stuck in recovery/DFU mode. You'll see these symptoms:
+
+- Discovery service creates a camera named `realsense-XXXXXXXXX-recovery` (with `-recovery` suffix)
+  - **Note**: The number (`XXXXXXXXX`) is the **firmware update ID**, not the camera's serial number
+  - This is a temporary identifier used while the camera is in recovery mode
+- The camera cannot stream images
+- Module logs show: `Device at index X is in recovery/DFU mode with update ID: XXXXXXXXX`
+
+**To recover the camera:**
+
+1. The module automatically detects devices in recovery mode
+2. Simply run the firmware update command again on the recovery device:
+   ```json
+   {
+     "firmware_update": "https://realsenseai.com/wp-content/uploads/2025/07/d400_series_production_fw_5_17_0_10.zip"
+   }
+   ```
+3. The module will skip compatibility checks and directly flash the firmware
+4. Wait for the update to complete (100% progress)
+5. The camera will reboot and return to normal operation
+
+> [!NOTE]
+> Auto-detect mode (`"firmware_update": ""`) does not work for recovery devices. You must provide an explicit firmware URL.
+
+##### Update Fails with "Device does not support firmware updates"
+
+This error indicates:
+- The camera is not in a state that supports firmware updates
+- Try unplugging and replugging the camera
+- Ensure no other application is using the camera
+- Check that the camera is recognized: look for `DeviceInfo` logs on module startup
+
+##### Update Progress Stops or Hangs
+
+If the firmware update progress stops for more than 2 minutes:
+
+1. **DO NOT disconnect the camera** - wait at least 5 minutes
+2. Check the module logs for error messages
+3. If the module crashes during update:
+   - The camera will remain in recovery mode
+   - Restart the module
+   - Run the firmware update command again
+
+##### "Access failed" or "Device may be in an invalid state"
+
+These errors typically occur when:
+- The camera is transitioning between modes (normal ↔ DFU)
+- Multiple processes are trying to access the camera
+- The camera needs time to enumerate after plugging in
+
+**Solution:**
+1. Wait 10-15 seconds for the camera to fully enumerate
+2. Ensure only the Viam module is accessing the camera (close RealSense Viewer, other apps)
+3. Try unplugging the camera for 5 seconds, then plug it back in
+4. Restart the Viam module if issues persist
+
+##### Network/Download Issues
+
+Firmware downloads require internet connectivity. If downloads fail:
+
+- Verify your machine can access the internet
+- Check firewall settings allow HTTPS traffic
+- Try downloading the firmware manually first to test connectivity:
+  ```bash
+  curl -O https://realsenseai.com/wp-content/uploads/2025/07/d400_series_production_fw_5_17_0_10.zip
+  ```
+- Use a local file path if you have the firmware locally:
+  ```json
+  {
+    "firmware_update": "file:///path/to/firmware.zip"
+  }
+  ```
+
+##### Manual Recovery Using Intel Tools
+
+If automatic recovery fails, you can manually recover using Intel's tools:
+
+1. Install Intel RealSense SDK tools (if not already installed):
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install librealsense2-utils
+   ```
+
+2. Check device status:
+   ```bash
+   rs-enumerate-devices
+   ```
+
+3. Manually flash firmware:
+   ```bash
+   # For device in recovery mode (-r flag)
+   rs-fw-update -r -f /path/to/firmware.bin
+   ```
+
+4. After manual recovery, restart the Viam module
+
+##### General Troubleshooting Tips
+
+- **USB Quality**: Use a high-quality USB 3.0 cable directly to a USB 3.0 port (avoid hubs)
+- **Power Supply**: Ensure adequate power supply, especially on Raspberry Pi
+- **One at a time**: Only update one camera at a time if you have multiple devices
+- **Check logs**: Module logs provide detailed progress and error information
+- **Verify device name**: A camera in recovery mode will appear with a `-recovery` suffix in its name
 
 ### Locally install the module
 
