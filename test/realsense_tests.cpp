@@ -37,6 +37,20 @@ public:
 
   std::string get_serial() const { return serial_; }
 
+  // Template method for device type checking (used for recovery mode detection)
+  template <typename T> bool is() const {
+    // Mock devices are never update_device (recovery mode)
+    // They are always normal devices for testing
+    return false;
+  }
+
+  // Support method to check if device supports specific info
+  bool supports(rs2_camera_info info) const {
+    // Mock devices always support serial number (normal mode)
+    // They never support firmware_update_id (not in recovery mode)
+    return info == RS2_CAMERA_INFO_SERIAL_NUMBER;
+  }
+
 private:
   std::string serial_;
 };
