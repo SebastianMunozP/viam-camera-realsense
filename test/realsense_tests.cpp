@@ -400,9 +400,14 @@ TEST_F(RealsenseTest, FirmwareUpdate_AutoDetect_ReturnsRecommendedVersion) {
   EXPECT_TRUE(result.count("error") > 0);
   auto error = *result["error"].get<std::string>();
   // Should either mention auto-detect failure or provide recommended version
+#ifdef __APPLE__
+  // On macOS, firmware update is not supported
+  EXPECT_TRUE(error.find("not supported on macOS") != std::string::npos);
+#else
   EXPECT_TRUE(error.find("Auto-detect") != std::string::npos ||
               error.find("recommended") != std::string::npos ||
               error.find("Device pointer is null") != std::string::npos);
+#endif
 }
 
 TEST_F(RealsenseTest, FirmwareUpdate_InvalidType) {
@@ -418,7 +423,12 @@ TEST_F(RealsenseTest, FirmwareUpdate_InvalidType) {
   EXPECT_FALSE(*result["success"].get<bool>());
   EXPECT_TRUE(result.count("error") > 0);
   auto error = *result["error"].get<std::string>();
+#ifdef __APPLE__
+  // On macOS, firmware update is not supported
+  EXPECT_TRUE(error.find("not supported on macOS") != std::string::npos);
+#else
   EXPECT_TRUE(error.find("must be a string") != std::string::npos);
+#endif
 }
 
 TEST_F(RealsenseTest, GetGeometriesReturnsExpectedGeometry) {
