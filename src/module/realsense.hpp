@@ -340,7 +340,8 @@ public:
         viam::sdk::ProtoStruct response;
         response["success"] = false;
         response["error"] = "Firmware update is not supported on macOS";
-        VIAM_RESOURCE_LOG(error) << "[do_command] Firmware update not supported on macOS";
+        VIAM_RESOURCE_LOG(error)
+            << "[do_command] Firmware update not supported on macOS";
         return response;
 #else
         return handleFirmwareUpdate(command);
@@ -367,8 +368,10 @@ public:
     try {
       VIAM_RESOURCE_LOG(debug) << "[get_image] start";
       if (is_recovery_mode_.get()) {
-        std::string error_msg = "Camera is in recovery/DFU mode and cannot stream images. "
-                                "Please update the firmware using do_command with firmware_update parameter.";
+        std::string error_msg =
+            "Camera is in recovery/DFU mode and cannot stream images. "
+            "Please update the firmware using do_command with firmware_update "
+            "parameter.";
         VIAM_RESOURCE_LOG(error) << "[get_image] " << error_msg;
         throw std::runtime_error(error_msg);
       }
@@ -408,8 +411,10 @@ public:
              const viam::sdk::ProtoStruct &extra) override {
     try {
       if (is_recovery_mode_.get()) {
-        std::string error_msg = "Camera is in recovery/DFU mode and cannot stream images. "
-                                "Please update the firmware using do_command with firmware_update parameter.";
+        std::string error_msg =
+            "Camera is in recovery/DFU mode and cannot stream images. "
+            "Please update the firmware using do_command with firmware_update "
+            "parameter.";
         VIAM_RESOURCE_LOG(error) << "[get_images] " << error_msg;
         throw std::runtime_error(error_msg);
       }
@@ -543,8 +548,10 @@ public:
                   const viam::sdk::ProtoStruct &extra) override {
     try {
       if (is_recovery_mode_.get()) {
-        std::string error_msg = "Camera is in recovery/DFU mode and cannot stream point clouds. "
-                                "Please update the firmware using do_command with firmware_update parameter.";
+        std::string error_msg =
+            "Camera is in recovery/DFU mode and cannot stream point clouds. "
+            "Please update the firmware using do_command with firmware_update "
+            "parameter.";
         VIAM_RESOURCE_LOG(error) << "[get_point_cloud] " << error_msg;
         throw std::runtime_error(error_msg);
       }
@@ -952,12 +959,13 @@ private:
       // Handle recovery mode vs normal mode devices differently
       if (is_recovery_mode_.get()) {
         VIAM_RESOURCE_LOG(info)
-            << "[handleFirmwareUpdate] Device is in recovery mode, using stored recovery device pointer";
+            << "[handleFirmwareUpdate] Device is in recovery mode, using "
+               "stored recovery device pointer";
 
         if (!recovery_device_ptr_) {
           response["success"] = false;
-          response["error"] =
-              std::string("Firmware update failed: No recovery device available");
+          response["error"] = std::string(
+              "Firmware update failed: No recovery device available");
           VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update "
                                       "failed: No recovery device available";
           return response;
@@ -1023,8 +1031,9 @@ private:
 
         response["success"] = true;
         response["message"] = update_result.second.count("message")
-            ? update_result.second.at("message")
-            : "Firmware update completed successfully. Device will reconnect shortly.";
+                                  ? update_result.second.at("message")
+                                  : "Firmware update completed successfully. "
+                                    "Device will reconnect shortly.";
       } else {
         // Failure - return error
         response["success"] = false;
@@ -1035,11 +1044,14 @@ private:
           if (error_ptr) {
             VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] " << *error_ptr;
           } else {
-            VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update failed (error message unavailable)";
+            VIAM_RESOURCE_LOG(error)
+                << "[handleFirmwareUpdate] Firmware update failed (error "
+                   "message unavailable)";
           }
         } else {
           response["error"] = "Firmware update failed";
-          VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update failed";
+          VIAM_RESOURCE_LOG(error)
+              << "[handleFirmwareUpdate] Firmware update failed";
         }
       }
 
@@ -1092,21 +1104,23 @@ private:
         if (is_recovery) {
           // Recovery mode devices only have firmware update ID
           if (dev.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
-            connected_device_serial_number = dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
+            connected_device_serial_number =
+                dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
             VIAM_RESOURCE_LOG(warn)
                 << "[assign_and_initialize_device] Device at index " << i
                 << " is in recovery/DFU mode with update ID: "
                 << connected_device_serial_number;
           } else {
             VIAM_RESOURCE_LOG(error)
-                << "[assign_and_initialize_device] Recovery device at index " << i
-                << " does not support firmware update ID";
+                << "[assign_and_initialize_device] Recovery device at index "
+                << i << " does not support firmware update ID";
             continue;
           }
         } else {
           // Normal mode devices have serial number
           if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
-            connected_device_serial_number = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+            connected_device_serial_number =
+                dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
           } else {
             VIAM_RESOURCE_LOG(error)
                 << "[assign_and_initialize_device] Normal device at index " << i
@@ -1141,11 +1155,13 @@ private:
         // Handle recovery mode devices differently - they can't stream
         if (is_recovery) {
           VIAM_RESOURCE_LOG(warn)
-              << "[assign_and_initialize_device] Device " << connected_device_serial_number
+              << "[assign_and_initialize_device] Device "
+              << connected_device_serial_number
               << " is in recovery/DFU mode. Skipping streaming initialization. "
               << "Only firmware updates are supported for this device.";
           is_recovery_mode_ = true;
-          recovery_device_ptr_ = dev_ptr;  // Store the device pointer for firmware updates
+          recovery_device_ptr_ =
+              dev_ptr; // Store the device pointer for firmware updates
           physical_camera_assigned_ = true;
           return true;
         }

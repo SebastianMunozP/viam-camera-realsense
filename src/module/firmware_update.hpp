@@ -44,7 +44,8 @@ std::optional<std::string> getFirmwareURLForVersion(const std::string &version);
  * @param firmware_url The URL of the firmware file
  * @param logger The logger to use for logging
  * @throws std::runtime_error if firmware update fails
- * @return pair<bool, map> - first is success flag, second contains message/error
+ * @return pair<bool, map> - first is success flag, second contains
+ * message/error
  */
 template <typename RealsenseContextT>
 [[nodiscard]] std::pair<bool, std::unordered_map<std::string, std::string>>
@@ -154,12 +155,15 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
     update_device = rs_device->as<rs2::update_device>();
 
     if (!update_device) {
-      std::string error_msg = "Failed to get update device interface from recovery mode device";
-      VIAM_SDK_LOG_IMPL(logger, error) << "[handleFirmwareUpdate] " << error_msg;
+      std::string error_msg =
+          "Failed to get update device interface from recovery mode device";
+      VIAM_SDK_LOG_IMPL(logger, error)
+          << "[handleFirmwareUpdate] " << error_msg;
       return {false, {{"error", error_msg}}};
     }
   } else {
-    // Normal path: Check if device is updatable, check compatibility, then enter update state
+    // Normal path: Check if device is updatable, check compatibility, then
+    // enter update state
 
     // Check if device is updatable
     if (!rs_device->is<rs2::updatable>()) {
@@ -170,7 +174,8 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
     auto updatable_device = rs_device->as<rs2::updatable>();
     if (!updatable_device) {
       std::string error_msg = "Device does not support firmware updates";
-      VIAM_SDK_LOG_IMPL(logger, error) << "[handleFirmwareUpdate] " << error_msg;
+      VIAM_SDK_LOG_IMPL(logger, error)
+          << "[handleFirmwareUpdate] " << error_msg;
       return {false, {{"error", error_msg}}};
     }
 
@@ -181,7 +186,8 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
       std::string error_msg =
           "Firmware update failed: Firmware is not compatible with "
           "this device";
-      VIAM_SDK_LOG_IMPL(logger, error) << "[handleFirmwareUpdate] " << error_msg;
+      VIAM_SDK_LOG_IMPL(logger, error)
+          << "[handleFirmwareUpdate] " << error_msg;
       return {false, {{"error", error_msg}}};
     }
 
@@ -232,7 +238,8 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
               device.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
           if (usb_type.find("2.") != std::string::npos) {
             VIAM_SDK_LOG_IMPL(logger, warn)
-                << "Warning! the camera is connected via USB 2 port, in case the "
+                << "Warning! the camera is connected via USB 2 port, in case "
+                   "the "
                    "process fails, connect the camera to a USB 3 port and try "
                    "again";
           }
@@ -247,8 +254,8 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
     });
 
     // RAII: Automatically clear custom callback on any exit path
-    // (success/error/exception) The RAII restorer in the caller will then restore
-    // the default callback
+    // (success/error/exception) The RAII restorer in the caller will then
+    // restore the default callback
     auto callback_clearer =
         std::shared_ptr<void>(nullptr, [realsense_ctx](void *) {
           realsense_ctx->clearDevicesChangedCallback();
@@ -259,9 +266,10 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
     constexpr int WAIT_FOR_DEVICE_TIMEOUT = 15;
     if (!cv.wait_for(lk, std::chrono::seconds(WAIT_FOR_DEVICE_TIMEOUT),
                      [&] { return device_found; })) {
-      std::string error_msg =
-          "Timeout waiting for device to reconnect in DFU mode after 15 seconds";
-      VIAM_SDK_LOG_IMPL(logger, error) << "[handleFirmwareUpdate] " << error_msg;
+      std::string error_msg = "Timeout waiting for device to reconnect in DFU "
+                              "mode after 15 seconds";
+      VIAM_SDK_LOG_IMPL(logger, error)
+          << "[handleFirmwareUpdate] " << error_msg;
       return {false, {{"error", error_msg}}};
     }
 
@@ -270,7 +278,8 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
 
     if (!update_device) {
       std::string error_msg = "Failed to get update device interface";
-      VIAM_SDK_LOG_IMPL(logger, error) << "[handleFirmwareUpdate] " << error_msg;
+      VIAM_SDK_LOG_IMPL(logger, error)
+          << "[handleFirmwareUpdate] " << error_msg;
       return {false, {{"error", error_msg}}};
     }
   } // End of else block (normal path)

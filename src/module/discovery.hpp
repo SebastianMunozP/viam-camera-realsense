@@ -65,14 +65,16 @@ public:
           }
           // If no serial number, check if it's a recovery/DFU mode device
           else if (dev.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
-            device_identifier = dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
+            device_identifier =
+                dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
             is_recovery_mode = true;
             VIAM_SDK_LOG(warn) << "[discover_resources] Device at index " << i
                                << " is in recovery/DFU mode with update ID: "
                                << device_identifier;
           } else {
-            VIAM_SDK_LOG(warn) << "[discover_resources] Device at index " << i
-                               << " does not support serial number or firmware update ID";
+            VIAM_SDK_LOG(warn)
+                << "[discover_resources] Device at index " << i
+                << " does not support serial number or firmware update ID";
             continue;
           }
 
