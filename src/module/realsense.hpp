@@ -43,10 +43,9 @@ enum class DoCommand : uint8_t {
   UNKNOWN = std::numeric_limits<uint8_t>::max()
 };
 
-static const std::unordered_map<std::string, uint8_t> DoCommandMap{{
-  {"firmware_update", static_cast<uint8_t>(DoCommand::FIRMWARE_UPDATE)},
-  {"unknown", static_cast<uint8_t>(DoCommand::UNKNOWN)}
-}};
+static const std::unordered_map<std::string, uint8_t> DoCommandMap{
+    {{"firmware_update", static_cast<uint8_t>(DoCommand::FIRMWARE_UPDATE)},
+     {"unknown", static_cast<uint8_t>(DoCommand::UNKNOWN)}}};
 
 const std::string service_name = "viam_realsense";
 
@@ -338,8 +337,8 @@ public:
   }
 
   DoCommand get_do_command(const viam::sdk::ProtoStruct &command) const {
-    for(auto const& proto_command : command) {
-      if(DoCommandMap.count(proto_command.first)) {
+    for (auto const &proto_command : command) {
+      if (DoCommandMap.count(proto_command.first)) {
         return static_cast<DoCommand>(DoCommandMap.at(proto_command.first));
       }
     }
