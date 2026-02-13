@@ -16,6 +16,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -347,7 +348,14 @@ public:
 
   viam::sdk::ProtoStruct
   do_command(const viam::sdk::ProtoStruct &command) override {
-    VIAM_RESOURCE_LOG(info) << "[do_command] Received do_command";
+    VIAM_RESOURCE_LOG(info) << "[do_command] Received do_command, waiting for lock...";
+
+    // Acquire lock to prevent concurrent do_command calls
+    // This is especially important for long-running operations like firmware updates
+    // If this blocks, another do_command is currently executing
+    std::lock_guard<std::mutex> lock(do_command_mutex_);
+
+    VIAM_RESOURCE_LOG(info) << "[do_command] Lock acquired, processing command";
     DoCommand do_command = get_do_command(command);
 
     try {
@@ -877,6 +885,10 @@ private:
   boost::synchronized_value<bool> is_recovery_mode_{false};
   std::shared_ptr<rs2::device> recovery_device_ptr_;
 
+  // Mutex to serialize do_command calls and prevent concurrent execution
+  // This is critical for long-running operations like firmware updates
+  std::mutex do_command_mutex_;
+
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<SynchronizedContextT>> realsense_ctx_;
 
@@ -935,6 +947,7 @@ private:
   }
   viam::sdk::ProtoStruct
   handleFirmwareUpdate(const viam::sdk::ProtoStruct &command) {
+    // Note: This function is called from do_command which already holds the mutex lock
     VIAM_RESOURCE_LOG(info)
         << "[handleFirmwareUpdate] Starting firmware update";
 
