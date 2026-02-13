@@ -897,8 +897,6 @@ private:
     }
   }
 
-  // Firmware update helper methods (now in separate modules)
-
   // Get firmware download URL for a given version
   std::optional<std::string>
   getFirmwareURLForVersion(const std::string &version) {
