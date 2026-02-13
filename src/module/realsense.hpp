@@ -38,6 +38,16 @@ static constexpr std::uint64_t TIMESTAMP_WARNING_LOG_INTERVAL_MS =
     60000; // 1
            // minute
 
+enum class DoCommand : uint8_t {
+  FIRMWARE_UPDATE,
+  UNKNOWN = std::numeric_limits<uint8_t>::max()
+};
+
+static const std::unordered_map<std::string, uint8_t> DoCommandMap{{
+  {"firmware_update", static_cast<uint8_t>(DoCommand::FIRMWARE_UPDATE)},
+  {"unknown", static_cast<uint8_t>(DoCommand::UNKNOWN)}
+}};
+
 const std::string service_name = "viam_realsense";
 
 const std::string kColorSourceName = "color";
@@ -327,13 +337,23 @@ public:
     VIAM_RESOURCE_LOG(info) << "[reconfigure] Realsense reconfigure end";
   }
 
+  DoCommand get_do_command(const viam::sdk::ProtoStruct &command) const {
+    for(auto const& proto_command : command) {
+      if(DoCommandMap.count(proto_command.first)) {
+        return static_cast<DoCommand>(DoCommandMap.at(proto_command.first));
+      }
+    }
+    return DoCommand::UNKNOWN;
+  }
+
   viam::sdk::ProtoStruct
   do_command(const viam::sdk::ProtoStruct &command) override {
     VIAM_RESOURCE_LOG(info) << "[do_command] Received do_command";
+    DoCommand do_command = get_do_command(command);
 
     try {
       // Check if command contains "firmware_update"
-      if (command.count("firmware_update")) {
+      if (do_command == DoCommand::FIRMWARE_UPDATE) {
         VIAM_RESOURCE_LOG(info) << "[do_command] Received firmware_update";
 #ifdef __APPLE__
         // Firmware update is not supported on macOS yet
