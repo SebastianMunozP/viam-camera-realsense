@@ -167,17 +167,13 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
 
     // Check if device is updatable
     if (!rs_device->is<rs2::updatable>()) {
-      throw std::runtime_error(
-          "Firmware update failed: Device does not support firmware updates");
-    }
-
-    auto updatable_device = rs_device->as<rs2::updatable>();
-    if (!updatable_device) {
       std::string error_msg = "Device does not support firmware updates";
       VIAM_SDK_LOG_IMPL(logger, error)
           << "[handleFirmwareUpdate] " << error_msg;
       return {false, {{"error", error_msg}}};
     }
+
+    auto updatable_device = rs_device->as<rs2::updatable>();
 
     // Check firmware compatibility
     VIAM_SDK_LOG_IMPL(logger, info)
