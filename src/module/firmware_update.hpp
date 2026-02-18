@@ -142,9 +142,9 @@ prepareDeviceForUpdate(std::shared_ptr<rs2::device> rs_device,
       // Following Intel RealSense reference implementation pattern
       if (firmware_update_id.empty()) {
         // Cannot safely identify device without firmware_update_id
-        VIAM_SDK_LOG_IMPL(logger, debug)
-            << "[prepareDeviceForUpdate] Skipping device - no firmware_update_id "
-               "to match against";
+        VIAM_SDK_LOG_IMPL(logger, debug) << "[prepareDeviceForUpdate] Skipping "
+                                            "device - no firmware_update_id "
+                                            "to match against";
         continue;
       }
 
