@@ -4,6 +4,7 @@
 #include "sensors.hpp"
 #include "time.hpp"
 #include "utils.hpp"
+
 #include <viam/sdk/components/camera.hpp>
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
@@ -310,42 +311,6 @@ public:
     return viam::sdk::ProtoStruct();
   }
 
-  viam::sdk::Camera::raw_image
-  get_image(std::string mime_type,
-            const viam::sdk::ProtoStruct &extra) override {
-    try {
-      VIAM_RESOURCE_LOG(debug) << "[get_image] start";
-      if (not latest_frameset_) {
-        VIAM_RESOURCE_LOG(error) << "[get_image] no frameset available";
-        throw std::runtime_error("no frameset available");
-      }
-      if (config_->getMainSensor() == sensors::SensorType::color) {
-        auto fs = latest_frameset_->get();
-        time::throwIfTooOld(
-            time::getNowMs(), fs.get_color_frame().get_timestamp(),
-            MAX_FRAME_AGE_MS, "no recent color frame: check USB connection");
-        VIAM_RESOURCE_LOG(debug) << "[get_image] end";
-        return encoding::encodeVideoFrameToResponse(fs.get_color_frame());
-      } else if (config_->getMainSensor() == sensors::SensorType::depth) {
-        auto fs = latest_frameset_->get();
-        time::throwIfTooOld(
-            time::getNowMs(), fs.get_depth_frame().get_timestamp(),
-            MAX_FRAME_AGE_MS, "no recent depth frame: check USB connection");
-        return encoding::encodeDepthFrameToResponse(fs.get_depth_frame());
-      } else {
-        throw std::invalid_argument(
-            "unknown main sensor: " +
-            sensors::sensor_type_to_string(config_->getMainSensor(),
-                                           this->logger_));
-      }
-
-    } catch (const std::exception &e) {
-      VIAM_RESOURCE_LOG(error) << "[get_image] error: " << e.what();
-      throw std::runtime_error("failed to create image: " +
-                               std::string(e.what()));
-    }
-    return viam::sdk::Camera::raw_image{}; // should never reach here
-  }
   viam::sdk::Camera::image_collection
   get_images(std::vector<std::string> filter_source_names,
              const viam::sdk::ProtoStruct &extra) override {
