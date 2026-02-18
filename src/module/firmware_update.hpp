@@ -129,52 +129,59 @@ prepareDeviceForUpdate(std::shared_ptr<rs2::device> rs_device,
   rs2::update_device update_device;
 
   // Set up callback to detect device reconnection
-  realsense_ctx->setDevicesChangedCallback([&](rs2::event_information &info) {
-    for (auto &&device : info.get_new_devices()) {
-      std::lock_guard<std::mutex> lk(mutex);
+  // Explicit capture list for thread safety:
+  // - firmware_update_id by value (immutable copy, thread-safe)
+  // - mutex, cv, device_found, update_device by reference (must be modified)
+  // - logger by reference (required for logging, lifetime managed by caller)
+  realsense_ctx->setDevicesChangedCallback(
+      [&mutex, &cv, &device_found, &update_device, firmware_update_id,
+       &logger](rs2::event_information &info) {
+        for (auto &&device : info.get_new_devices()) {
+          std::lock_guard<std::mutex> lk(mutex);
 
-      // Check if this is an update device (in DFU/recovery mode)
-      if (!device.is<rs2::update_device>()) {
-        continue;
-      }
+          // Check if this is an update device (in DFU/recovery mode)
+          if (!device.is<rs2::update_device>()) {
+            continue;
+          }
 
-      // Match by firmware_update_id (required for multi-device safety)
-      // Following Intel RealSense reference implementation pattern
-      if (firmware_update_id.empty()) {
-        // Cannot safely identify device without firmware_update_id
-        VIAM_SDK_LOG_IMPL(logger, debug) << "[prepareDeviceForUpdate] Skipping "
-                                            "device - no firmware_update_id "
-                                            "to match against";
-        continue;
-      }
+          // Match by firmware_update_id (required for multi-device safety)
+          // Following Intel RealSense reference implementation pattern
+          if (firmware_update_id.empty()) {
+            // Cannot safely identify device without firmware_update_id
+            VIAM_SDK_LOG_IMPL(logger, debug)
+                << "[prepareDeviceForUpdate] Skipping device - no "
+                   "firmware_update_id to match against";
+            continue;
+          }
 
-      if (!device.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
-        VIAM_SDK_LOG_IMPL(logger, debug)
-            << "[prepareDeviceForUpdate] Skipping device - does not support "
-               "firmware_update_id";
-        continue;
-      }
+          if (!device.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
+            VIAM_SDK_LOG_IMPL(logger, debug)
+                << "[prepareDeviceForUpdate] Skipping device - does not "
+                   "support firmware_update_id";
+            continue;
+          }
 
-      std::string device_fw_id =
-          device.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
-      if (device_fw_id != firmware_update_id) {
-        VIAM_SDK_LOG_IMPL(logger, debug)
-            << "[prepareDeviceForUpdate] Skipping device - firmware_update_id "
-               "mismatch (expected: "
-            << firmware_update_id << ", got: " << device_fw_id << ")";
-        continue;
-      }
+          std::string device_fw_id =
+              device.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
+          if (device_fw_id != firmware_update_id) {
+            VIAM_SDK_LOG_IMPL(logger, debug)
+                << "[prepareDeviceForUpdate] Skipping device - "
+                   "firmware_update_id mismatch (expected: "
+                << firmware_update_id << ", got: " << device_fw_id << ")";
+            continue;
+          }
 
-      // Found the correct device in DFU mode
-      VIAM_SDK_LOG_IMPL(logger, info)
-          << "[prepareDeviceForUpdate] Matched device by firmware_update_id: "
-          << firmware_update_id;
-      update_device = device.as<rs2::update_device>();
-      device_found = true;
-      cv.notify_one();
-      break;
-    }
-  });
+          // Found the correct device in DFU mode
+          VIAM_SDK_LOG_IMPL(logger, info)
+              << "[prepareDeviceForUpdate] Matched device by "
+                 "firmware_update_id: "
+              << firmware_update_id;
+          update_device = device.as<rs2::update_device>();
+          device_found = true;
+          cv.notify_one();
+          break;
+        }
+      });
 
   // RAII: Automatically clear custom callback on any exit path
   // (success/error/exception) The RAII restorer in the caller will then
