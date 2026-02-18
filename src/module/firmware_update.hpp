@@ -192,9 +192,15 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
     VIAM_SDK_LOG_IMPL(logger, info)
         << "[handleFirmwareUpdate] Checking firmware compatibility";
     if (!updatable_device.check_firmware_compatibility(firmware_data)) {
+      std::string device_model = "unknown";
+      if (rs_device->supports(RS2_CAMERA_INFO_NAME)) {
+        device_model = rs_device->get_info(RS2_CAMERA_INFO_NAME);
+      }
+
       std::string error_msg =
           "Firmware update failed: Firmware is incompatible with this device. "
-          "Verify the firmware URL/file is correct for your RealSense camera model.";
+          "Verify the firmware URL/file is correct for your RealSense camera "
+          "model (" + device_model + ").";
       VIAM_SDK_LOG_IMPL(logger, error)
           << "[handleFirmwareUpdate] " << error_msg;
       return {false, {{"error", error_msg}}};
