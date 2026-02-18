@@ -61,7 +61,8 @@ prepareDeviceForUpdate(std::shared_ptr<rs2::device> rs_device,
   // Check if device is updatable
   if (!rs_device->is<rs2::updatable>()) {
     std::string error_msg = "Device does not support firmware updates";
-    VIAM_SDK_LOG_IMPL(logger, error) << "[prepareDeviceForUpdate] " << error_msg;
+    VIAM_SDK_LOG_IMPL(logger, error)
+        << "[prepareDeviceForUpdate] " << error_msg;
     return {false, {{"error", error_msg}}, rs2::update_device()};
   }
 
@@ -81,7 +82,8 @@ prepareDeviceForUpdate(std::shared_ptr<rs2::device> rs_device,
         "Verify the firmware URL/file is correct for your RealSense camera "
         "model (" +
         device_model + ").";
-    VIAM_SDK_LOG_IMPL(logger, error) << "[prepareDeviceForUpdate] " << error_msg;
+    VIAM_SDK_LOG_IMPL(logger, error)
+        << "[prepareDeviceForUpdate] " << error_msg;
     return {false, {{"error", error_msg}}, rs2::update_device()};
   }
 
@@ -160,7 +162,8 @@ prepareDeviceForUpdate(std::shared_ptr<rs2::device> rs_device,
                    [&] { return device_found; })) {
     std::string error_msg = "Timeout waiting for device to reconnect in DFU "
                             "mode after 15 seconds";
-    VIAM_SDK_LOG_IMPL(logger, error) << "[prepareDeviceForUpdate] " << error_msg;
+    VIAM_SDK_LOG_IMPL(logger, error)
+        << "[prepareDeviceForUpdate] " << error_msg;
     return {false, {{"error", error_msg}}, update_device};
   }
 
@@ -169,7 +172,8 @@ prepareDeviceForUpdate(std::shared_ptr<rs2::device> rs_device,
 
   if (!update_device) {
     std::string error_msg = "Failed to get update device interface";
-    VIAM_SDK_LOG_IMPL(logger, error) << "[prepareDeviceForUpdate] " << error_msg;
+    VIAM_SDK_LOG_IMPL(logger, error)
+        << "[prepareDeviceForUpdate] " << error_msg;
     return {false, {{"error", error_msg}}, update_device};
   }
   return {true, {}, update_device};
