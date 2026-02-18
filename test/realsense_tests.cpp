@@ -174,7 +174,8 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
       .createDevice =
           [](const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
              const std::unordered_set<std::string> &supported_models,
-             const realsense::RsResourceConfig &config, viam::sdk::LogSource &logger)
+             const realsense::RsResourceConfig &config,
+             viam::sdk::LogSource &logger)
           -> std::shared_ptr<
               boost::synchronized_value<device::ViamRSDevice<>>> {
         std::cout << "Mock: createDevice called for " << serial << std::endl;
