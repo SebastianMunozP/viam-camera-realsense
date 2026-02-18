@@ -55,6 +55,19 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
                std::shared_ptr<RealsenseContextT> realsense_ctx,
                viam::sdk::LogSource &logger) {
 
+  // Check USB type and warn if USB 2.x
+  if (rs_device->supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
+    std::string usb_type =
+        rs_device->get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
+    if (usb_type.find("2.") != std::string::npos) {
+      VIAM_SDK_LOG_IMPL(logger, warn)
+          << "Warning! the camera is connected via USB 2 port, in case "
+             "the "
+             "process fails, connect the camera to a USB 3 port and try "
+             "again";
+    }
+  }
+
   std::pair<bool, std::unordered_map<std::string, std::string>> response;
   if (firmware_url.empty()) {
     VIAM_SDK_LOG_IMPL(logger, info)
@@ -225,19 +238,6 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
               device.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
           if (device_fw_id != firmware_update_id) {
             continue;
-          }
-        }
-
-        // Check USB type and warn if USB 2.x
-        if (device.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
-          std::string usb_type =
-              device.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
-          if (usb_type.find("2.") != std::string::npos) {
-            VIAM_SDK_LOG_IMPL(logger, warn)
-                << "Warning! the camera is connected via USB 2 port, in case "
-                   "the "
-                   "process fails, connect the camera to a USB 3 port and try "
-                   "again";
           }
         }
 
