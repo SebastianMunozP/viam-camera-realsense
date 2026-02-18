@@ -107,12 +107,12 @@ createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
             mock->printDeviceInfo(dev);
           },
       .createDevice =
-          [mock](const std::string &serial,
-                 std::shared_ptr<rs2::device> dev_ptr,
-                 const std::unordered_set<std::string> &supported_models,
-                 const realsense::RsResourceConfig &config,
-                 viam::sdk::LogSource &) // Add logger parameter
-      -> std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>> {
+          [mock](
+              const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
+              const std::unordered_set<std::string> &supported_models,
+              const realsense::RsResourceConfig &config, viam::sdk::LogSource &)
+          -> std::shared_ptr<
+              boost::synchronized_value<device::ViamRSDevice<>>> {
         auto raw_device = mock->createDevice(serial, dev_ptr, supported_models,
                                              config); // Pass config
         return std::make_shared<
@@ -174,8 +174,7 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
       .createDevice =
           [](const std::string &serial, std::shared_ptr<rs2::device> dev_ptr,
              const std::unordered_set<std::string> &supported_models,
-             const realsense::RsResourceConfig &config,
-             viam::sdk::LogSource &logger)
+             const realsense::RsResourceConfig &config, viam::sdk::LogSource &)
           -> std::shared_ptr<
               boost::synchronized_value<device::ViamRSDevice<>>> {
         std::cout << "Mock: createDevice called for " << serial << std::endl;
@@ -196,7 +195,7 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
                  &latest_frameset,
              std::uint64_t maxFrameAgeMs,
              const realsense::RsResourceConfig &viamConfig,
-             viam::sdk::LogSource &logger) {
+             viam::sdk::LogSource &) {
             std::cout << "Mock: startDevice called for " << serial << std::endl;
             if (device) {
               auto locked_device = device->synchronize();
@@ -207,7 +206,7 @@ DeviceFunctions createFullyMockedDeviceFunctions() {
           [](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>
                  device,
              realsense::RsResourceConfig const &viamConfig,
-             viam::sdk::LogSource &logger) {
+             viam::sdk::LogSource &) {
             std::cout << "Mock: reconfigureDevice called" << std::endl;
             // No-op for mock
           }};
