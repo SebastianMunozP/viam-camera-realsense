@@ -4,6 +4,7 @@
 #include "sensors.hpp"
 #include "time.hpp"
 #include "utils.hpp"
+
 #include <viam/sdk/components/camera.hpp>
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
