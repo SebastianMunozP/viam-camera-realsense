@@ -633,12 +633,14 @@ public:
         VIAM_SDK_LOG(error) << "[validate] sensors is not a list";
         throw std::invalid_argument("sensors must be a list");
       }
-      auto sensors_proto = attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
+      auto sensors_proto =
+          attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
 
       if (sensors_proto.size() == 0 or sensors_proto.size() > 2) {
         VIAM_SDK_LOG(error)
             << "[validate] sensors field must contain 1 or 2 elements";
-        throw std::invalid_argument("sensors field must contain 1 or 2 elements");
+        throw std::invalid_argument(
+            "sensors field must contain 1 or 2 elements");
       }
       if (sensors_proto.size() == 1) {
         VIAM_SDK_LOG(info) << "[validate] Validating that sensors is a string";
@@ -646,7 +648,8 @@ public:
           VIAM_SDK_LOG(error) << "[validate] sensors is not a string";
           throw std::invalid_argument("sensors must be a string");
         }
-        std::string sensors_param = sensors_proto[0].get_unchecked<std::string>();
+        std::string sensors_param =
+            sensors_proto[0].get_unchecked<std::string>();
         if (sensors_param != "color" and sensors_param != "depth") {
           VIAM_SDK_LOG(error)
               << "[validate] sensors must be either 'color' or 'depth'";
@@ -678,7 +681,8 @@ public:
         }
       }
     } else {
-      VIAM_SDK_LOG(info) << "[validate] sensors not specified, will default to [\"color\", \"depth\"]";
+      VIAM_SDK_LOG(info) << "[validate] sensors not specified, will default to "
+                            "[\"color\", \"depth\"]";
     }
 
     if (attrs.count("serial_number")) {
@@ -884,7 +888,8 @@ private:
     // Default to both color and depth sensors if not specified
     std::vector<sensors::SensorType> sensors;
     if (attrs.count("sensors")) {
-      auto sensors_list = attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
+      auto sensors_list =
+          attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
       for (const auto &sensor : sensors_list) {
         auto sensor_type = sensors::string_to_sensor_type(
             sensor.get_unchecked<std::string>(), this->logger_);

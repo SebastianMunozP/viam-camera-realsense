@@ -325,8 +325,7 @@ TEST_F(RealsenseTest, ValidateWithEmptyConfig_UsesDefaults) {
       Model("viam", "camera", "realsense"), LinkConfig{}, log_level::info);
 
   // Empty config is now valid - sensors default to ["color", "depth"]
-  EXPECT_NO_THROW(
-      { Realsense<SimpleMockContext>::validate(config); });
+  EXPECT_NO_THROW({ Realsense<SimpleMockContext>::validate(config); });
 }
 
 TEST_F(RealsenseTest, ValidateWithEmptySerialNumber) {
