@@ -686,7 +686,6 @@ public:
     }
 
     if (attrs.count("serial_number")) {
-
       VIAM_SDK_LOG(info)
           << "[validate] Validating that serial_number is a string";
       if (not attrs["serial_number"].is_a<std::string>()) {
@@ -694,7 +693,13 @@ public:
         throw std::invalid_argument("serial_number must be a string");
       }
 
-      VIAM_SDK_LOG(info) << "[validate] serial_number is empty, "
+      std::string serial = attrs["serial_number"].get_unchecked<std::string>();
+      if (serial.empty()) {
+        VIAM_SDK_LOG(info) << "[validate] serial_number is empty, "
+                              "first available device will be used";
+      }
+    } else {
+      VIAM_SDK_LOG(info) << "[validate] serial_number not specified, "
                             "first available device will be used";
     }
 
