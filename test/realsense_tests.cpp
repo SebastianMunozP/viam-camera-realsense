@@ -318,15 +318,15 @@ TEST_F(RealsenseTest, ValidateWithValidConfig) {
   });
 }
 
-TEST_F(RealsenseTest, ValidateWithInvalidConfig_NoSerialNumber) {
+TEST_F(RealsenseTest, ValidateWithEmptyConfig_UsesDefaults) {
   auto empty_attributes = ProtoStruct{};
-  ResourceConfig invalid_config(
+  ResourceConfig config(
       "rdk:component:camera", "", test_name_, empty_attributes, "",
       Model("viam", "camera", "realsense"), LinkConfig{}, log_level::info);
 
-  EXPECT_THROW(
-      { Realsense<SimpleMockContext>::validate(invalid_config); },
-      std::invalid_argument);
+  // Empty config is now valid - sensors default to ["color", "depth"]
+  EXPECT_NO_THROW(
+      { Realsense<SimpleMockContext>::validate(config); });
 }
 
 TEST_F(RealsenseTest, ValidateWithEmptySerialNumber) {
