@@ -626,7 +626,8 @@ public:
   static std::vector<std::string> validate(viam::sdk::ResourceConfig cfg) {
     auto attrs = cfg.attributes();
 
-    // If sensors is provided, validate it
+    // If sensors is provided, validate it, if not, we'll enable both color and
+    // depth by default
     if (attrs.count("sensors")) {
       VIAM_SDK_LOG(info) << "[validate] Validating sensors config";
       if (not attrs["sensors"].is_a<viam::sdk::ProtoList>()) {
