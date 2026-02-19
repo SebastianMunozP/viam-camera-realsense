@@ -226,8 +226,6 @@ prepareDeviceForUpdate(std::shared_ptr<rs2::device> rs_device,
  * @return pair<bool, map> - first is success flag, second contains
  * message/error. Returns {false, {{"error", "..."}}} on failure, {true,
  * {{"message", "..."}}} on success.
- * @note This function does not throw. All errors (download, extraction, SDK
- * errors) are caught and returned as error pairs.
  */
 template <typename RealsenseContextT>
 [[nodiscard]] std::pair<bool, std::unordered_map<std::string, std::string>>
