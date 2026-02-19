@@ -8,7 +8,6 @@ on:
   push:
     branches:
       - main
-      - install-codecov
 
 jobs:
   run-tests:
@@ -18,12 +17,11 @@ jobs:
     strategy:
       matrix:
         include:
-          # Disabled for testing - buildjet not available on forks
-          # - os: buildjet-8vcpu-ubuntu-2204-arm
-          #   container:
-          #     image: ghcr.io/viam-modules/viam-camera-realsense:arm64
-          #     options: --platform linux/arm64
-          #   coverage: false
+          - os: buildjet-8vcpu-ubuntu-2204-arm
+            container:
+              image: ghcr.io/viam-modules/viam-camera-realsense:arm64
+              options: --platform linux/arm64
+            coverage: false
           - os: ubuntu-latest
             container:
               image: ghcr.io/viam-modules/viam-camera-realsense:amd64
