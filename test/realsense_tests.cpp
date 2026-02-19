@@ -318,15 +318,14 @@ TEST_F(RealsenseTest, ValidateWithValidConfig) {
   });
 }
 
-TEST_F(RealsenseTest, ValidateWithInvalidConfig_NoSerialNumber) {
+TEST_F(RealsenseTest, ValidateWithEmptyConfig_UsesDefaults) {
   auto empty_attributes = ProtoStruct{};
-  ResourceConfig invalid_config(
+  ResourceConfig config(
       "rdk:component:camera", "", test_name_, empty_attributes, "",
       Model("viam", "camera", "realsense"), LinkConfig{}, log_level::info);
 
-  EXPECT_THROW(
-      { Realsense<SimpleMockContext>::validate(invalid_config); },
-      std::invalid_argument);
+  // Empty config is now valid - sensors default to ["color", "depth"]
+  EXPECT_NO_THROW({ Realsense<SimpleMockContext>::validate(config); });
 }
 
 TEST_F(RealsenseTest, ValidateWithEmptySerialNumber) {
@@ -338,10 +337,10 @@ TEST_F(RealsenseTest, ValidateWithEmptySerialNumber) {
       "rdk:component:camera", "", test_name_, empty_serial_attributes, "",
       Model("viam", "camera", "realsense"), LinkConfig{}, log_level::info);
 
-  EXPECT_NO_THROW({
-    auto result = Realsense<SimpleMockContext>::validate(valid_config);
-    EXPECT_TRUE(result.empty());
-  });
+  // An explicitly empty serial_number string is valid and will use the first
+  // available device This behaves the same as not specifying serial_number at
+  // all
+  EXPECT_NO_THROW(Realsense<SimpleMockContext>::validate(valid_config));
 }
 
 TEST_F(RealsenseTest, DoCommandReturnsEmptyStruct) {

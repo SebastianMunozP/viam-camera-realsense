@@ -626,70 +626,82 @@ public:
   static std::vector<std::string> validate(viam::sdk::ResourceConfig cfg) {
     auto attrs = cfg.attributes();
 
-    VIAM_SDK_LOG(info) << "[validate] Validating that config contains sensors";
-    if (not attrs.count("sensors")) {
-      VIAM_SDK_LOG(error) << "[validate] sensors are not present";
-      throw std::invalid_argument("sensors must be present");
-    }
-    if (not attrs["sensors"].is_a<viam::sdk::ProtoList>()) {
-      VIAM_SDK_LOG(error) << "[validate] sensors is not a list";
-      throw std::invalid_argument("sensors must be a list");
-    }
-    auto sensors_proto = attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
+    // If sensors is provided, validate it, if not, we'll enable both color and
+    // depth by default
+    if (attrs.count("sensors")) {
+      VIAM_SDK_LOG(info) << "[validate] Validating sensors config";
+      if (not attrs["sensors"].is_a<viam::sdk::ProtoList>()) {
+        VIAM_SDK_LOG(error) << "[validate] sensors is not a list";
+        throw std::invalid_argument("sensors must be a list");
+      }
+      auto sensors_proto =
+          attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
 
-    if (sensors_proto.size() == 0 or sensors_proto.size() > 2) {
-      VIAM_SDK_LOG(error)
-          << "[validate] sensors field must contain 1 or 2 elements";
-      throw std::invalid_argument("sensors field must contain 1 or 2 elements");
-    }
-    if (sensors_proto.size() == 1) {
-      VIAM_SDK_LOG(info) << "[validate] Validating that sensors is a string";
-      if (not sensors_proto[0].is_a<std::string>()) {
-        VIAM_SDK_LOG(error) << "[validate] sensors is not a string";
-        throw std::invalid_argument("sensors must be a string");
-      }
-      std::string sensors_param = sensors_proto[0].get_unchecked<std::string>();
-      if (sensors_param != "color" and sensors_param != "depth") {
+      if (sensors_proto.size() == 0 or sensors_proto.size() > 2) {
         VIAM_SDK_LOG(error)
-            << "[validate] sensors must be either 'color' or 'depth'";
+            << "[validate] sensors field must contain 1 or 2 elements";
         throw std::invalid_argument(
-            "sensors must be either 'color' or 'depth'");
+            "sensors field must contain 1 or 2 elements");
       }
-    }
-    if (sensors_proto.size() == 2) {
-      VIAM_SDK_LOG(info) << "[validate] Validating that sensors is a string";
-      if (not sensors_proto[0].is_a<std::string>() or
-          not sensors_proto[1].is_a<std::string>()) {
-        VIAM_SDK_LOG(error) << "[validate] sensors is not a string";
-        throw std::invalid_argument("sensors must be a string");
+      if (sensors_proto.size() == 1) {
+        VIAM_SDK_LOG(info) << "[validate] Validating that sensors is a string";
+        if (not sensors_proto[0].is_a<std::string>()) {
+          VIAM_SDK_LOG(error) << "[validate] sensors is not a string";
+          throw std::invalid_argument("sensors must be a string");
+        }
+        std::string sensors_param =
+            sensors_proto[0].get_unchecked<std::string>();
+        if (sensors_param != "color" and sensors_param != "depth") {
+          VIAM_SDK_LOG(error)
+              << "[validate] sensors must be either 'color' or 'depth'";
+          throw std::invalid_argument(
+              "sensors must be either 'color' or 'depth'");
+        }
       }
-      std::string sensors_param_1 =
-          sensors_proto[0].get_unchecked<std::string>();
-      std::string sensors_param_2 =
-          sensors_proto[1].get_unchecked<std::string>();
-      if ((sensors_param_1 != "color" and sensors_param_1 != "depth") or
-          (sensors_param_2 != "color" and sensors_param_2 != "depth")) {
-        VIAM_SDK_LOG(error)
-            << "[validate] sensors must be either 'color' or 'depth'";
-        throw std::invalid_argument(
-            "sensors must be either 'color' or 'depth'");
+      if (sensors_proto.size() == 2) {
+        VIAM_SDK_LOG(info) << "[validate] Validating that sensors is a string";
+        if (not sensors_proto[0].is_a<std::string>() or
+            not sensors_proto[1].is_a<std::string>()) {
+          VIAM_SDK_LOG(error) << "[validate] sensors is not a string";
+          throw std::invalid_argument("sensors must be a string");
+        }
+        std::string sensors_param_1 =
+            sensors_proto[0].get_unchecked<std::string>();
+        std::string sensors_param_2 =
+            sensors_proto[1].get_unchecked<std::string>();
+        if ((sensors_param_1 != "color" and sensors_param_1 != "depth") or
+            (sensors_param_2 != "color" and sensors_param_2 != "depth")) {
+          VIAM_SDK_LOG(error)
+              << "[validate] sensors must be either 'color' or 'depth'";
+          throw std::invalid_argument(
+              "sensors must be either 'color' or 'depth'");
+        }
+        if (sensors_param_1 == sensors_param_2) {
+          VIAM_SDK_LOG(error) << "[validate] sensors cannot contain duplicates";
+          throw std::invalid_argument("sensors cannot contain duplicates");
+        }
       }
-      if (sensors_param_1 == sensors_param_2) {
-        VIAM_SDK_LOG(error) << "[validate] sensors cannot contain duplicates";
-        throw std::invalid_argument("sensors cannot contain duplicates");
-      }
+    } else {
+      VIAM_SDK_LOG(info) << "[validate] sensors not specified, will default to "
+                            "[\"color\", \"depth\"]";
     }
 
     if (attrs.count("serial_number")) {
-
       VIAM_SDK_LOG(info)
           << "[validate] Validating that serial_number is a string";
       if (not attrs["serial_number"].is_a<std::string>()) {
-        VIAM_SDK_LOG(error) << "[validate] serial_number is not a string";
-        throw std::invalid_argument("serial_number must be a string");
+        std::string error_message = "serial_number is not a string";
+        VIAM_SDK_LOG(error) << "[validate] " << error_message;
+        throw std::invalid_argument(error_message);
       }
 
-      VIAM_SDK_LOG(info) << "[validate] serial_number is empty, "
+      std::string serial = attrs["serial_number"].get_unchecked<std::string>();
+      if (serial.empty()) {
+        VIAM_SDK_LOG(info) << "[validate] serial_number is empty, "
+                              "first available device will be used";
+      }
+    } else {
+      VIAM_SDK_LOG(info) << "[validate] serial_number not specified, "
                             "first available device will be used";
     }
 
@@ -879,16 +891,25 @@ private:
     if (attrs.count("serial_number")) {
       serial = attrs["serial_number"].get_unchecked<std::string>();
     }
-    auto sensors_list = attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
+
+    // Default to both color and depth sensors if not specified
     std::vector<sensors::SensorType> sensors;
-    for (const auto &sensor : sensors_list) {
-      auto sensor_type = sensors::string_to_sensor_type(
-          sensor.get_unchecked<std::string>(), this->logger_);
-      if (sensor_type == sensors::SensorType::unknown) {
-        throw std::runtime_error("Invalid sensor type: " +
-                                 sensor.get_unchecked<std::string>());
+    if (attrs.count("sensors")) {
+      auto sensors_list =
+          attrs["sensors"].get_unchecked<viam::sdk::ProtoList>();
+      for (const auto &sensor : sensors_list) {
+        auto sensor_type = sensors::string_to_sensor_type(
+            sensor.get_unchecked<std::string>(), this->logger_);
+        if (sensor_type == sensors::SensorType::unknown) {
+          throw std::runtime_error("Invalid sensor type: " +
+                                   sensor.get_unchecked<std::string>());
+        }
+        sensors.push_back(sensor_type);
       }
-      sensors.push_back(sensor_type);
+    } else {
+      // Default: enable both color and depth sensors
+      sensors.push_back(sensors::SensorType::color);
+      sensors.push_back(sensors::SensorType::depth);
     }
     std::optional<int> width;
     if (attrs.count("width_px")) {
