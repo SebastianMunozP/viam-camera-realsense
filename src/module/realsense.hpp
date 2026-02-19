@@ -437,14 +437,6 @@ public:
         VIAM_SDK_LOG_IMPL(this->logger_, error) << "[get_images] " << error_msg;
         throw std::runtime_error(error_msg);
       }
-      if (is_recovery_mode_.get()) {
-        std::string error_msg =
-            "Camera is in recovery/DFU mode and cannot stream images. "
-            "Please update the firmware using do_command with firmware_update "
-            "parameter.";
-        VIAM_SDK_LOG_IMPL(this->logger_, error) << "[get_images] " << error_msg;
-        throw std::runtime_error(error_msg);
-      }
 
       bool should_process_color = false;
       bool should_process_depth = false;
@@ -576,15 +568,6 @@ public:
   get_point_cloud(std::string mime_type,
                   const viam::sdk::ProtoStruct &extra) override {
     try {
-      if (is_recovery_mode_.get()) {
-        std::string error_msg =
-            "Camera is in recovery/DFU mode and cannot stream point clouds. "
-            "Please update the firmware using do_command with firmware_update "
-            "parameter.";
-        VIAM_SDK_LOG_IMPL(this->logger_, error)
-            << "[get_point_cloud] " << error_msg;
-        throw std::runtime_error(error_msg);
-      }
       if (is_recovery_mode_.get()) {
         std::string error_msg =
             "Camera is in recovery/DFU mode and cannot stream point clouds. "
@@ -1177,22 +1160,6 @@ private:
             continue;
           }
         } // End scope for serials_guard lock
-
-        // Handle recovery mode devices differently - they can't stream
-        if (is_recovery) {
-          VIAM_SDK_LOG_IMPL(this->logger_, warn)
-              << "[assign_and_initialize_device] Device "
-              << connected_device_serial_number
-              << " is in recovery/DFU mode. Skipping streaming initialization. "
-              << "Only firmware updates are supported for this device.";
-          is_recovery_mode_ = true;
-          recovery_device_ptr_ =
-              dev_ptr; // Store the device pointer for firmware updates
-          physical_camera_assigned_ = true;
-          return true;
-        }
-
-        // Normal device initialization with streaming support
 
         // Handle recovery mode devices differently - they can't stream
         if (is_recovery) {
