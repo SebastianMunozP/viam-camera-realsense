@@ -8,7 +8,7 @@ on: pull_request
 jobs:
   run-tests:
     name: Run Tests
-    timeout-minutes: 10
+    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -21,15 +21,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Restore cached Conan dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.conan2
+          key: ${{ matrix.os }}-conan-${{ hashFiles('**/conanfile.py') }}
+          restore-keys: |
+            ${{ matrix.os }}-conan-
+
       - name: Install dependencies
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             sudo apt-get update && sudo apt-get install -y make
           fi
           make setup
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            test -f ./venv/bin/activate && . ./venv/bin/activate && conan profile show
-          fi
       
       - name: Lint
         run: |
@@ -41,19 +46,11 @@ jobs:
             exit 1
           fi
 
-      - name: Install Conan dependencies
-        run: |
-          make conan-install-test
-
-      - name: Run the tests
-        run: make test-native
+      - name: Run tests
+        run: make test
 
       - name: Check binary dependencies
         if: runner.os == 'Linux'
         run: |
-          # Build the release binary to check dependencies
-          test -f ./venv/bin/activate && . ./venv/bin/activate
-          conan create . -o "&:with_tests=False" -s:a build_type=Release -s:a compiler.cppstd=17 --build=missing --output-folder=build-dep-check
-
-          # Run dependency check script
-          ./bin/test-dynamic-deps.sh build-dep-check/build/Release/viam-camera-realsense
+          # The binary was built by 'make test' in build-native/
+          ./bin/test-dynamic-deps.sh build-native/viam-camera-realsense
