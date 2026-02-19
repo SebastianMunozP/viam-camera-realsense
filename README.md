@@ -31,7 +31,6 @@ Copy and paste the following attributes into your camera's JSON configuration:
   "sensors": ["color", "depth"],
   "width_px": 640,
   "height_px": 480,
-  "little_endian_depth": false,
   "serial_number": ""
 }
 ```
@@ -60,7 +59,6 @@ The following attributes are available for `viam:camera:realsense` cameras:
         "sensors": ["color","depth"],
         "width_px": 640,
         "height_px": 480,
-        "little_endian_depth": false,
         "serial_number": "YOUR_CAMERA_SERIAL_NUMBER"
       },
       "namespace": "rdk",
