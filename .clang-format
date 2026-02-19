@@ -1,28 +1,22 @@
 ---
 # Clang-Format configuration for viam-camera-realsense
-# Based on Google C++ Style Guide with modifications
+# Compatible with clang-format 10+
 
 Language: Cpp
 BasedOnStyle: Google
 
-# Indentation
+# Basic settings
 IndentWidth: 2
-TabWidth: 2
-UseTab: Never
-ContinuationIndentWidth: 4
-
-# Line length
 ColumnLimit: 100
-
-# Braces
-BreakBeforeBraces: Attach
+UseTab: Never
+TabWidth: 2
 
 # Alignment
 AlignAfterOpenBracket: Align
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
-AlignOperands: Align
+AlignOperands: true
 AlignTrailingComments: true
 
 # Spacing
@@ -38,17 +32,17 @@ SpaceBeforeRangeBasedForLoopColon: true
 SpaceInEmptyBlock: false
 SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 2
-SpacesInAngles: Never
+SpacesInAngles: false
 SpacesInConditionalStatement: false
 SpacesInContainerLiterals: true
 SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
 
-# Wrapping
+# Line breaking
 AllowAllArgumentsOnNextLine: true
 AllowAllParametersOfDeclarationOnNextLine: true
-AllowShortBlocksOnASingleLine: Never
+AllowShortBlocksOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
@@ -60,28 +54,20 @@ AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: true
 BinPackParameters: true
 BreakBeforeBinaryOperators: None
+BreakBeforeBraces: Attach
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeColon
 BreakInheritanceList: BeforeColon
 BreakStringLiterals: true
+ContinuationIndentWidth: 4
 
 # Includes
 IncludeBlocks: Regroup
-SortIncludes: CaseSensitive
+SortIncludes: true
 
 # Pointers and references
 DerivePointerAlignment: false
 PointerAlignment: Left
-
-# Penalties (for line breaking decisions)
-PenaltyBreakAssignment: 2
-PenaltyBreakBeforeFirstCallParameter: 19
-PenaltyBreakComment: 300
-PenaltyBreakFirstLessLess: 120
-PenaltyBreakString: 1000
-PenaltyBreakTemplateDeclaration: 10
-PenaltyExcessCharacter: 1000000
-PenaltyReturnTypeOnItsOwnLine: 60
 
 # Other
 Cpp11BracedListStyle: true
@@ -91,5 +77,5 @@ MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 ReflowComments: true
 SortUsingDeclarations: true
-Standard: Latest
+Standard: Cpp11
 ...

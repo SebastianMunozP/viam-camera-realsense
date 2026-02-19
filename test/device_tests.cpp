@@ -183,8 +183,8 @@ class SimpleConfig {
     }
   }
 
-  void
-  set_enable_stream_func(std::function<void(rs2_stream, int, int, int, rs2_format, int)> func) {
+  void set_enable_stream_func(
+      std::function<void(rs2_stream, int, int, int, rs2_format, int)> func) {
     enable_stream_func_ = func;
   }
 

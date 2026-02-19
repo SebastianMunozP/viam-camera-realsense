@@ -450,10 +450,10 @@ bool destroyDevice(std::shared_ptr<boost::synchronized_value<ViamDeviceT>>& dev,
 
 template <typename ViamConfigT, typename ViamDeviceT, typename DeviceT, typename ConfigT,
           typename ColorSensorT, typename DepthSensorT, typename VideoStreamProfileT>
-std::shared_ptr<boost::synchronized_value<ViamDeviceT>>
-createDevice(std::string const& serial_number, std::shared_ptr<DeviceT> dev,
-             std::unordered_set<std::string> const& supported_camera_models,
-             ViamConfigT const& viamConfig, viam::sdk::LogSource& logger) {
+std::shared_ptr<boost::synchronized_value<ViamDeviceT>> createDevice(
+    std::string const& serial_number, std::shared_ptr<DeviceT> dev,
+    std::unordered_set<std::string> const& supported_camera_models, ViamConfigT const& viamConfig,
+    viam::sdk::LogSource& logger) {
   VIAM_DEVICE_LOG(logger, info) << "[createDevice] creating device serial number: "
                                 << serial_number;
   auto camera_model = getCameraModel(dev);

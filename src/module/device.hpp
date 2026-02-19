@@ -69,10 +69,9 @@ template <typename ViamConfigT, typename ViamDeviceT = ViamRSDevice<>,
           typename DeviceT = rs2::device, typename ConfigT = rs2::config,
           typename ColorSensorT = rs2::color_sensor, typename DepthSensorT = rs2::depth_sensor,
           typename VideoStreamProfileT = rs2::video_stream_profile>
-std::shared_ptr<boost::synchronized_value<ViamDeviceT>>
-createDevice(std::string const& serial_number, std::shared_ptr<DeviceT> dev,
-             std::unordered_set<std::string> const& supported_camera_models,
-             ViamConfigT const& viamConfig);
+std::shared_ptr<boost::synchronized_value<ViamDeviceT>> createDevice(
+    std::string const& serial_number, std::shared_ptr<DeviceT> dev,
+    std::unordered_set<std::string> const& supported_camera_models, ViamConfigT const& viamConfig);
 
 template <typename ViamDeviceT>
 bool destroyDevice(std::shared_ptr<boost::synchronized_value<ViamDeviceT>>& dev) noexcept;

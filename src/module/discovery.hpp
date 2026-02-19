@@ -23,8 +23,8 @@ class RealsenseDiscovery : public viam::sdk::Discovery {
                      std::shared_ptr<ContextT> ctx)
       : Discovery(configuration.name()), rs_ctx_(ctx) {}
 
-  std::vector<viam::sdk::ResourceConfig>
-  discover_resources(const viam::sdk::ProtoStruct& extra) override {
+  std::vector<viam::sdk::ResourceConfig> discover_resources(
+      const viam::sdk::ProtoStruct& extra) override {
     std::vector<viam::sdk::ResourceConfig> configs;
 
     try {

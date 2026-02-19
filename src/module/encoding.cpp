@@ -198,9 +198,9 @@ std::vector<std::uint8_t> encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video
   // being trivially copyable and having a standard memory layout), and that it
   // has no padding, thus can be copied as bytes. Since vector is contiguous, we
   // can just copy the whole thing
-  static_assert(std::is_trivially_copyable_v<PointXYZRGB> and
-                    std::is_standard_layout_v<PointXYZRGB>,
-                "PointXYZRGB must be trivially copyable and have standard layout");
+  static_assert(
+      std::is_trivially_copyable_v<PointXYZRGB> and std::is_standard_layout_v<PointXYZRGB>,
+      "PointXYZRGB must be trivially copyable and have standard layout");
   static_assert(sizeof(PointXYZRGB) == (3 * sizeof(float)) + sizeof(unsigned int),
                 "PointXYZRGB has unexpected padding");
 

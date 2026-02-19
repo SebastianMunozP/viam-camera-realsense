@@ -556,8 +556,8 @@ class Realsense final : public viam::sdk::Camera, public viam::sdk::Reconfigurab
       throw std::runtime_error("failed to create properties: " + std::string(e.what()));
     }
   }
-  std::vector<viam::sdk::GeometryConfig>
-  get_geometries(const viam::sdk::ProtoStruct& extra) override {
+  std::vector<viam::sdk::GeometryConfig> get_geometries(
+      const viam::sdk::ProtoStruct& extra) override {
     // This is the geometry for the D435 and D435i, the only models that we
     // currently support. See
     // https://github.com/viam-modules/viam-camera-realsense/pull/75 for

@@ -65,9 +65,9 @@ class MockDeviceFunctions {
 
 DeviceFunctions createMockDeviceFunctionsWithOrder(std::shared_ptr<MockDeviceFunctions> mock) {
   return DeviceFunctions{
-      .stopDevice =
-          [mock](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>& device,
-                 viam::sdk::LogSource&) -> bool { return mock->stopDevice(device); },
+      .stopDevice = [mock](
+                        std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>& device,
+                        viam::sdk::LogSource&) -> bool { return mock->stopDevice(device); },
       .destroyDevice =
           [mock](std::shared_ptr<boost::synchronized_value<device::ViamRSDevice<>>>& device,
                  viam::sdk::LogSource&) -> bool { return mock->destroyDevice(device); },
