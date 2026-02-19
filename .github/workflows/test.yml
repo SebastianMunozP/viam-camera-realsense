@@ -1,9 +1,14 @@
 name: Test
 
-concurrency: 
+concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
-on: pull_request
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - install-codecov
 
 jobs:
   run-tests:
@@ -81,3 +86,4 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
