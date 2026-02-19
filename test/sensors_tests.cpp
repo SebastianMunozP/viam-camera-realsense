@@ -1,7 +1,8 @@
-#include "../src/module/sensors.hpp"
-#include "log_capture.hpp"
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include "../src/module/sensors.hpp"
+#include "log_capture.hpp"
 
 namespace realsense {
 namespace sensors {
@@ -23,8 +24,7 @@ TEST(SensorsTest, SensorTypeToString) {
 
   auto error_logs = log_capture.get_error_logs();
   ASSERT_EQ(error_logs.size(), 1);
-  EXPECT_THAT(error_logs[0].message,
-              ::testing::HasSubstr("Invalid sensor type"));
+  EXPECT_THAT(error_logs[0].message, ::testing::HasSubstr("Invalid sensor type"));
 }
 
 TEST(SensorsTest, StringToSensorType) {
@@ -42,25 +42,29 @@ TEST(SensorsTest, StringToSensorType) {
 
   auto error_logs = log_capture.get_error_logs();
   ASSERT_EQ(error_logs.size(), 1);
-  EXPECT_THAT(error_logs[0].message,
-              ::testing::HasSubstr("Invalid sensor type: foo"));
+  EXPECT_THAT(error_logs[0].message, ::testing::HasSubstr("Invalid sensor type: foo"));
 }
 
 // Dummy classes to mock rs2::sensor-like interface for get_sensor_type template
 struct MockDepthSensor {
-  template <typename T> bool is() const {
+  template <typename T>
+  bool is() const {
     return std::is_same<T, rs2::depth_sensor>::value;
   }
 };
 
 struct MockColorSensor {
-  template <typename T> bool is() const {
+  template <typename T>
+  bool is() const {
     return std::is_same<T, rs2::color_sensor>::value;
   }
 };
 
 struct MockUnknownSensor {
-  template <typename T> bool is() const { return false; }
+  template <typename T>
+  bool is() const {
+    return false;
+  }
 };
 
 TEST(SensorsTest, GetSensorType) {
@@ -82,9 +86,8 @@ TEST(SensorsTest, GetSensorType) {
 
   auto error_logs = log_capture.get_error_logs();
   ASSERT_EQ(error_logs.size(), 1);
-  EXPECT_THAT(error_logs[0].message,
-              ::testing::HasSubstr("Invalid sensor type"));
+  EXPECT_THAT(error_logs[0].message, ::testing::HasSubstr("Invalid sensor type"));
 }
 
-} // namespace sensors
-} // namespace realsense
+}  // namespace sensors
+}  // namespace realsense

@@ -1,16 +1,14 @@
 #pragma once
 
-#include "realsense.hpp"
-
 #include <chrono>
+#include <librealsense2/rs.hpp>
 #include <memory>
 #include <thread>
-
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
 #include <viam/sdk/services/discovery.hpp>
 
-#include <librealsense2/rs.hpp>
+#include "realsense.hpp"
 
 namespace realsense {
 namespace discovery {
@@ -19,15 +17,14 @@ template <typename ContextT>
 class RealsenseDiscovery : public viam::sdk::Discovery {
   std::shared_ptr<ContextT> rs_ctx_;
 
-public:
+ public:
   static inline viam::sdk::Model model{"viam", "realsense", "discovery"};
-  RealsenseDiscovery(viam::sdk::Dependencies dependencies,
-                     viam::sdk::ResourceConfig configuration,
+  RealsenseDiscovery(viam::sdk::Dependencies dependencies, viam::sdk::ResourceConfig configuration,
                      std::shared_ptr<ContextT> ctx)
       : Discovery(configuration.name()), rs_ctx_(ctx) {}
 
   std::vector<viam::sdk::ResourceConfig>
-  discover_resources(const viam::sdk::ProtoStruct &extra) override {
+  discover_resources(const viam::sdk::ProtoStruct& extra) override {
     std::vector<viam::sdk::ResourceConfig> configs;
 
     try {
@@ -36,8 +33,8 @@ public:
       auto deviceList = rs_ctx_->query_devices();
       int devCount = deviceList.size();
 
-      VIAM_SDK_LOG(info) << "[discover_resources] query_devices returned "
-                         << devCount << " devices";
+      VIAM_SDK_LOG(info) << "[discover_resources] query_devices returned " << devCount
+                         << " devices";
 
       if (devCount == 0) {
         VIAM_SDK_LOG(warn) << "[discover_resources] No Realsense devices found "
@@ -48,18 +45,12 @@ public:
       std::vector<std::string> device_errors;
       for (int i = 0; i < devCount; i++) {
         try {
-          VIAM_SDK_LOG(debug)
-              << "[discover_resources] Attempting to access device at index "
-              << i;
+          VIAM_SDK_LOG(debug) << "[discover_resources] Attempting to access device at index " << i;
           auto dev = deviceList[i];
-          VIAM_SDK_LOG(debug)
-              << "[discover_resources] Successfully accessed device at index "
-              << i;
+          VIAM_SDK_LOG(debug) << "[discover_resources] Successfully accessed device at index " << i;
 
           if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
-
-            std::string serial_number =
-                dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+            std::string serial_number = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
             viam::sdk::ProtoStruct attributes;
             attributes["serial_number"] = serial_number;
@@ -72,21 +63,20 @@ public:
             std::ostringstream name;
             name << "realsense-" << serial_number;
 
-            viam::sdk::ResourceConfig config(
-                "camera", std::move(name.str()), "viam", attributes,
-                "rdk:component:camera", realsense::Realsense<ContextT>::model,
-                viam::sdk::LinkConfig{}, viam::sdk::log_level::info);
+            viam::sdk::ResourceConfig config("camera", std::move(name.str()), "viam", attributes,
+                                             "rdk:component:camera",
+                                             realsense::Realsense<ContextT>::model,
+                                             viam::sdk::LinkConfig{}, viam::sdk::log_level::info);
             configs.push_back(config);
           } else {
             VIAM_SDK_LOG(warn) << "[discover_resources] Device at index " << i
                                << " does not support serial number";
           }
-        } catch (const std::exception &e) {
-          VIAM_SDK_LOG(error)
-              << "[discover_resources] Failed to access device at index " << i
-              << ": " << e.what()
-              << "Device may be in an invalid state or have firmware "
-                 "compatibility issues.";
+        } catch (const std::exception& e) {
+          VIAM_SDK_LOG(error) << "[discover_resources] Failed to access device at index " << i
+                              << ": " << e.what()
+                              << "Device may be in an invalid state or have firmware "
+                                 "compatibility issues.";
           std::ostringstream error_msg;
           error_msg << "Device " << i << ": " << e.what();
           device_errors.push_back(error_msg.str());
@@ -98,16 +88,14 @@ public:
       // If we found at least one valid device, return those configs
       if (!configs.empty()) {
         if (!device_errors.empty()) {
-          VIAM_SDK_LOG(warn) << "[discover_resources] Successfully discovered "
-                             << configs.size() << " device(s), but "
-                             << device_errors.size() << " device(s) failed";
-          for (const auto &err : device_errors) {
-            VIAM_SDK_LOG(error)
-                << "[discover_resources] Failed device: " << err;
+          VIAM_SDK_LOG(warn) << "[discover_resources] Successfully discovered " << configs.size()
+                             << " device(s), but " << device_errors.size() << " device(s) failed";
+          for (const auto& err : device_errors) {
+            VIAM_SDK_LOG(error) << "[discover_resources] Failed device: " << err;
           }
         }
-        VIAM_SDK_LOG(info) << "[discover_resources] Successfully created "
-                           << configs.size() << " configs";
+        VIAM_SDK_LOG(info) << "[discover_resources] Successfully created " << configs.size()
+                           << " configs";
         return configs;
       }
 
@@ -127,7 +115,7 @@ public:
       }
       return configs;
 
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
       std::ostringstream err;
       err << "[discover_resources]: " << e.what();
       VIAM_SDK_LOG(error) << err.str();
@@ -135,12 +123,11 @@ public:
     }
   }
 
-  viam::sdk::ProtoStruct
-  do_command(const viam::sdk::ProtoStruct &command) override {
+  viam::sdk::ProtoStruct do_command(const viam::sdk::ProtoStruct& command) override {
     VIAM_SDK_LOG(error) << "do_command not implemented";
     return viam::sdk::ProtoStruct{};
   }
 };
 
-} // namespace discovery
-} // namespace realsense
+}  // namespace discovery
+}  // namespace realsense

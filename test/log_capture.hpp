@@ -20,10 +20,10 @@ struct CapturedLogRecord {
 };
 
 // Custom Boost.Log sink backend to capture log messages
-class LogCaptureSink : public boost::log::sinks::basic_sink_backend<
-                           boost::log::sinks::synchronized_feeding> {
-public:
-  void consume(const boost::log::record_view &rec) {
+class LogCaptureSink
+    : public boost::log::sinks::basic_sink_backend<boost::log::sinks::synchronized_feeding> {
+ public:
+  void consume(const boost::log::record_view& rec) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     CapturedLogRecord record;
@@ -53,7 +53,7 @@ public:
     records_.clear();
   }
 
-private:
+ private:
   mutable std::mutex mutex_;
   std::vector<CapturedLogRecord> records_;
 };
@@ -66,14 +66,12 @@ private:
 //   auto error_logs = log_capture.get_error_logs();
 //   EXPECT_EQ(error_logs.size(), 1);
 class LogCaptureFixture {
-public:
+ public:
   LogCaptureFixture() {
     // Create backend and sink
     auto backend = boost::make_shared<LogCaptureSink>();
     backend_ = backend;
-    sink_ =
-        boost::make_shared<boost::log::sinks::synchronous_sink<LogCaptureSink>>(
-            backend);
+    sink_ = boost::make_shared<boost::log::sinks::synchronous_sink<LogCaptureSink>>(backend);
 
     // Register the sink with Boost.Log core
     boost::log::core::get()->add_sink(sink_);
@@ -85,15 +83,13 @@ public:
   }
 
   // Get all captured log records
-  std::vector<CapturedLogRecord> get_records() const {
-    return backend_->get_records();
-  }
+  std::vector<CapturedLogRecord> get_records() const { return backend_->get_records(); }
 
   // Get only error-level logs
   std::vector<CapturedLogRecord> get_error_logs() const {
     auto all_records = backend_->get_records();
     std::vector<CapturedLogRecord> error_logs;
-    for (const auto &record : all_records) {
+    for (const auto& record : all_records) {
       if (record.level == viam::sdk::log_level::error) {
         error_logs.push_back(record);
       }
@@ -105,7 +101,7 @@ public:
   std::vector<CapturedLogRecord> get_warning_logs() const {
     auto all_records = backend_->get_records();
     std::vector<CapturedLogRecord> warning_logs;
-    for (const auto &record : all_records) {
+    for (const auto& record : all_records) {
       if (record.level == viam::sdk::log_level::warn) {
         warning_logs.push_back(record);
       }
@@ -114,11 +110,10 @@ public:
   }
 
   // Get logs by specific level
-  std::vector<CapturedLogRecord>
-  get_logs_by_level(viam::sdk::log_level level) const {
+  std::vector<CapturedLogRecord> get_logs_by_level(viam::sdk::log_level level) const {
     auto all_records = backend_->get_records();
     std::vector<CapturedLogRecord> filtered_logs;
-    for (const auto &record : all_records) {
+    for (const auto& record : all_records) {
       if (record.level == level) {
         filtered_logs.push_back(record);
       }
@@ -129,9 +124,9 @@ public:
   // Clear all captured logs
   void clear() { backend_->clear(); }
 
-private:
+ private:
   boost::shared_ptr<LogCaptureSink> backend_;
   boost::shared_ptr<boost::log::sinks::synchronous_sink<LogCaptureSink>> sink_;
 };
 
-} // namespace test_utils
+}  // namespace test_utils

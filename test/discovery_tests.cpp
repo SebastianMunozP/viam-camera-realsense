@@ -1,8 +1,10 @@
-#include "discovery.hpp"
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
 #include <librealsense2/rs.hpp>
 #include <viam/sdk/common/instance.hpp>
+
+#include "discovery.hpp"
 
 using ::testing::_;
 using ::testing::InSequence;
@@ -16,7 +18,7 @@ namespace discovery {
 namespace test {
 
 class RealsenseTestEnvironment : public ::testing::Environment {
-public:
+ public:
   void SetUp() override {
     // Create the instance here, before any tests run
     instance_ = std::make_unique<viam::sdk::Instance>();
@@ -27,16 +29,16 @@ public:
     instance_.reset();
   }
 
-private:
+ private:
   std::unique_ptr<viam::sdk::Instance> instance_;
 };
 
 class MockDevice {
   std::string serial_number_;
 
-public:
+ public:
   MockDevice() = default;
-  MockDevice(const std::string &serial) : serial_number_(serial) {}
+  MockDevice(const std::string& serial) : serial_number_(serial) {}
   bool supports(rs2_camera_info info) const {
     if (info == RS2_CAMERA_INFO_SERIAL_NUMBER) {
       return true;
@@ -52,7 +54,7 @@ public:
 };
 
 class IContext {
-public:
+ public:
   virtual ~IContext() = default;
   virtual std::vector<MockDevice> query_devices() const = 0;
 };
@@ -60,11 +62,11 @@ public:
 class MockContext : public IContext {
   std::vector<MockDevice> devices_;
 
-public:
+ public:
   MockContext() = default;
 
-  MockContext(std::vector<std::string> const &serial_numbers) {
-    for (const auto &serial : serial_numbers) {
+  MockContext(std::vector<std::string> const& serial_numbers) {
+    for (const auto& serial : serial_numbers) {
       devices_.emplace_back(serial);
     }
     ON_CALL(*this, query_devices()).WillByDefault(::testing::Return(devices_));
@@ -76,8 +78,7 @@ public:
 TEST(RealsenseDiscoveryTest, NoDevicesFound) {
   auto mock_ctx = std::make_shared<MockContext>();
   std::vector<MockDevice> empty_list;
-  EXPECT_CALL(*mock_ctx, query_devices())
-      .WillOnce(::testing::Return(empty_list));
+  EXPECT_CALL(*mock_ctx, query_devices()).WillOnce(::testing::Return(empty_list));
 
   realsense::discovery::RealsenseDiscovery<IContext> discovery(
       {}, viam::sdk::ResourceConfig("discovery"), mock_ctx);
@@ -86,8 +87,7 @@ TEST(RealsenseDiscoveryTest, NoDevicesFound) {
 }
 
 TEST(RealsenseDiscoveryTest, DeviceWithSerialFound) {
-  auto test_ctx =
-      std::make_shared<MockContext>(std::vector<std::string>{"123456"});
+  auto test_ctx = std::make_shared<MockContext>(std::vector<std::string>{"123456"});
 
   realsense::discovery::RealsenseDiscovery<IContext> discovery(
       {}, viam::sdk::ResourceConfig("discovery"), test_ctx);
@@ -98,8 +98,7 @@ TEST(RealsenseDiscoveryTest, DeviceWithSerialFound) {
 }
 
 TEST(RealsenseDiscoveryTest, MultipleDevicesFound) {
-  auto test_ctx =
-      std::make_shared<MockContext>(std::vector<std::string>{"123456", "789"});
+  auto test_ctx = std::make_shared<MockContext>(std::vector<std::string>{"123456", "789"});
 
   realsense::discovery::RealsenseDiscovery<IContext> discovery(
       {}, viam::sdk::ResourceConfig("discovery"), test_ctx);
@@ -111,13 +110,12 @@ TEST(RealsenseDiscoveryTest, MultipleDevicesFound) {
   EXPECT_EQ(configs[1].attributes().at("serial_number"), "789");
 }
 
-} // namespace test
-} // namespace discovery
-} // namespace realsense
+}  // namespace test
+}  // namespace discovery
+}  // namespace realsense
 
-GTEST_API_ int main(int argc, char **argv) {
+GTEST_API_ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  ::testing::AddGlobalTestEnvironment(
-      new realsense::discovery::test::RealsenseTestEnvironment);
+  ::testing::AddGlobalTestEnvironment(new realsense::discovery::test::RealsenseTestEnvironment);
   return RUN_ALL_TESTS();
 }

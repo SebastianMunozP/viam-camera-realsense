@@ -1,6 +1,7 @@
 #include "encoding.hpp"
 
 #include <turbojpeg.h>
+
 #include <viam/sdk/log/logging.hpp>
 
 // Helper macro to use resource logging with explicit logger
@@ -9,8 +10,7 @@
 namespace realsense {
 namespace encoding {
 
-std::vector<std::uint8_t> encodeDepthRAW(const std::uint8_t *data,
-                                         const uint64_t width,
+std::vector<std::uint8_t> encodeDepthRAW(const std::uint8_t* data, const uint64_t width,
                                          const uint64_t height) {
   if (data == nullptr) {
     throw std::runtime_error("[encodeDepthRAW] data pointer is null");
@@ -19,17 +19,14 @@ std::vector<std::uint8_t> encodeDepthRAW(const std::uint8_t *data,
   if (width == 0 || height == 0) {
     throw std::runtime_error("[encodeDepthRAW] invalid dimensions");
   }
-  viam::sdk::Camera::depth_map m =
-      xt::xarray<uint16_t>::from_shape({height, width});
-  std::copy(reinterpret_cast<const uint16_t *>(data),
-            reinterpret_cast<const uint16_t *>(data) + height * width,
-            m.begin());
+  viam::sdk::Camera::depth_map m = xt::xarray<uint16_t>::from_shape({height, width});
+  std::copy(reinterpret_cast<const uint16_t*>(data),
+            reinterpret_cast<const uint16_t*>(data) + height * width, m.begin());
 
   return viam::sdk::Camera::encode_depth_map(m);
 }
 
-viam::sdk::Camera::raw_image encodeDepthRAWToResponse(const std::uint8_t *data,
-                                                      const uint width,
+viam::sdk::Camera::raw_image encodeDepthRAWToResponse(const std::uint8_t* data, const uint width,
                                                       const uint height) {
   if (data == nullptr) {
     throw std::runtime_error("[encodeDepthRAWToResponse] data pointer is null");
@@ -45,7 +42,7 @@ viam::sdk::Camera::raw_image encodeDepthRAWToResponse(const std::uint8_t *data,
   return response;
 }
 
-std::vector<std::uint8_t> encodeJPEG(const std::uint8_t *data, const uint width,
+std::vector<std::uint8_t> encodeJPEG(const std::uint8_t* data, const uint width,
                                      const uint height) {
   if (data == nullptr) {
     throw std::runtime_error("[encodeJPEG] data pointer is null");
@@ -54,7 +51,7 @@ std::vector<std::uint8_t> encodeJPEG(const std::uint8_t *data, const uint width,
   if (width == 0 || height == 0) {
     throw std::runtime_error("[encodeJPEG] invalid dimensions");
   }
-  std::uint8_t *encoded = nullptr;
+  std::uint8_t* encoded = nullptr;
   std::size_t encodedSize = 0;
   tjhandle handle = tjInitCompress();
   if (handle == nullptr) {
@@ -62,27 +59,24 @@ std::vector<std::uint8_t> encodeJPEG(const std::uint8_t *data, const uint width,
   }
   int success;
   try {
-    success = tjCompress2(handle, data, width, 0, height, TJPF_RGB, &encoded,
-                          &encodedSize, TJSAMP_420, 75, TJFLAG_FASTDCT);
+    success = tjCompress2(handle, data, width, 0, height, TJPF_RGB, &encoded, &encodedSize,
+                          TJSAMP_420, 75, TJFLAG_FASTDCT);
     tjDestroy(handle);
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     tjDestroy(handle);
-    throw std::runtime_error(
-        "[encodeJPEG] JPEG compressor failed to compress: " +
-        std::string(e.what()));
+    throw std::runtime_error("[encodeJPEG] JPEG compressor failed to compress: " +
+                             std::string(e.what()));
   }
   if (success != 0) {
-    throw std::runtime_error(
-        "[encodeJPEG] JPEG compressor failed to compress image");
+    throw std::runtime_error("[encodeJPEG] JPEG compressor failed to compress image");
   }
 
   std::vector<std::uint8_t> output(encoded, encoded + encodedSize);
-  tjFree(encoded); // Free the compressed data
+  tjFree(encoded);  // Free the compressed data
   return output;
 }
 
-viam::sdk::Camera::raw_image encodeJPEGToResponse(const std::uint8_t *data,
-                                                  const uint width,
+viam::sdk::Camera::raw_image encodeJPEGToResponse(const std::uint8_t* data, const uint width,
                                                   const uint height) {
   if (data == nullptr) {
     throw std::runtime_error("[encodeJPEGToResponse] data pointer is null");
@@ -98,36 +92,34 @@ viam::sdk::Camera::raw_image encodeJPEGToResponse(const std::uint8_t *data,
   return response;
 }
 
-viam::sdk::Camera::raw_image
-encodeVideoFrameToResponse(rs2::video_frame const &frame) {
-  auto data = reinterpret_cast<const std::uint8_t *>(frame.get_data());
+viam::sdk::Camera::raw_image encodeVideoFrameToResponse(rs2::video_frame const& frame) {
+  auto data = reinterpret_cast<const std::uint8_t*>(frame.get_data());
   if (data == nullptr) {
     throw std::runtime_error("[encodeVideoFrameToResponse] frame data is null");
   }
 
   auto stream_profile = frame.get_profile().as<rs2::video_stream_profile>();
   if (not stream_profile) {
-    throw std::runtime_error("[encodeVideoFrameToResponse] frame profile is "
-                             "not a video stream profile");
+    throw std::runtime_error(
+        "[encodeVideoFrameToResponse] frame profile is "
+        "not a video stream profile");
   }
-  return encodeJPEGToResponse(data, stream_profile.width(),
-                              stream_profile.height());
+  return encodeJPEGToResponse(data, stream_profile.width(), stream_profile.height());
 }
 
-viam::sdk::Camera::raw_image
-encodeDepthFrameToResponse(rs2::depth_frame const &frame) {
-  auto data = reinterpret_cast<const std::uint8_t *>(frame.get_data());
+viam::sdk::Camera::raw_image encodeDepthFrameToResponse(rs2::depth_frame const& frame) {
+  auto data = reinterpret_cast<const std::uint8_t*>(frame.get_data());
   if (data == nullptr) {
     throw std::runtime_error("[encodeDepthFrameToResponse] frame data is null");
   }
 
   auto stream_profile = frame.get_profile().as<rs2::video_stream_profile>();
   if (not stream_profile) {
-    throw std::runtime_error("[encodeDepthFrameToResponse] frame profile is "
-                             "not a video stream profile");
+    throw std::runtime_error(
+        "[encodeDepthFrameToResponse] frame profile is "
+        "not a video stream profile");
   }
-  return encodeDepthRAWToResponse(data, stream_profile.width(),
-                                  stream_profile.height());
+  return encodeDepthRAWToResponse(data, stream_profile.width(), stream_profile.height());
 }
 
 struct PointXYZRGB {
@@ -135,21 +127,19 @@ struct PointXYZRGB {
   unsigned int rgb;
 };
 
-std::vector<PointXYZRGB>
-getPCDPoints(std::pair<rs2::points, rs2::video_frame> &&data) {
-  rs2::points const &points = data.first;
-  rs2::video_frame const &color = data.second;
+std::vector<PointXYZRGB> getPCDPoints(std::pair<rs2::points, rs2::video_frame>&& data) {
+  rs2::points const& points = data.first;
+  rs2::video_frame const& color = data.second;
 
   if (not points or not color) {
     throw std::runtime_error("Points or color frame data is empty");
   }
 
   int num_points = points.size();
-  const rs2::vertex *vertices = points.get_vertices();
-  const rs2::texture_coordinate *tex_coords = points.get_texture_coordinates();
+  const rs2::vertex* vertices = points.get_vertices();
+  const rs2::texture_coordinate* tex_coords = points.get_texture_coordinates();
 
-  const uint8_t *color_data =
-      reinterpret_cast<const uint8_t *>(color.get_data());
+  const uint8_t* color_data = reinterpret_cast<const uint8_t*>(color.get_data());
   int width = color.get_width();
   int height = color.get_height();
 
@@ -157,13 +147,11 @@ getPCDPoints(std::pair<rs2::points, rs2::video_frame> &&data) {
   pcdPoints.reserve(num_points);
 
   for (int i = 0; i < num_points; ++i) {
-    auto const &vertex = vertices[i];
+    auto const& vertex = vertices[i];
 
-    auto const &tc = tex_coords[i];
-    int u =
-        std::clamp(static_cast<int>(std::lround(tc.u * width)), 0, width - 1);
-    int v =
-        std::clamp(static_cast<int>(std::lround(tc.v * height)), 0, height - 1);
+    auto const& tc = tex_coords[i];
+    int u = std::clamp(static_cast<int>(std::lround(tc.u * width)), 0, width - 1);
+    int v = std::clamp(static_cast<int>(std::lround(tc.v * height)), 0, height - 1);
 
     size_t idx = (v * width + u) * 3;
     auto r = static_cast<unsigned int>(color_data[idx]);
@@ -183,13 +171,11 @@ getPCDPoints(std::pair<rs2::points, rs2::video_frame> &&data) {
   return pcdPoints;
 }
 
-std::vector<std::uint8_t>
-encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data,
-                     viam::sdk::LogSource &logger) {
+std::vector<std::uint8_t> encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame>&& data,
+                                               viam::sdk::LogSource& logger) {
   auto pcdPoints = getPCDPoints(std::move(data));
   if (pcdPoints.empty()) {
-    VIAM_DEVICE_LOG(logger, error)
-        << "[encodeRGBPointsToPCD] No valid points found";
+    VIAM_DEVICE_LOG(logger, error) << "[encodeRGBPointsToPCD] No valid points found";
     return {};
   }
 
@@ -212,24 +198,21 @@ encodeRGBPointsToPCD(std::pair<rs2::points, rs2::video_frame> &&data,
   // being trivially copyable and having a standard memory layout), and that it
   // has no padding, thus can be copied as bytes. Since vector is contiguous, we
   // can just copy the whole thing
-  static_assert(
-      std::is_trivially_copyable_v<PointXYZRGB> and
-          std::is_standard_layout_v<PointXYZRGB>,
-      "PointXYZRGB must be trivially copyable and have standard layout");
-  static_assert(sizeof(PointXYZRGB) ==
-                    (3 * sizeof(float)) + sizeof(unsigned int),
+  static_assert(std::is_trivially_copyable_v<PointXYZRGB> and
+                    std::is_standard_layout_v<PointXYZRGB>,
+                "PointXYZRGB must be trivially copyable and have standard layout");
+  static_assert(sizeof(PointXYZRGB) == (3 * sizeof(float)) + sizeof(unsigned int),
                 "PointXYZRGB has unexpected padding");
 
-  const std::uint8_t *dataPtr =
-      reinterpret_cast<const std::uint8_t *>(pcdPoints.data());
+  const std::uint8_t* dataPtr = reinterpret_cast<const std::uint8_t*>(pcdPoints.data());
   size_t dataSize = pcdPoints.size() * sizeof(PointXYZRGB);
   pcdBytes.insert(pcdBytes.end(), dataPtr, dataPtr + dataSize);
 
-  VIAM_DEVICE_LOG(logger, debug)
-      << "[encodeRGBPointsToPCD] Converted " << pcdPoints.size()
-      << " points to PCD format, encoded in " << pcdBytes.size() << " bytes";
+  VIAM_DEVICE_LOG(logger, debug) << "[encodeRGBPointsToPCD] Converted " << pcdPoints.size()
+                                 << " points to PCD format, encoded in " << pcdBytes.size()
+                                 << " bytes";
   return pcdBytes;
 }
 
-} // namespace encoding
-} // namespace realsense
+}  // namespace encoding
+}  // namespace realsense

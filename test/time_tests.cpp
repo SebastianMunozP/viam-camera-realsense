@@ -1,17 +1,17 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "time.hpp"
-
 #include <chrono>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
 
+#include "time.hpp"
+
 using namespace realsense::time;
 
 class TimeTest : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     // Set up test time values
     base_time_ms_ = 1000.0;
@@ -32,7 +32,7 @@ TEST_F(TimeTest, GetNowMs_ReturnsPositiveValue) {
   auto now_ms = getNowMs();
 
   EXPECT_GT(now_ms, 0.0);
-  EXPECT_LT(now_ms, 1e20); // Sanity check - should be reasonable timestamp
+  EXPECT_LT(now_ms, 1e20);  // Sanity check - should be reasonable timestamp
 }
 
 TEST_F(TimeTest, GetNowMs_IsIncreasing) {
@@ -44,7 +44,7 @@ TEST_F(TimeTest, GetNowMs_IsIncreasing) {
   auto time2 = getNowMs();
 
   EXPECT_GT(time2, time1);
-  EXPECT_LT(time2 - time1, 100.0); // Should be small difference (< 100ms)
+  EXPECT_LT(time2 - time1, 100.0);  // Should be small difference (< 100ms)
 }
 
 TEST_F(TimeTest, GetNowMs_MultipleCalls) {
@@ -65,7 +65,7 @@ TEST_F(TimeTest, GetNowMs_MultipleCalls) {
 TEST_F(TimeTest, TimeSincePrevMs_PositiveDifference) {
   auto diff = timeSincePrevMs(later_time_ms_, base_time_ms_);
 
-  EXPECT_EQ(diff, 500.0); // 1500 - 1000 = 500
+  EXPECT_EQ(diff, 500.0);  // 1500 - 1000 = 500
 }
 
 TEST_F(TimeTest, TimeSincePrevMs_ZeroDifference) {
@@ -105,16 +105,14 @@ TEST_F(TimeTest, IsTooOld_WithinMaxAge) {
 
 TEST_F(TimeTest, IsTooOld_ExactlyMaxAge) {
   // Exactly at max age boundary
-  bool result =
-      isTooOld(base_time_ms_ + max_age_ms_, base_time_ms_, max_age_ms_);
+  bool result = isTooOld(base_time_ms_ + max_age_ms_, base_time_ms_, max_age_ms_);
 
-  EXPECT_FALSE(result); // Should be false when exactly equal
+  EXPECT_FALSE(result);  // Should be false when exactly equal
 }
 
 TEST_F(TimeTest, IsTooOld_JustOverMaxAge) {
   // Just over max age boundary
-  bool result =
-      isTooOld(base_time_ms_ + max_age_ms_ + 0.1, base_time_ms_, max_age_ms_);
+  bool result = isTooOld(base_time_ms_ + max_age_ms_ + 0.1, base_time_ms_, max_age_ms_);
 
   EXPECT_TRUE(result);
 }
@@ -146,8 +144,8 @@ TEST_F(TimeTest, LogIfTooOld_LogsWhenTooOld) {
   std::ostringstream log_stream;
 
   // This should trigger logging (500ms > 400ms max age)
-  auto &result = logIfTooOld(log_stream, later_time_ms_, base_time_ms_,
-                             max_age_ms_, test_error_msg_);
+  auto& result =
+      logIfTooOld(log_stream, later_time_ms_, base_time_ms_, max_age_ms_, test_error_msg_);
 
   // Should return reference to the same stream
   EXPECT_EQ(&result, &log_stream);
@@ -163,8 +161,8 @@ TEST_F(TimeTest, LogIfTooOld_DoesNotLogWhenNotTooOld) {
   std::ostringstream log_stream;
 
   // This should NOT trigger logging (100ms < 400ms max age)
-  auto &result = logIfTooOld(log_stream, base_time_ms_ + 100.0, base_time_ms_,
-                             max_age_ms_, test_error_msg_);
+  auto& result =
+      logIfTooOld(log_stream, base_time_ms_ + 100.0, base_time_ms_, max_age_ms_, test_error_msg_);
 
   // Should return reference to the same stream
   EXPECT_EQ(&result, &log_stream);
@@ -187,39 +185,31 @@ TEST_F(TimeTest, LogIfTooOld_FormatsMessageCorrectly) {
 TEST_F(TimeTest, LogIfTooOld_WorksWithDifferentSinkTypes) {
   // Test with std::stringstream
   std::stringstream string_stream;
-  logIfTooOld(string_stream, later_time_ms_, base_time_ms_, max_age_ms_,
-              "Test");
+  logIfTooOld(string_stream, later_time_ms_, base_time_ms_, max_age_ms_, "Test");
   EXPECT_FALSE(string_stream.str().empty());
 
   // Test with std::ostringstream
   std::ostringstream ostring_stream;
-  logIfTooOld(ostring_stream, later_time_ms_, base_time_ms_, max_age_ms_,
-              "Test");
+  logIfTooOld(ostring_stream, later_time_ms_, base_time_ms_, max_age_ms_, "Test");
   EXPECT_FALSE(ostring_stream.str().empty());
 }
 
 TEST_F(TimeTest, ThrowIfTooOld_ThrowsWhenTooOld) {
   EXPECT_THROW(
-      {
-        throwIfTooOld(later_time_ms_, base_time_ms_, max_age_ms_,
-                      test_error_msg_);
-      },
+      { throwIfTooOld(later_time_ms_, base_time_ms_, max_age_ms_, test_error_msg_); },
       std::invalid_argument);
 }
 
 TEST_F(TimeTest, ThrowIfTooOld_DoesNotThrowWhenNotTooOld) {
-  EXPECT_NO_THROW({
-    throwIfTooOld(base_time_ms_ + 100.0, base_time_ms_, max_age_ms_,
-                  test_error_msg_);
-  });
+  EXPECT_NO_THROW(
+      { throwIfTooOld(base_time_ms_ + 100.0, base_time_ms_, max_age_ms_, test_error_msg_); });
 }
 
 TEST_F(TimeTest, ThrowIfTooOld_ExceptionMessageFormat) {
   try {
-    throwIfTooOld(much_later_time_ms_, base_time_ms_, max_age_ms_,
-                  "Custom error");
+    throwIfTooOld(much_later_time_ms_, base_time_ms_, max_age_ms_, "Custom error");
     FAIL() << "Expected std::invalid_argument exception";
-  } catch (const std::invalid_argument &e) {
+  } catch (const std::invalid_argument& e) {
     std::string message = e.what();
     EXPECT_THAT(message, ::testing::HasSubstr("Custom error"));
     EXPECT_THAT(message, ::testing::HasSubstr("timestamp: 1000ms"));
@@ -229,17 +219,12 @@ TEST_F(TimeTest, ThrowIfTooOld_ExceptionMessageFormat) {
 
 TEST_F(TimeTest, ThrowIfTooOld_EdgeCaseBoundary) {
   // Should not throw when exactly at boundary
-  EXPECT_NO_THROW({
-    throwIfTooOld(base_time_ms_ + max_age_ms_, base_time_ms_, max_age_ms_,
-                  "Error");
-  });
+  EXPECT_NO_THROW(
+      { throwIfTooOld(base_time_ms_ + max_age_ms_, base_time_ms_, max_age_ms_, "Error"); });
 
   // Should throw when just over boundary
   EXPECT_THROW(
-      {
-        throwIfTooOld(base_time_ms_ + max_age_ms_ + 0.001, base_time_ms_,
-                      max_age_ms_, "Error");
-      },
+      { throwIfTooOld(base_time_ms_ + max_age_ms_ + 0.001, base_time_ms_, max_age_ms_, "Error"); },
       std::invalid_argument);
 }
 
@@ -259,8 +244,8 @@ TEST_F(TimeTest, IntegrationTest_RealTimeScenario) {
 
   // Time difference should be reasonable
   auto diff = timeSincePrevMs(current_time, start_time);
-  EXPECT_GT(diff, 5.0);   // At least 5ms (we slept for 10ms)
-  EXPECT_LT(diff, 100.0); // But not more than 100ms
+  EXPECT_GT(diff, 5.0);    // At least 5ms (we slept for 10ms)
+  EXPECT_LT(diff, 100.0);  // But not more than 100ms
 }
 
 TEST_F(TimeTest, IntegrationTest_ConsistentBehaviorAcrossFunctions) {
@@ -270,7 +255,7 @@ TEST_F(TimeTest, IntegrationTest_ConsistentBehaviorAcrossFunctions) {
 
   // All functions should agree on whether timestamp is too old
   bool is_too_old = isTooOld(now, prev, max_age);
-  EXPECT_TRUE(is_too_old); // 500ms > 400ms
+  EXPECT_TRUE(is_too_old);  // 500ms > 400ms
 
   // logIfTooOld should log when isTooOld returns true
   std::ostringstream log;
@@ -278,11 +263,10 @@ TEST_F(TimeTest, IntegrationTest_ConsistentBehaviorAcrossFunctions) {
   EXPECT_FALSE(log.str().empty());
 
   // throwIfTooOld should throw when isTooOld returns true
-  EXPECT_THROW(
-      { throwIfTooOld(now, prev, max_age, "Test"); }, std::invalid_argument);
+  EXPECT_THROW({ throwIfTooOld(now, prev, max_age, "Test"); }, std::invalid_argument);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
