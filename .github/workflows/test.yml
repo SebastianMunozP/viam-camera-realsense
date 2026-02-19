@@ -22,11 +22,14 @@ jobs:
             container:
               image: ghcr.io/viam-modules/viam-camera-realsense:arm64
               options: --platform linux/arm64
+            coverage: false
           - os: ubuntu-latest
             container:
               image: ghcr.io/viam-modules/viam-camera-realsense:amd64
               options: --platform linux/amd64
+            coverage: true
           - os: macos-latest
+            coverage: false
 
     container: ${{ matrix.container }}
 
@@ -56,21 +59,21 @@ jobs:
           make conan-install-test
 
       - name: Build with coverage (Linux amd64 only)
-        if: runner.os == 'Linux' && matrix.os == 'ubuntu-latest'
+        if: matrix.coverage == true
         run: |
           mkdir -p build-native && cd build-native
           cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DVIAM_REALSENSE_ENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Release
           make -j$(nproc)
 
       - name: Build without coverage (other platforms)
-        if: runner.os != 'Linux' || matrix.os != 'ubuntu-latest'
+        if: matrix.coverage != true
         run: make build-native
 
       - name: Run the tests
         run: cd build-native && ctest --output-on-failure
 
       - name: Generate coverage report
-        if: runner.os == 'Linux' && matrix.os == 'ubuntu-latest'
+        if: matrix.coverage == true
         run: |
           sudo apt-get update && sudo apt-get install -y lcov
           cd build-native
@@ -79,7 +82,7 @@ jobs:
           lcov --list coverage.info
 
       - name: Upload coverage reports to Codecov
-        if: runner.os == 'Linux' && matrix.os == 'ubuntu-latest'
+        if: matrix.coverage == true
         uses: codecov/codecov-action@v5
         with:
           files: ./build-native/coverage.info
