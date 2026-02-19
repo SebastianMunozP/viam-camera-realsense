@@ -258,7 +258,7 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
       std::string error_msg = std::string(
           "Auto-detect failed: Device does not provide recommended "
           "firmware version information. Please specify the firmware URL "
-          "directly using: {\"firmware_update\": "
+          "directly using: {\"update_firmware\": "
           "\"https://your-firmware-url.zip\"}");
       VIAM_SDK_LOG_IMPL(logger, error) << error_msg;
       return {false, {{"error", error_msg}}};
@@ -279,7 +279,7 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
           recommended_version +
           ", but no download URL mapping is available for this version. "
           "Please specify the firmware URL directly using: "
-          "{\"firmware_update\": \"https://your-firmware-url.zip\"}";
+          "{\"update_firmware\": \"https://your-firmware-url.zip\"}";
       VIAM_SDK_LOG_IMPL(logger, error) << error_msg;
       return {false, {{"error", error_msg}}};
     }
