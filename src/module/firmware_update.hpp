@@ -220,11 +220,14 @@ prepareDeviceForUpdate(std::shared_ptr<rs2::device> rs_device,
  * Update the firmware of a RealSense device.
  * @param rs_device The RealSense device to update
  * @param device_serial_number The serial number of the device
- * @param firmware_url The URL of the firmware file
+ * @param firmware_url The URL of the firmware file (empty for auto-detect)
+ * @param realsense_ctx The RealSense context
  * @param logger The logger to use for logging
- * @throws std::runtime_error if firmware update fails
  * @return pair<bool, map> - first is success flag, second contains
- * message/error
+ * message/error. Returns {false, {{"error", "..."}}} on failure, {true,
+ * {{"message", "..."}}} on success.
+ * @note This function does not throw. All errors (download, extraction, SDK
+ * errors) are caught and returned as error pairs.
  */
 template <typename RealsenseContextT>
 [[nodiscard]] std::pair<bool, std::unordered_map<std::string, std::string>>
@@ -233,139 +236,170 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
                std::string firmware_url,
                std::shared_ptr<RealsenseContextT> realsense_ctx,
                viam::sdk::LogSource &logger) {
+  try {
 
-  // Check USB type and warn if USB 2.x
-  if (rs_device->supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
-    std::string usb_type =
-        rs_device->get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
-    if (usb_type.find("2.") != std::string::npos) {
-      VIAM_SDK_LOG_IMPL(logger, warn)
-          << "Warning! the camera is connected via USB 2 port, in case "
-             "the "
-             "process fails, connect the camera to a USB 3 port and try "
-             "again";
-    }
-  }
-
-  std::pair<bool, std::unordered_map<std::string, std::string>> response;
-  if (firmware_url.empty()) {
-    VIAM_SDK_LOG_IMPL(logger, info)
-        << "[handleFirmwareUpdate] Auto-detect mode: querying device for "
-           "recommended firmware";
-
-    // Check if device supports recommended firmware version
-    if (!rs_device->supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
-      std::string error_msg = std::string(
-          "Auto-detect failed: Device does not provide recommended "
-          "firmware version information. Please specify the firmware URL "
-          "directly using: {\"update_firmware\": "
-          "\"https://your-firmware-url.zip\"}");
-      VIAM_SDK_LOG_IMPL(logger, error) << error_msg;
-      return {false, {{"error", error_msg}}};
+    // Check USB type and warn if USB 2.x
+    if (rs_device->supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR)) {
+      std::string usb_type =
+          rs_device->get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
+      if (usb_type.find("2.") != std::string::npos) {
+        VIAM_SDK_LOG_IMPL(logger, warn)
+            << "Warning! the camera is connected via USB 2 port, in case "
+               "the "
+               "process fails, connect the camera to a USB 3 port and try "
+               "again";
+      }
     }
 
-    std::string const recommended_version =
-        rs_device->get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION);
-    VIAM_SDK_LOG_IMPL(logger, info)
-        << "[handleFirmwareUpdate] Device recommended "
-           "firmware version: "
-        << recommended_version;
+    std::pair<bool, std::unordered_map<std::string, std::string>> response;
+    if (firmware_url.empty()) {
+      VIAM_SDK_LOG_IMPL(logger, info)
+          << "[handleFirmwareUpdate] Auto-detect mode: querying device for "
+             "recommended firmware";
 
-    // Look up URL for recommended version
-    auto const firmware_url_opt = getFirmwareURLForVersion(recommended_version);
-    if (!firmware_url_opt.has_value()) {
-      std::string error_msg =
-          std::string("Auto-detect found recommended firmware version ") +
-          recommended_version +
-          ", but no download URL mapping is available for this version. "
-          "Please specify the firmware URL directly using: "
-          "{\"update_firmware\": \"https://your-firmware-url.zip\"}";
-      VIAM_SDK_LOG_IMPL(logger, error) << error_msg;
-      return {false, {{"error", error_msg}}};
+      // Check if device supports recommended firmware version
+      if (!rs_device->supports(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION)) {
+        std::string error_msg = std::string(
+            "Auto-detect failed: Device does not provide recommended "
+            "firmware version information. Please specify the firmware URL "
+            "directly using: {\"update_firmware\": "
+            "\"https://your-firmware-url.zip\"}");
+        VIAM_SDK_LOG_IMPL(logger, error) << error_msg;
+        return {false, {{"error", error_msg}}};
+      }
+
+      std::string const recommended_version =
+          rs_device->get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION);
+      VIAM_SDK_LOG_IMPL(logger, info)
+          << "[handleFirmwareUpdate] Device recommended "
+             "firmware version: "
+          << recommended_version;
+
+      // Look up URL for recommended version
+      auto const firmware_url_opt =
+          getFirmwareURLForVersion(recommended_version);
+      if (!firmware_url_opt.has_value()) {
+        std::string error_msg =
+            std::string("Auto-detect found recommended firmware version ") +
+            recommended_version +
+            ", but no download URL mapping is available for this version. "
+            "Please specify the firmware URL directly using: "
+            "{\"update_firmware\": \"https://your-firmware-url.zip\"}";
+        VIAM_SDK_LOG_IMPL(logger, error) << error_msg;
+        return {false, {{"error", error_msg}}};
+      }
+
+      firmware_url = *firmware_url_opt;
+      VIAM_SDK_LOG_IMPL(logger, info)
+          << "[handleFirmwareUpdate] Auto-detected firmware URL: "
+          << firmware_url << " for version " << recommended_version;
     }
 
-    firmware_url = *firmware_url_opt;
+    // Download firmware from URL
     VIAM_SDK_LOG_IMPL(logger, info)
-        << "[handleFirmwareUpdate] Auto-detected firmware URL: " << firmware_url
-        << " for version " << recommended_version;
-  }
+        << "[handleFirmwareUpdate] Firmware URL: " << firmware_url;
+    std::vector<uint8_t> firmware_data =
+        viam::realsense::download_utils::downloadFirmwareFromURL(firmware_url,
+                                                                 logger);
 
-  // Download firmware from URL
-  VIAM_SDK_LOG_IMPL(logger, info)
-      << "[handleFirmwareUpdate] Firmware URL: " << firmware_url;
-  std::vector<uint8_t> firmware_data =
-      viam::realsense::download_utils::downloadFirmwareFromURL(firmware_url,
-                                                               logger);
-
-  // Check if it's a ZIP file and extract if needed
-  if (viam::realsense::zip_utils::isZipFile(firmware_data)) {
-    VIAM_SDK_LOG_IMPL(logger, info)
-        << "[handleFirmwareUpdate] Detected ZIP file, extracting .bin file";
-    firmware_data =
-        viam::realsense::zip_utils::extractBinFromZip(firmware_data, logger);
-  } else {
-    VIAM_SDK_LOG_IMPL(logger, error)
-        << "[handleFirmwareUpdate] Firmware update "
-           "failed: firmware data is not a ZIP file";
-    return {
-        false,
-        {{"error", "Firmware update failed: firmware data is not a ZIP file"}}};
-  }
-
-  VIAM_SDK_LOG_IMPL(logger, info)
-      << "[handleFirmwareUpdate] Firmware data size: " << firmware_data.size()
-      << " bytes";
-
-  VIAM_SDK_LOG_IMPL(logger, info)
-      << "[handleFirmwareUpdate] Updating device with "
-         "serial number: "
-      << device_serial_number;
-
-  // Check if device is already in recovery/DFU mode first
-  rs2::update_device update_device;
-  bool already_in_recovery = rs_device->is<rs2::update_device>();
-
-  VIAM_SDK_LOG_IMPL(logger, info)
-      << "[handleFirmwareUpdate] Device state check: is_update_device="
-      << already_in_recovery
-      << ", is_updatable=" << rs_device->is<rs2::updatable>();
-
-  if (already_in_recovery) {
-    VIAM_SDK_LOG_IMPL(logger, info)
-        << "[handleFirmwareUpdate] Device is already in recovery/DFU mode, "
-           "skipping enter_update_state and compatibility checks";
-    update_device = rs_device->as<rs2::update_device>();
-
-    if (!update_device) {
-      std::string error_msg =
-          "Failed to get update device interface from recovery mode device";
+    // Check if it's a ZIP file and extract if needed
+    if (viam::realsense::zip_utils::isZipFile(firmware_data)) {
+      VIAM_SDK_LOG_IMPL(logger, info)
+          << "[handleFirmwareUpdate] Detected ZIP file, extracting .bin file";
+      firmware_data =
+          viam::realsense::zip_utils::extractBinFromZip(firmware_data, logger);
+    } else {
       VIAM_SDK_LOG_IMPL(logger, error)
-          << "[handleFirmwareUpdate] " << error_msg;
-      return {false, {{"error", error_msg}}};
+          << "[handleFirmwareUpdate] Firmware update "
+             "failed: firmware data is not a ZIP file";
+      return {false,
+              {{"error",
+                "Firmware update failed: firmware data is not a ZIP file"}}};
     }
-  } else // End of else block (normal path)
-  {
-    auto [success, message, update_device_local] = prepareDeviceForUpdate(
-        rs_device, device_serial_number, firmware_data, realsense_ctx, logger);
-    if (!success) {
-      return {success, message};
-    }
-    update_device = update_device_local;
-  }
 
-  // Perform the firmware update with progress tracking
-  VIAM_SDK_LOG_IMPL(logger, info)
-      << "[handleFirmwareUpdate] Starting firmware update process";
-  update_device.update(firmware_data, [&logger](const float progress) {
-    int percent = static_cast<int>(progress * 100);
     VIAM_SDK_LOG_IMPL(logger, info)
-        << "[handleFirmwareUpdate] Progress: " << percent << "%";
-  });
+        << "[handleFirmwareUpdate] Firmware data size: " << firmware_data.size()
+        << " bytes";
 
-  VIAM_SDK_LOG_IMPL(logger, info)
-      << "[handleFirmwareUpdate] Firmware update completed successfully";
+    VIAM_SDK_LOG_IMPL(logger, info)
+        << "[handleFirmwareUpdate] Updating device with "
+           "serial number: "
+        << device_serial_number;
 
-  return {true, {{"message", "Firmware update completed successfully"}}};
+    // Check if device is already in recovery/DFU mode first
+    rs2::update_device update_device;
+    bool already_in_recovery = rs_device->is<rs2::update_device>();
+
+    VIAM_SDK_LOG_IMPL(logger, info)
+        << "[handleFirmwareUpdate] Device state check: is_update_device="
+        << already_in_recovery
+        << ", is_updatable=" << rs_device->is<rs2::updatable>();
+
+    if (already_in_recovery) {
+      VIAM_SDK_LOG_IMPL(logger, info)
+          << "[handleFirmwareUpdate] Device is already in recovery/DFU mode, "
+             "skipping enter_update_state and compatibility checks";
+      update_device = rs_device->as<rs2::update_device>();
+
+      if (!update_device) {
+        std::string error_msg =
+            "Failed to get update device interface from recovery mode device";
+        VIAM_SDK_LOG_IMPL(logger, error)
+            << "[handleFirmwareUpdate] " << error_msg;
+        return {false, {{"error", error_msg}}};
+      }
+    } else // End of else block (normal path)
+    {
+      auto [success, message, update_device_local] =
+          prepareDeviceForUpdate(rs_device, device_serial_number, firmware_data,
+                                 realsense_ctx, logger);
+      if (!success) {
+        return {success, message};
+      }
+      update_device = update_device_local;
+    }
+
+    // Perform the firmware update with progress tracking
+    VIAM_SDK_LOG_IMPL(logger, info)
+        << "[handleFirmwareUpdate] Starting firmware update process";
+    update_device.update(firmware_data, [](const float progress) {
+      int percent = static_cast<int>(progress * 100);
+      std::cout << "Progress: " << percent << "%" << std::endl;
+    });
+
+    VIAM_SDK_LOG_IMPL(logger, info)
+        << "[handleFirmwareUpdate] Firmware update completed successfully";
+
+    return {true, {{"message", "Firmware update completed successfully"}}};
+  } catch (const rs2::camera_disconnected_error &e) {
+    std::string error_msg = std::string("Camera disconnected: ") + e.what();
+    VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << error_msg;
+    return {false, {{"error", error_msg}}};
+  } catch (const rs2::backend_error &e) {
+    std::string error_msg = std::string("Backend error: ") + e.what();
+    VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << error_msg;
+    return {false, {{"error", error_msg}}};
+  } catch (const rs2::invalid_value_error &e) {
+    std::string error_msg = std::string("Invalid value: ") + e.what();
+    VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << error_msg;
+    return {false, {{"error", error_msg}}};
+  } catch (const rs2::error &e) {
+    std::string error_msg = std::string("RealSense error: ") + e.what();
+    VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << error_msg;
+    return {false, {{"error", error_msg}}};
+  } catch (const std::runtime_error &e) {
+    std::string error_msg = std::string("Firmware update failed: ") + e.what();
+    VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << error_msg;
+    return {false, {{"error", error_msg}}};
+  } catch (const std::exception &e) {
+    std::string error_msg = std::string("Unexpected error: ") + e.what();
+    VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << error_msg;
+    return {false, {{"error", error_msg}}};
+  } catch (...) {
+    std::string error_msg = "Unknown error during firmware update";
+    VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << error_msg;
+    return {false, {{"error", error_msg}}};
+  }
 }
 
 } // namespace firmware_update
