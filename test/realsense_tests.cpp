@@ -337,8 +337,9 @@ TEST_F(RealsenseTest, ValidateWithEmptySerialNumber) {
       "rdk:component:camera", "", test_name_, empty_serial_attributes, "",
       Model("viam", "camera", "realsense"), LinkConfig{}, log_level::info);
 
-  // An explicitly empty serial_number string is valid and will use the first available device
-  // This behaves the same as not specifying serial_number at all
+  // An explicitly empty serial_number string is valid and will use the first
+  // available device This behaves the same as not specifying serial_number at
+  // all
   EXPECT_NO_THROW(Realsense<SimpleMockContext>::validate(valid_config));
 }
 
