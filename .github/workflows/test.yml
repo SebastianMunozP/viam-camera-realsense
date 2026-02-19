@@ -50,5 +50,34 @@ jobs:
         run: |
           make conan-install-test
 
+      - name: Build with coverage (Linux amd64 only)
+        if: runner.os == 'Linux' && matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p build-native && cd build-native
+          cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DVIAM_REALSENSE_ENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+
+      - name: Build without coverage (other platforms)
+        if: runner.os != 'Linux' || matrix.os != 'ubuntu-latest'
+        run: make build-native
+
       - name: Run the tests
-        run: make test-native
+        run: cd build-native && ctest --output-on-failure
+
+      - name: Generate coverage report
+        if: runner.os == 'Linux' && matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update && sudo apt-get install -y lcov
+          cd build-native
+          lcov --capture --directory . --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/test/*' '*/build-native/_deps/*' --output-file coverage.info
+          lcov --list coverage.info
+
+      - name: Upload coverage to Codecov
+        if: runner.os == 'Linux' && matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./build-native/coverage.info
+          flags: unittests
+          name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}

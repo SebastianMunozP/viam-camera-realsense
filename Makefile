@@ -30,7 +30,7 @@ endif
 # Common Conan settings to ensure binary cache hits across all build flows
 export CONAN_FLAGS := -s:a build_type=Release -s:a compiler.cppstd=17
 
-.PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test build-native test-native
+.PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test build-native test-native test-coverage
 
 default: module.tar.gz
 
@@ -50,8 +50,37 @@ conan-install-test:
 	--build=missing \
 	$(CONAN_FLAGS)
 
+conan-build-test-coverage:
+	test -f ./venv/bin/activate && . ./venv/bin/activate; \
+	conan build . \
+	-o "&:with_tests=True" \
+	--output-folder=build-conan \
+	--build=none \
+	$(CONAN_FLAGS) \
+	-c tools.cmake.cmaketoolchain:user_toolchain="['$(CURDIR)/cmake/coverage_toolchain.cmake']"
+
 test: conan-install-test conan-build-test
 	cd build-conan/build/Release && . ./generators/conanrun.sh && ctest --output-on-failure
+
+test-coverage: conan-install-test
+	@echo "Building with coverage enabled..."
+	@command -v lcov >/dev/null 2>&1 || { echo >&2 "lcov is not installed. Install it with: sudo apt-get install lcov"; exit 1; }
+	test -f ./venv/bin/activate && . ./venv/bin/activate; \
+	conan build . \
+	-o "&:with_tests=True" \
+	--output-folder=build-conan \
+	--build=missing \
+	$(CONAN_FLAGS) \
+	-c tools.build:cxxflags="['--coverage']" \
+	-c tools.build:sharedlinkflags="['--coverage']" \
+	-c tools.build:exelinkflags="['--coverage']"
+	@echo "Running tests..."
+	cd build-conan/build/Release && . ./generators/conanrun.sh && ctest --output-on-failure
+	@echo "Generating coverage report..."
+	lcov --capture --directory build-conan/build/Release --output-file build-conan/coverage.info
+	lcov --remove build-conan/coverage.info '/usr/*' '*/test/*' '*/build-conan/build/Release/_deps/*' --output-file build-conan/coverage.info
+	@echo "\n=== Coverage Summary ==="
+	lcov --list build-conan/coverage.info
 
 # Native build targets for CI environments with pre-installed dependencies
 build-native:
