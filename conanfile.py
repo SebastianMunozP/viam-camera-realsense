@@ -38,7 +38,7 @@ class ViamRealsense(ConanFile):
     def requirements(self):
         self.requires("viam-cpp-sdk/0.30.2")
         if self.settings.os == "Macos":
-            self.requires("librealsense/2.57.0+viam")
+            self.requires("librealsense/2.57.6")
         else:
             self.requires("librealsense/2.56.5")
         self.requires("libjpeg-turbo/[>=2.1.0 <3]")
