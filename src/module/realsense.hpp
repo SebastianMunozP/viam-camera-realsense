@@ -697,9 +697,8 @@ public:
 
       std::string serial = attrs["serial_number"].get_unchecked<std::string>();
       if (serial.empty()) {
-        std::string error_message = "serial_number is empty";
-        VIAM_SDK_LOG(error) << "[validate] " << error_message;
-        throw std::invalid_argument(error_message);
+        VIAM_SDK_LOG(info) << "[validate] serial_number is empty, "
+                              "first available device will be used";
       }
     } else {
       VIAM_SDK_LOG(info) << "[validate] serial_number not specified, "
