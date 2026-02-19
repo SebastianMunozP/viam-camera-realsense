@@ -132,9 +132,9 @@ Support for specific hardware is known for the following devices. The table is n
 | RPi 4B Bullseye       |  X   |       |      |
 | Orin Nano JetPack 5.1 |  X   |   X   |  X   |
 | UP 4000               |  X   |       |      |
-| Mac                   |      |  (1)  |      |
+| macOS                 |      |  (1)  |      |
 
-(1) Support for Mac is experimental and may not work. It is based on a vendored version of `librealsense` from its development branch that contains experimental support for macOS.
+(1) macOS support is experimental and based on [v2.57.6 (Beta)](https://github.com/realsenseai/librealsense/releases/tag/v2.57.6) from RealSense. May have stability issues. Firmware updates are not supported on macOS.
 
 ## Linux distribution recommendation
 
