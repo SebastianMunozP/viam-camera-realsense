@@ -123,16 +123,16 @@ Use the `do_command` method with the following command structure:
 **Option 1: Auto-detect recommended firmware (recommended)**
 ```json
 {
-  "firmware_update": ""
+  "update_firmware": ""
 }
 ```
 
-Setting `firmware_update` to an empty string will automatically detect your camera's current firmware version and install the recommended update if available.
+Setting `update_firmware` to an empty string will automatically detect your camera's current firmware version and install the recommended update if available.
 
 **Option 2: Specify firmware URL**
 ```json
 {
-  "firmware_update": "https://example.com/firmware.zip"
+  "update_firmware": "https://example.com/firmware.zip"
 }
 ```
 
@@ -155,11 +155,11 @@ from viam.components.camera import Camera
 camera = Camera.from_robot(robot, "myRealSense")
 
 # Option 1: Auto-detect and install recommended firmware
-result = await camera.do_command({"firmware_update": ""})
+result = await camera.do_command({"update_firmware": ""})
 
 # Option 2: Install specific firmware from URL
 result = await camera.do_command({
-    "firmware_update": "https://realsenseai.com/wp-content/uploads/2025/07/d400_series_production_fw_5_17_0_10.zip"
+    "update_firmware": "https://realsenseai.com/wp-content/uploads/2025/07/d400_series_production_fw_5_17_0_10.zip"
 })
 ```
 
@@ -177,7 +177,7 @@ result = await camera.do_command({
 
 1. Check your current firmware version by viewing the module logs on startup
 2. **Ensure the camera is securely connected** and will not be disconnected during the update
-3. Call `do_command` with the `firmware_update` parameter
+3. Call `do_command` with the `update_firmware` parameter
 4. Monitor the module logs to track update progress
 5. Wait for the update to complete (typically 2-5 minutes)
 6. The camera will automatically reboot and be ready to use with the new firmware
@@ -201,7 +201,7 @@ If a firmware update is interrupted (power loss, disconnection, etc.), your came
 3. Simply run the firmware update command again on the recovery device, but this time with an explicit firmware URL:
    ```json
    {
-     "firmware_update": "https://example.com/firmware.zip"
+     "update_firmware": "https://example.com/firmware.zip"
    }
    ```
 4. Wait for the update to complete (100% progress)
@@ -209,7 +209,7 @@ If a firmware update is interrupted (power loss, disconnection, etc.), your came
 6. The recovery device will no longer be found and should be removed.
 
 > [!NOTE]
-> Auto-detect mode (`"firmware_update": ""`) does not work for recovery devices. You must provide an explicit firmware URL.
+> Auto-detect mode (`"update_firmware": ""`) does not work for recovery devices. You must provide an explicit firmware URL.
 
 ##### Update Progress Stops or Hangs
 
