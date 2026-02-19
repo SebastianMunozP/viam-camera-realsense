@@ -78,12 +78,11 @@ jobs:
           lcov --remove coverage.info '/usr/*' '*/test/*' '*/build-native/_deps/*' --output-file coverage.info
           lcov --list coverage.info
 
-      - name: Upload coverage to Codecov
+      - name: Upload coverage reports to Codecov
         if: runner.os == 'Linux' && matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ./build-native/coverage.info
           flags: unittests
-          name: codecov-umbrella
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
