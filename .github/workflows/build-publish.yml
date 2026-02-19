@@ -28,19 +28,14 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04-arm
-            container:
-              image: ubuntu:22.04
             artifact-name: module-arm64
             platform: linux/arm64
           - os: ubuntu-22.04
-            container:
-              image: ubuntu:22.04
             artifact-name: module-amd64
             platform: linux/amd64
           - os: macos-latest
             platform: darwin/arm64
             artifact-name: module-darwin-arm64
-    container: ${{ matrix.container }}
     steps:
       - name: Set checkout ref (release)
         if: github.event_name == 'release'
@@ -69,7 +64,7 @@ jobs:
       - name: Install dependencies
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
-            apt-get update && apt-get install -y make sudo
+            sudo apt-get update && sudo apt-get install -y make
           fi
           make setup
 

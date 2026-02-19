@@ -14,26 +14,22 @@ jobs:
       matrix:
         include:
           - os: buildjet-8vcpu-ubuntu-2204-arm
-            container:
-              image: ghcr.io/viam-modules/viam-camera-realsense:arm64
-              options: --platform linux/arm64
-          - os: ubuntu-latest
-            container:
-              image: ghcr.io/viam-modules/viam-camera-realsense:amd64
-              options: --platform linux/amd64
+          - os: ubuntu-22.04
           - os: macos-latest
-
-    container: ${{ matrix.container }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Install dependencies
-        if: runner.os == 'macOS'
         run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y make
+          fi
           make setup
-          test -f ./venv/bin/activate && . ./venv/bin/activate && conan profile show
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            test -f ./venv/bin/activate && . ./venv/bin/activate && conan profile show
+          fi
       
       - name: Lint
         run: |
@@ -46,9 +42,18 @@ jobs:
           fi
 
       - name: Install Conan dependencies
-        if: runner.os == 'macOS'
         run: |
           make conan-install-test
 
       - name: Run the tests
         run: make test-native
+
+      - name: Check binary dependencies
+        if: runner.os == 'Linux'
+        run: |
+          # Build the release binary to check dependencies
+          test -f ./venv/bin/activate && . ./venv/bin/activate
+          conan create . -o "&:with_tests=False" -s:a build_type=Release -s:a compiler.cppstd=17 --build=missing --output-folder=build-dep-check
+
+          # Run dependency check script
+          ./bin/test-dynamic-deps.sh build-dep-check/build/Release/viam-camera-realsense

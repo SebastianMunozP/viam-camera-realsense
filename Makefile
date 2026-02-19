@@ -30,19 +30,11 @@ endif
 # Common Conan settings to ensure binary cache hits across all build flows
 export CONAN_FLAGS := -s:a build_type=Release -s:a compiler.cppstd=17
 
-.PHONY: build setup test clean lint conan-pkg conan-build-test conan-install-test build-native test-native
+.PHONY: build setup test clean lint conan-pkg conan-install-test build-native test-native
 
 default: module.tar.gz
 
-conan-build-test:
-	test -f ./venv/bin/activate && . ./venv/bin/activate; \
-	conan build . \
-	-o "&:with_tests=True" \
-	--output-folder=build-conan \
-	--build=none \
-	$(CONAN_FLAGS)
-
-conan-install-test:
+conan-install-test: setup
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan install . \
 	-o "&:with_tests=True" \
@@ -50,18 +42,21 @@ conan-install-test:
 	--build=missing \
 	$(CONAN_FLAGS)
 
-test: conan-install-test conan-build-test
-	cd build-conan/build/Release && . ./generators/conanrun.sh && ctest --output-on-failure
-
-# Native build targets for CI environments with pre-installed dependencies
-build-native:
+# Native CMake build using Conan-provided dependencies
+# Faster than using conan build because it uses native CMake directly
+# Depends on conan-install-test to generate the toolchain
+build-native: conan-install-test
 	mkdir -p build-native && cd build-native && \
 	cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Release \
-	$(if $(wildcard $(CURDIR)/build-conan/build/Release/generators/conan_toolchain.cmake),-DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/build-conan/build/Release/generators/conan_toolchain.cmake -DCMAKE_PREFIX_PATH=$(CURDIR)/build-conan/build/Release/generators) && \
+	-DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/build-conan/build/Release/generators/conan_toolchain.cmake \
+	-DCMAKE_PREFIX_PATH=$(CURDIR)/build-conan/build/Release/generators && \
 	make -j$(NPROC)
 
 test-native: build-native
 	cd build-native && ctest --output-on-failure
+
+# Alias for test-native (main test target)
+test: test-native
 
 clean:
 	rm -rf build-conan build-native module.tar.gz venv
@@ -71,7 +66,7 @@ setup:
 
 # Both the commands below need to source/activate the venv in the same line as the
 # conan call because every line of a Makefile runs in a subshell
-conan-pkg:
+conan-pkg: setup
 	test -f ./venv/bin/activate && . ./venv/bin/activate; \
 	conan create . \
 	-o "&:with_tests=False" \
@@ -87,34 +82,3 @@ module.tar.gz: conan-pkg meta.json
 
 lint:
 	./bin/lint.sh
-
-
-# Docker
-BUILD_CMD = docker buildx build --pull $(BUILD_PUSH) --force-rm --no-cache --build-arg MAIN_TAG=$(MAIN_TAG) --build-arg BASE_TAG=$(BUILD_TAG) --platform linux/$(BUILD_TAG) -f $(BUILD_FILE) -t '$(MAIN_TAG):$(BUILD_TAG)' .
-BUILD_PUSH = --load
-BUILD_FILE = ./etc/Dockerfile.debian.bookworm
-
-docker: docker-build docker-upload
-
-docker-build: docker-arm64
-
-docker-arm64: MAIN_TAG = ghcr.io/viam-modules/viam-camera-realsense
-docker-arm64: BUILD_TAG = arm64
-docker-arm64:
-	$(BUILD_CMD)
-
-docker-upload:
-	docker push 'ghcr.io/viam-modules/viam-camera-realsense:arm64'
-
-# CI targets that automatically push, avoid for local test-first-then-push workflows
-docker-arm64-ci: MAIN_TAG = ghcr.io/viam-modules/viam-camera-realsense
-docker-arm64-ci: BUILD_TAG = arm64
-docker-arm64-ci: BUILD_PUSH = --push
-docker-arm64-ci:
-	$(BUILD_CMD)
-
-docker-amd64-ci: MAIN_TAG = ghcr.io/viam-modules/viam-camera-realsense
-docker-amd64-ci: BUILD_TAG = amd64
-docker-amd64-ci: BUILD_PUSH = --push
-docker-amd64-ci:
-	$(BUILD_CMD)
