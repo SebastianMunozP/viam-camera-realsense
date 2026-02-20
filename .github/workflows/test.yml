@@ -4,7 +4,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
 on:
+  # Run on all pull requests for pre-merge validation and coverage reporting
   pull_request:
+  # Run on pushes to main to update the baseline coverage after merge
+  # This populates the Codecov dashboard and updates the coverage badge
   push:
     branches:
       - main
