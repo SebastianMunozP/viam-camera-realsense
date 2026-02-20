@@ -132,9 +132,9 @@ Support for specific hardware is known for the following devices. The table is n
 | RPi 4B Bullseye       |  X   |       |      |
 | Orin Nano JetPack 5.1 |  X   |   X   |  X   |
 | UP 4000               |  X   |       |      |
-| Mac                   |      |  (1)  |      |
+| macOS                 |      |  (1)  |      |
 
-(1) Support for Mac is experimental and may not work. It is based on a vendored version of `librealsense` from its development branch that contains experimental support for macOS.
+(1) macOS support is experimental and based on [v2.57.6 (Beta)](https://github.com/realsenseai/librealsense/releases/tag/v2.57.6) from RealSense. May have stability issues. Firmware updates are not supported on macOS.
 
 ## Linux distribution recommendation
 
@@ -155,9 +155,11 @@ You can also look at the official RealSense troubleshooting guide [here](https:/
 
 The module takes advantage of faster USB ports. Use the (blue) USB 3.0 port on the Raspberry Pi for faster streaming and access to more resolution options.
 
-## MacOS distribution recommendation
+## macOS Distribution Recommendation
 
-The support for MacOS is extremely experimental and may not work. It is based on a [vendored version of `librealsense` from its development branch](https://github.com/realsenseai/librealsense/commit/67d20df877e9a049332ba4e104ba307f6e8b93e6) that contains experimental support for MacOS.
+macOS support is based on [v2.57.6 (Beta)](https://github.com/realsenseai/librealsense/releases/tag/v2.57.6) from RealSense, and may have stability issues given its beta state.
+
+**Note**: Firmware updates are not currently supported on macOS.
 
 
 ### Troubleshooting
