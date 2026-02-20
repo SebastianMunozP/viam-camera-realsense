@@ -86,5 +86,8 @@ jobs:
         with:
           files: ./build-native/coverage.info
           flags: unittests
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          # Token is optional for public repos, but recommended for reliability
+          # If uploads fail, ensure CODECOV_TOKEN is set in repository secrets
+          token: ${{ secrets.CODECOV_TOKEN || '' }}
+          fail_ci_if_error: true
+          verbose: true
