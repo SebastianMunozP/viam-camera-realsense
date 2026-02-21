@@ -883,16 +883,20 @@ private:
     try {
       std::string const required_serial_number = config_->serial_number;
       { // Begin scope for current_device lock
-        auto current_device = device_->synchronize();
-        if (device_ and info.was_removed(*current_device->device)) {
-          std::cerr << "[deviceChangedCallback] Device removed: "
-                    << current_device->serial_number << std::endl;
-          { // Begin scope for serials_guard lock
-            auto serials_guard = assigned_serials_->synchronize();
-            serials_guard->erase(current_device->serial_number);
-          } // End scope for serials_guard lock
-          device_ = nullptr;
-          physical_camera_assigned_ = false;
+        // Check if device_ is null before accessing it
+        // This can happen after firmware update completes and device_ is cleared
+        if (device_) {
+          auto current_device = device_->synchronize();
+          if (info.was_removed(*current_device->device)) {
+            std::cerr << "[deviceChangedCallback] Device removed: "
+                      << current_device->serial_number << std::endl;
+            { // Begin scope for serials_guard lock
+              auto serials_guard = assigned_serials_->synchronize();
+              serials_guard->erase(current_device->serial_number);
+            } // End scope for serials_guard lock
+            device_ = nullptr;
+            physical_camera_assigned_ = false;
+          }
         }
       } // End scope for current_device lock
 
@@ -923,6 +927,10 @@ private:
 
     viam::sdk::ProtoStruct response;
 
+    // Declare these outside try block so they're accessible in catch block
+    std::shared_ptr<rs2::device> rs_device;
+    std::string device_serial_number;
+
     try {
 
       // Temporarily clear the device change callback to prevent interference
@@ -935,8 +943,6 @@ private:
       });
 
       // Get the rs2::device and its serial number for tracking
-      std::shared_ptr<rs2::device> rs_device;
-      std::string device_serial_number;
 
       // Handle recovery mode vs normal mode devices differently
       if (is_recovery_mode_.get()) {
@@ -1010,13 +1016,39 @@ private:
         physical_camera_assigned_ = false;
         is_recovery_mode_ = false;
 
+        // Remove the device's serial number from the assigned set
+        // This allows the device to be reassigned when it reconnects after
+        // firmware update
+        {
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(device_serial_number);
+        }
+
         response["success"] = true;
         response["message"] = update_result.second.count("message")
                                   ? update_result.second.at("message")
                                   : "Firmware update completed successfully. "
                                     "Device will reconnect shortly.";
       } else {
-        // Failure - return error
+        // Failure - clear device state so it can be reassigned when it reconnects
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Firmware update failed, clearing device "
+               "state. Device will be reassigned when it reconnects (either in "
+               "normal mode or recovery/DFU mode).";
+
+        // Clear device state - device may exit DFU mode automatically (on some
+        // errors) or stay in DFU/recovery mode (on others like power loss).
+        // Either way, it will be reassigned when detected by deviceChangedCallback
+        device_ = nullptr;
+        physical_camera_assigned_ = false;
+
+        // Remove serial from assigned set so it can be reassigned
+        {
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(device_serial_number);
+        }
+
+        // Return error
         response["success"] = false;
         if (update_result.second.count("error")) {
           response["error"] = update_result.second.at("error");
@@ -1038,6 +1070,23 @@ private:
 
     } catch (const std::exception &e) {
       VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Error: " << e.what();
+
+      // Clear device state on exception - device will reconnect automatically
+      if (!is_recovery_mode_.get() && device_) {
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Exception occurred, clearing device state. "
+               "Device will be reassigned when it exits DFU mode and reconnects.";
+
+        device_ = nullptr;
+        physical_camera_assigned_ = false;
+
+        // Remove serial from assigned set so it can be reassigned
+        {
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(device_serial_number);
+        }
+      }
+
       response["success"] = false;
       response["error"] = std::string("Firmware update failed: ") + e.what();
     }

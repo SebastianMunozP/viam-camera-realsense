@@ -132,11 +132,14 @@ Setting `update_firmware` to an empty string will automatically detect your came
 **Option 2: Specify firmware URL**
 ```json
 {
-  "update_firmware": "https://example.com/firmware.zip"
+  "update_firmware": "https://realsenseai.com/wp-content/uploads/2025/07/d400_series_production_fw_5_17_0_10.zip"
 }
 ```
 
 You can specify a direct URL to a firmware `.zip` file containing the firmware binary.
+
+> [!TIP]
+> Find firmware download URLs for D400 series cameras at [RealSense D400 Firmware Releases](https://dev.realsenseai.com/docs/firmware-releases-d400)
 
 #### Supported Auto-detect Versions
 
@@ -188,28 +191,48 @@ result = await camera.do_command({
 
 If a firmware update is interrupted (power loss, disconnection, etc.), your camera may be stuck in recovery/DFU mode. You'll see these symptoms:
 
-- Discovery service discovers a camera named `realsense-XXXXXXXXX-recovery` (with `-recovery` suffix)
-  - **Note**: The number (`XXXXXXXXX`) is the **firmware update ID**, not the camera's serial number
-  - This is a temporary identifier used while the camera is in recovery mode
-- That camera cannot stream images
+- Camera cannot stream images
 - Module logs show: `Device at index X is in recovery/DFU mode with update ID: XXXXXXXXX`
+- `GetImages` returns error: "Camera is in recovery/DFU mode and cannot stream images"
 
-**To recover the camera:**
+**Option 1: Retry on the Same Camera (Recommended)**
 
-1. Use Discovery service to find the recovery device
-2. Add the recovery device to your robot configuration
-3. Simply run the firmware update command again on the recovery device, but this time with an explicit firmware URL:
+This is the easiest recovery method:
+
+1. The camera automatically detects it's in recovery mode
+2. Get the appropriate firmware URL for your camera from [RealSense D400 Firmware Releases](https://dev.realsenseai.com/docs/firmware-releases-d400)
+3. Run the firmware update command again on the **same camera** with the **explicit firmware URL**:
    ```json
    {
-     "update_firmware": "https://example.com/firmware.zip"
+     "update_firmware": "https://example.com/your-firmware-version.zip"
    }
    ```
 4. Wait for the update to complete (100% progress)
-5. The original camera will reboot and return to normal operation
-6. The recovery device will no longer be found and should be removed.
+5. The camera will automatically reboot and return to normal operation
 
 > [!NOTE]
 > Auto-detect mode (`"update_firmware": ""`) does not work for recovery devices. You must provide an explicit firmware URL.
+>
+> Find firmware URLs at [RealSense D400 Firmware Releases](https://dev.realsenseai.com/docs/firmware-releases-d400)
+
+**Option 2: Use Discovery Service (For Edge Cases)**
+
+If Option 1 doesn't work (e.g., brand new device in DFU mode, unknown device, multiple cameras and unsure which is stuck):
+
+1. Use Discovery service to find the recovery device
+   - It will appear as `realsense-XXXXXXXXX-recovery` (with `-recovery` suffix)
+   - **Note**: `XXXXXXXXX` is the **firmware update ID**, not the serial number
+2. Add the recovery device to your robot configuration
+3. Get the appropriate firmware URL for your camera from [RealSense D400 Firmware Releases](https://dev.realsenseai.com/docs/firmware-releases-d400)
+4. Run the firmware update command on the recovery device with the explicit firmware URL:
+   ```json
+   {
+     "update_firmware": "https://example.com/your-firmware-version.zip"
+   }
+   ```
+5. Wait for the update to complete (100% progress)
+6. The original camera will reboot and return to normal operation
+7. Remove the recovery device from your configuration
 
 ##### Update Progress Stops or Hangs
 

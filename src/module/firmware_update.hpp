@@ -273,6 +273,9 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
              "firmware version: "
           << recommended_version;
 
+      // TODO: Add pre-flight version check here before production
+      // For now, allowing same-version updates for testing purposes
+
       // Look up URL for recommended version
       auto const firmware_url_opt =
           getFirmwareURLForVersion(recommended_version);
@@ -324,6 +327,13 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
            "serial number: "
         << device_serial_number;
 
+    // Capture firmware_update_id for logging (if available)
+    std::string firmware_update_id;
+    if (rs_device->supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
+      firmware_update_id =
+          rs_device->get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
+    }
+
     // Check if device is already in recovery/DFU mode first
     rs2::update_device update_device;
     bool already_in_recovery = rs_device->is<rs2::update_device>();
@@ -360,10 +370,20 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
     // Perform the firmware update with progress tracking
     VIAM_SDK_LOG_IMPL(logger, info)
         << "[handleFirmwareUpdate] Starting firmware update process";
-    update_device.update(firmware_data, [](const float progress) {
-      int percent = static_cast<int>(progress * 100);
-      std::cout << "Progress: " << percent << "%" << std::endl;
-    });
+    update_device.update(
+        firmware_data,
+        [device_serial_number, firmware_update_id](const float progress) {
+          int percent = static_cast<int>(progress * 100);
+          std::cout << "Firmware update progress: " << percent << "%";
+          if (!device_serial_number.empty()) {
+            std::cout << " (serial: " << device_serial_number;
+            if (!firmware_update_id.empty()) {
+              std::cout << ", fw_update_id: " << firmware_update_id;
+            }
+            std::cout << ")";
+          }
+          std::cout << std::endl;
+        });
 
     VIAM_SDK_LOG_IMPL(logger, info)
         << "[handleFirmwareUpdate] Firmware update completed successfully";
@@ -382,7 +402,23 @@ updateFirmware(std::shared_ptr<rs2::device> rs_device,
     VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << error_msg;
     return {false, {{"error", error_msg}}};
   } catch (const rs2::error &e) {
-    std::string error_msg = std::string("RealSense error: ") + e.what();
+    std::string error_msg = std::string(e.what());
+
+    // Check for the "locked for update" error and provide helpful message
+    if (error_msg.find("locked for update") != std::string::npos) {
+      std::string friendly_msg =
+          "Device is locked and cannot be downgraded or updated to the same "
+          "version. Current firmware appears to be at or above the target "
+          "version. To update to a newer version, specify the firmware URL "
+          "directly using: {\"update_firmware\": "
+          "\"https://your-firmware-url.zip\"}. Error details: " +
+          error_msg;
+      VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << friendly_msg;
+      return {false, {{"error", friendly_msg}}};
+    }
+
+    // Generic RealSense error
+    error_msg = std::string("RealSense error: ") + error_msg;
     VIAM_SDK_LOG_IMPL(logger, error) << "[updateFirmware] " << error_msg;
     return {false, {{"error", error_msg}}};
   } catch (const std::runtime_error &e) {
