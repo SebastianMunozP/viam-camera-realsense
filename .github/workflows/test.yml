@@ -1,9 +1,16 @@
 name: Test
 
-concurrency: 
+concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
-on: pull_request
+on:
+  # Run on all pull requests for pre-merge validation and coverage reporting
+  pull_request:
+  # Run on pushes to main to update the baseline coverage after merge
+  # This populates the Codecov dashboard and updates the coverage badge
+  push:
+    branches:
+      - main
 
 jobs:
   run-tests:
@@ -17,11 +24,14 @@ jobs:
             container:
               image: ghcr.io/viam-modules/viam-camera-realsense:arm64
               options: --platform linux/arm64
+            coverage: false
           - os: ubuntu-latest
             container:
               image: ghcr.io/viam-modules/viam-camera-realsense:amd64
               options: --platform linux/amd64
+            coverage: true
           - os: macos-latest
+            coverage: false
 
     container: ${{ matrix.container }}
 
@@ -50,5 +60,37 @@ jobs:
         run: |
           make conan-install-test
 
+      - name: Build with coverage (Linux amd64 only)
+        if: matrix.coverage == true
+        run: |
+          mkdir -p build-native && cd build-native
+          cmake .. -DVIAM_REALSENSE_ENABLE_TESTS=ON -DVIAM_REALSENSE_ENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+
+      - name: Build without coverage (other platforms)
+        if: matrix.coverage != true
+        run: make build-native
+
       - name: Run the tests
-        run: make test-native
+        run: cd build-native && ctest --output-on-failure
+
+      - name: Generate coverage report
+        if: matrix.coverage == true
+        run: |
+          sudo apt-get update && sudo apt-get install -y lcov
+          cd build-native
+          lcov --capture --directory . --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/test/*' '*/build-native/_deps/*' --output-file coverage.info
+          lcov --list coverage.info
+
+      - name: Upload coverage reports to Codecov
+        if: matrix.coverage == true
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./build-native/coverage.info
+          flags: unittests
+          # Token is optional for public repos, but recommended for reliability
+          # If uploads fail, ensure CODECOV_TOKEN is set in repository secrets
+          token: ${{ secrets.CODECOV_TOKEN || '' }}
+          fail_ci_if_error: true
+          verbose: true

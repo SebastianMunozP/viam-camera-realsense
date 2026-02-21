@@ -1,5 +1,8 @@
 # [`realsense` module](https://app.viam.com/module/viam/realsense)
 
+[![codecov](https://codecov.io/gh/viam-modules/viam-camera-realsense/branch/main/graph/badge.svg)](https://codecov.io/gh/viam-modules/viam-camera-realsense)
+
+
 This [module](https://docs.viam.com/registry/#modular-resources) implements the [`rdk:component:camera` API](https://docs.viam.com/components/camera/) in a `viam:camera:realsense` model.
 Configure this model on your machine to stream image and depth data from the [Intel RealSense](https://github.com/IntelRealSense/librealsense) family of cameras to Viam.
 

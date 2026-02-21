@@ -1,0 +1,19 @@
+# This is the codecov.yml file for the viam-camera-realsense module.
+# It is used to configure the code coverage reporting for the module.
+# For more information about the configuration options, see:
+# https://docs.codecov.io/docs/codecov-yaml or https://docs.codecov.com/docs/github-tutorial
+coverage:
+  status:
+    project:
+      default:
+        target: 70%
+ignore:
+  - "test/**/*"
+  - "build-*/**/*"
+  - "etc/**/*"
+  - "bin/**/*"
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false

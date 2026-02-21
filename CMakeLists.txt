@@ -11,6 +11,14 @@ project(viam-camera-realsense
 include(cmake/simd_flags.cmake)
 
 option(VIAM_REALSENSE_ENABLE_TESTS "Enable unit tests" OFF)
+option(VIAM_REALSENSE_ENABLE_COVERAGE "Enable code coverage" OFF)
+
+if(VIAM_REALSENSE_ENABLE_COVERAGE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(--coverage -O0 -g)
+        add_link_options(--coverage)
+    endif()
+endif()
 
 if (APPLE)
     list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/../lib")
