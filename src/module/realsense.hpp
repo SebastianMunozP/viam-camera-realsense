@@ -884,7 +884,8 @@ private:
       std::string const required_serial_number = config_->serial_number;
       { // Begin scope for current_device lock
         // Check if device_ is null before accessing it
-        // This can happen after firmware update completes and device_ is cleared
+        // This can happen after firmware update completes and device_ is
+        // cleared
         if (device_) {
           auto current_device = device_->synchronize();
           if (info.was_removed(*current_device->device)) {
@@ -1030,7 +1031,8 @@ private:
                                   : "Firmware update completed successfully. "
                                     "Device will reconnect shortly.";
       } else {
-        // Failure - clear device state so it can be reassigned when it reconnects
+        // Failure - clear device state so it can be reassigned when it
+        // reconnects
         VIAM_RESOURCE_LOG(info)
             << "[handleFirmwareUpdate] Firmware update failed, clearing device "
                "state. Device will be reassigned when it reconnects (either in "
@@ -1038,7 +1040,8 @@ private:
 
         // Clear device state - device may exit DFU mode automatically (on some
         // errors) or stay in DFU/recovery mode (on others like power loss).
-        // Either way, it will be reassigned when detected by deviceChangedCallback
+        // Either way, it will be reassigned when detected by
+        // deviceChangedCallback
         device_ = nullptr;
         physical_camera_assigned_ = false;
 
@@ -1073,9 +1076,10 @@ private:
 
       // Clear device state on exception - device will reconnect automatically
       if (!is_recovery_mode_.get() && device_) {
-        VIAM_RESOURCE_LOG(info)
-            << "[handleFirmwareUpdate] Exception occurred, clearing device state. "
-               "Device will be reassigned when it exits DFU mode and reconnects.";
+        VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Exception occurred, "
+                                   "clearing device state. "
+                                   "Device will be reassigned when it exits "
+                                   "DFU mode and reconnects.";
 
         device_ = nullptr;
         physical_camera_assigned_ = false;
