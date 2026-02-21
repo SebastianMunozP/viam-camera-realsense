@@ -1,19 +1,26 @@
 #pragma once
 #include "device.hpp"
+#include "download_utils.hpp"
 #include "encoding.hpp"
+#include "firmware_update.hpp"
 #include "sensors.hpp"
 #include "time.hpp"
 #include "utils.hpp"
-
+#include "zip_utils.hpp"
 #include <viam/sdk/components/camera.hpp>
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
 
 #include <librealsense2/rs.hpp>
 
+#include <chrono>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
+#include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -31,6 +38,15 @@ static constexpr std::uint64_t MAX_FRAME_SET_TIME_DIFF_MS =
 static constexpr std::uint64_t TIMESTAMP_WARNING_LOG_INTERVAL_MS =
     60000; // 1
            // minute
+
+enum class DoCommand : uint8_t {
+  UPDATE_FIRMWARE,
+  UNKNOWN = std::numeric_limits<uint8_t>::max()
+};
+
+static const std::unordered_map<std::string, uint8_t> DoCommandMap{
+    {{"update_firmware", static_cast<uint8_t>(DoCommand::UPDATE_FIRMWARE)},
+     {"unknown", static_cast<uint8_t>(DoCommand::UNKNOWN)}}};
 
 const std::string service_name = "viam_realsense";
 
@@ -54,15 +70,28 @@ public:
 
   void addInstance(Realsense<SynchronizedContextT> *instance) {
     instances_->insert(instance);
-    VIAM_SDK_LOG(info) << "[RealsenseContext] Added instance (total: "
-                       << instances_->size() << ")";
   }
 
   void removeInstance(Realsense<SynchronizedContextT> *instance) {
     instances_->erase(instance);
-    VIAM_SDK_LOG(info) << "[RealsenseContext] Removed instance (total: "
-                       << instances_->size() << ")";
   }
+
+  // Clear the devices changed callback (e.g., during firmware update)
+  void clearDevicesChangedCallback() {
+    auto rs_context = rs_context_->synchronize();
+    rs_context->set_devices_changed_callback([](rs2::event_information &) {});
+  }
+
+  // Set a custom devices changed callback (e.g., for firmware update event
+  // detection)
+  template <typename CallbackT>
+  void setDevicesChangedCallback(CallbackT callback) {
+    auto rs_context = rs_context_->synchronize();
+    rs_context->set_devices_changed_callback(callback);
+  }
+
+  // Restore the default devices changed callback
+  void restoreDevicesChangedCallback() { setupCallback(); }
 
 private:
   std::shared_ptr<SynchronizedContextT> rs_context_;
@@ -86,8 +115,8 @@ private:
         try {
           instance->handleDeviceChange(info);
         } catch (const std::exception &e) {
-          VIAM_SDK_LOG(error)
-              << "[RealsenseContext] Error notifying instance: " << e.what();
+          std::cerr << "[RealsenseContext] Error notifying instance: "
+                    << e.what() << std::endl;
           // Consider whether to remove failed instances
           failed_instances.push_back(instance);
         }
@@ -304,17 +333,100 @@ public:
     VIAM_RESOURCE_LOG(info) << "[reconfigure] Realsense reconfigure end";
   }
 
+  DoCommand get_do_command(const viam::sdk::ProtoStruct &command) const {
+    for (auto const &proto_command : command) {
+      if (DoCommandMap.count(proto_command.first)) {
+        return static_cast<DoCommand>(DoCommandMap.at(proto_command.first));
+      }
+    }
+    return DoCommand::UNKNOWN;
+  }
+
   viam::sdk::ProtoStruct
   do_command(const viam::sdk::ProtoStruct &command) override {
-    VIAM_RESOURCE_LOG(error) << "do_command not implemented";
+    VIAM_RESOURCE_LOG(info)
+        << "[do_command] Received do_command, waiting for lock...";
 
-    return viam::sdk::ProtoStruct();
+    // Only 1 command is allowed at a time
+    if (command.size() > 1) {
+      viam::sdk::ProtoStruct response;
+      response["success"] = false;
+      response["error"] =
+          "Firmware update command must contain exactly one parameter";
+      VIAM_RESOURCE_LOG(error)
+          << "[do_command] Invalid firmware update command: contains "
+          << command.size() << " parameters, expected 1";
+      return response;
+    }
+
+    // Acquire lock to prevent concurrent do_command calls
+    // This is especially important for long-running operations like firmware
+    // updates If this blocks, another do_command is currently executing
+    std::lock_guard<std::mutex> lock(do_command_mutex_);
+
+    VIAM_RESOURCE_LOG(info) << "[do_command] Lock acquired, processing command";
+    DoCommand do_command = get_do_command(command);
+
+    try {
+      // Check if command contains "firmware_update"
+      if (do_command == DoCommand::UPDATE_FIRMWARE) {
+        VIAM_RESOURCE_LOG(info) << "[do_command] Received update_firmware";
+#ifdef __APPLE__
+        // Firmware update is not supported on macOS yet
+        viam::sdk::ProtoStruct response;
+        response["success"] = false;
+        response["error"] = "Firmware update is not supported on macOS";
+        VIAM_RESOURCE_LOG(error)
+            << "[do_command] Firmware update not supported on macOS";
+        return response;
+#else
+        // Extract the firmware URL from the command
+        // Command structure: {"update_firmware": "url"} or {"update_firmware":
+        // ""} Note: command.size() is already validated to be exactly 1 at the
+        // top of do_command
+        auto it = command.begin();
+        auto const &fw_param = it->second;
+
+        if (!fw_param.is_a<std::string>()) {
+          viam::sdk::ProtoStruct response;
+          response["success"] = false;
+          response["error"] = "Firmware update URL must be a string";
+          VIAM_RESOURCE_LOG(error) << "[do_command] Invalid firmware update "
+                                      "parameter type (expected string)";
+          return response;
+        }
+
+        std::string firmware_url = *fw_param.get<std::string>();
+        return handleFirmwareUpdate(firmware_url);
+#endif
+      }
+
+      VIAM_RESOURCE_LOG(error) << "[do_command] Unknown command";
+      viam::sdk::ProtoStruct response;
+      response["error"] =
+          "Unknown command. Supported commands: firmware_update";
+      return response;
+
+    } catch (const std::exception &e) {
+      VIAM_RESOURCE_LOG(error) << "[do_command] Error: " << e.what();
+      viam::sdk::ProtoStruct response;
+      response["error"] = std::string("Command failed: ") + e.what();
+      return response;
+    }
   }
 
   viam::sdk::Camera::image_collection
   get_images(std::vector<std::string> filter_source_names,
              const viam::sdk::ProtoStruct &extra) override {
     try {
+      if (is_recovery_mode_.get()) {
+        std::string error_msg =
+            "Camera is in recovery/DFU mode and cannot stream images. "
+            "Please update the firmware using do_command with firmware_update "
+            "parameter.";
+        VIAM_RESOURCE_LOG(error) << "[get_images] " << error_msg;
+        throw std::runtime_error(error_msg);
+      }
 
       bool should_process_color = false;
       bool should_process_depth = false;
@@ -444,6 +556,14 @@ public:
   get_point_cloud(std::string mime_type,
                   const viam::sdk::ProtoStruct &extra) override {
     try {
+      if (is_recovery_mode_.get()) {
+        std::string error_msg =
+            "Camera is in recovery/DFU mode and cannot stream point clouds. "
+            "Please update the firmware using do_command with firmware_update "
+            "parameter.";
+        VIAM_RESOURCE_LOG(error) << "[get_point_cloud] " << error_msg;
+        throw std::runtime_error(error_msg);
+      }
       if (not latest_frameset_) {
         VIAM_RESOURCE_LOG(error) << "[get_point_cloud] no frameset available";
         throw std::runtime_error("no frameset available");
@@ -491,7 +611,7 @@ public:
         }
 
         data = encoding::encodeRGBPointsToPCD(
-            my_dev->point_cloud_filter->process(fs), logger_);
+            my_dev->point_cloud_filter->process(fs), this->logger_);
       } // End scope for my_dev lock
 
       if (data.size() > MAX_GRPC_MESSAGE_SIZE) {
@@ -706,33 +826,23 @@ public:
     }
 
     if (attrs.count("width_px")) {
-      VIAM_SDK_LOG(info) << "[validate] Validating that width_px is a double";
       if (not attrs["width_px"].is_a<double>()) {
-        VIAM_SDK_LOG(error) << "[validate] width_px is not a double";
         throw std::invalid_argument("width_px must be a double");
       }
       int width = attrs["width_px"].get_unchecked<double>();
       if (width <= 0) {
-        VIAM_SDK_LOG(error) << "[validate] width_px must be positive";
         throw std::invalid_argument("width_px must be positive");
       }
     }
 
     if (attrs.count("height_px")) {
-      VIAM_SDK_LOG(info) << "[validate] Validating that height_px is a double";
       if (not attrs["height_px"].is_a<double>()) {
-        VIAM_SDK_LOG(error) << "[validate] height_px is not a double";
         throw std::invalid_argument("height_px must be a double");
       }
       int height = attrs["height_px"].get_unchecked<double>();
       if (height <= 0) {
-        VIAM_SDK_LOG(error) << "[validate] height_px must be positive";
         throw std::invalid_argument("height_px must be positive");
       }
-    }
-
-    if (attrs.count("little_endian_depth")) {
-      VIAM_SDK_LOG(error) << "[validate] little_endian_depth is not supported";
     }
 
     // If we reach here, the serial number is valid
@@ -756,6 +866,12 @@ private:
       assigned_serials_;
   boost::synchronized_value<bool> physical_camera_assigned_;
   boost::synchronized_value<std::uint64_t> last_timestamp_warning_log_time_ms_;
+  boost::synchronized_value<bool> is_recovery_mode_{false};
+  std::shared_ptr<rs2::device> recovery_device_ptr_;
+
+  // Mutex to serialize do_command calls and prevent concurrent execution
+  // This is critical for long-running operations like firmware updates
+  std::mutex do_command_mutex_;
 
   DeviceFunctions device_funcs_;
   std::shared_ptr<RealsenseContext<SynchronizedContextT>> realsense_ctx_;
@@ -763,19 +879,25 @@ private:
   void deviceChangedCallback(rs2::event_information &info) {
     std::cout << "[deviceChangedCallback] Device connection status changed"
               << std::endl;
+
     try {
       std::string const required_serial_number = config_->serial_number;
       { // Begin scope for current_device lock
-        auto current_device = device_->synchronize();
-        if (device_ and info.was_removed(*current_device->device)) {
-          std::cerr << "[deviceChangedCallback] Device removed: "
-                    << current_device->serial_number << std::endl;
-          { // Begin scope for serials_guard lock
-            auto serials_guard = assigned_serials_->synchronize();
-            serials_guard->erase(current_device->serial_number);
-          } // End scope for serials_guard lock
-          device_ = nullptr;
-          physical_camera_assigned_ = false;
+        // Check if device_ is null before accessing it
+        // This can happen after firmware update completes and device_ is
+        // cleared
+        if (device_) {
+          auto current_device = device_->synchronize();
+          if (info.was_removed(*current_device->device)) {
+            std::cerr << "[deviceChangedCallback] Device removed: "
+                      << current_device->serial_number << std::endl;
+            { // Begin scope for serials_guard lock
+              auto serials_guard = assigned_serials_->synchronize();
+              serials_guard->erase(current_device->serial_number);
+            } // End scope for serials_guard lock
+            device_ = nullptr;
+            physical_camera_assigned_ = false;
+          }
         }
       } // End scope for current_device lock
 
@@ -793,6 +915,189 @@ private:
       std::cerr << "[deviceChangedCallback] Exception occurred: " << e.what()
                 << std::endl;
     }
+  }
+
+  viam::sdk::ProtoStruct handleFirmwareUpdate(const std::string &firmware_url) {
+    // Note: This function is called from do_command which already holds the
+    // mutex lock
+    VIAM_RESOURCE_LOG(info)
+        << "[handleFirmwareUpdate] Starting firmware update";
+    VIAM_RESOURCE_LOG(info)
+        << "[handleFirmwareUpdate] Firmware URL parameter: "
+        << (firmware_url.empty() ? "(auto-detect)" : firmware_url);
+
+    viam::sdk::ProtoStruct response;
+
+    // Declare these outside try block so they're accessible in catch block
+    std::shared_ptr<rs2::device> rs_device;
+    std::string device_serial_number;
+
+    try {
+
+      // Temporarily clear the device change callback to prevent interference
+      // It will be automatically restored when this scope exits
+      realsense_ctx_->clearDevicesChangedCallback();
+      auto callback_restorer = std::shared_ptr<void>(nullptr, [this](void *) {
+        realsense_ctx_->restoreDevicesChangedCallback();
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Restored device change callback";
+      });
+
+      // Get the rs2::device and its serial number for tracking
+
+      // Handle recovery mode vs normal mode devices differently
+      if (is_recovery_mode_.get()) {
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Device is in recovery mode, using "
+            << "stored recovery device pointer";
+
+        if (!recovery_device_ptr_) {
+          response["success"] = false;
+          response["error"] = std::string(
+              "Firmware update failed: No recovery device available");
+          VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update "
+                                      "failed: No recovery device available";
+          return response;
+        }
+
+        rs_device = recovery_device_ptr_;
+        // Get the firmware update ID as the serial number for recovery devices
+        device_serial_number = config_->serial_number;
+
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Recovery device firmware update ID: "
+            << device_serial_number;
+      } else {
+        // Normal mode device
+        if (!device_) {
+          response["success"] = false;
+          response["error"] =
+              std::string("Firmware update failed: No device available");
+          VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Firmware update "
+                                      "failed: No device available";
+          return response;
+        }
+
+        // Stop the device before firmware update
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Stopping device before update";
+        if (!device_funcs_.stopDevice(device_, this->logger_)) {
+          response["success"] = false;
+          response["error"] = std::string("Firmware update failed: Failed to "
+                                          "stop device before firmware update");
+          return response;
+        }
+
+        {
+          auto device_guard = device_->synchronize();
+          rs_device = device_guard->device;
+          device_serial_number = device_guard->serial_number;
+        }
+
+        if (!rs_device) {
+          response["success"] = false;
+          response["error"] =
+              std::string("Firmware update failed: Device pointer is null");
+          return response;
+        }
+      }
+
+      VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Updating device with "
+                              << "serial number: " << device_serial_number;
+
+      auto update_result = viam::realsense::firmware_update::updateFirmware(
+          rs_device, device_serial_number, firmware_url, realsense_ctx_,
+          logger_);
+
+      // Check if firmware update succeeded
+      if (update_result.first) {
+        // Success - clear device assignment
+        device_ = nullptr;
+        recovery_device_ptr_ = nullptr;
+        physical_camera_assigned_ = false;
+        is_recovery_mode_ = false;
+
+        // Remove the device's serial number from the assigned set
+        // This allows the device to be reassigned when it reconnects after
+        // firmware update
+        {
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(device_serial_number);
+        }
+
+        response["success"] = true;
+        response["message"] = update_result.second.count("message")
+                                  ? update_result.second.at("message")
+                                  : "Firmware update completed successfully. "
+                                    "Device will reconnect shortly.";
+      } else {
+        // Failure - clear device state so it can be reassigned when it
+        // reconnects
+        VIAM_RESOURCE_LOG(info)
+            << "[handleFirmwareUpdate] Firmware update failed, clearing device "
+               "state. Device will be reassigned when it reconnects (either in "
+               "normal mode or recovery/DFU mode).";
+
+        // Clear device state - device may exit DFU mode automatically (on some
+        // errors) or stay in DFU/recovery mode (on others like power loss).
+        // Either way, it will be reassigned when detected by
+        // deviceChangedCallback
+        device_ = nullptr;
+        physical_camera_assigned_ = false;
+
+        // Remove serial from assigned set so it can be reassigned
+        {
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(device_serial_number);
+        }
+
+        // Return error
+        response["success"] = false;
+        if (update_result.second.count("error")) {
+          response["error"] = update_result.second.at("error");
+          // Extract error string for logging
+          auto error_ptr = response["error"].get<std::string>();
+          if (error_ptr) {
+            VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] " << *error_ptr;
+          } else {
+            VIAM_RESOURCE_LOG(error)
+                << "[handleFirmwareUpdate] Firmware update failed (error "
+                   "message unavailable)";
+          }
+        } else {
+          response["error"] = "Firmware update failed";
+          VIAM_RESOURCE_LOG(error)
+              << "[handleFirmwareUpdate] Firmware update failed";
+        }
+      }
+
+    } catch (const std::exception &e) {
+      VIAM_RESOURCE_LOG(error) << "[handleFirmwareUpdate] Error: " << e.what();
+
+      // Clear device state on exception - device will reconnect automatically
+      if (!is_recovery_mode_.get() && device_) {
+        VIAM_RESOURCE_LOG(info) << "[handleFirmwareUpdate] Exception occurred, "
+                                   "clearing device state. "
+                                   "Device will be reassigned when it exits "
+                                   "DFU mode and reconnects.";
+
+        device_ = nullptr;
+        physical_camera_assigned_ = false;
+
+        // Remove serial from assigned set so it can be reassigned
+        {
+          auto serials_guard = assigned_serials_->synchronize();
+          serials_guard->erase(device_serial_number);
+        }
+      }
+
+      response["success"] = false;
+      response["error"] = std::string("Firmware update failed: ") + e.what();
+    }
+
+    // Callback will be automatically restored by callback_restorer destructor
+
+    return response;
   }
 
   template <typename DeviceListT>
@@ -825,8 +1130,38 @@ private:
         device_funcs_.printDeviceInfo(dev, this->logger_);
 
         auto dev_ptr = std::make_shared<std::decay_t<decltype(dev)>>(dev);
-        std::string connected_device_serial_number =
-            dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+
+        // Check if device is in recovery/DFU mode
+        bool is_recovery = dev.template is<rs2::update_device>();
+        std::string connected_device_serial_number;
+
+        if (is_recovery) {
+          // Recovery mode devices only have firmware update ID
+          if (dev.supports(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID)) {
+            connected_device_serial_number =
+                dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID);
+            VIAM_RESOURCE_LOG(warn)
+                << "[assign_and_initialize_device] Device at index " << i
+                << " is in recovery/DFU mode with update ID: "
+                << connected_device_serial_number;
+          } else {
+            VIAM_RESOURCE_LOG(error)
+                << "[assign_and_initialize_device] Recovery device at index "
+                << i << " does not support firmware update ID";
+            continue;
+          }
+        } else {
+          // Normal mode devices have serial number
+          if (dev.supports(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
+            connected_device_serial_number =
+                dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+          } else {
+            VIAM_RESOURCE_LOG(error)
+                << "[assign_and_initialize_device] Normal device at index " << i
+                << " does not support serial number";
+            continue;
+          }
+        }
 
         VIAM_RESOURCE_LOG(info)
             << "[assign_and_initialize_device] trying connecting to device: "
@@ -850,6 +1185,22 @@ private:
             continue;
           }
         } // End scope for serials_guard lock
+
+        // Handle recovery mode devices differently - they can't stream
+        if (is_recovery) {
+          VIAM_RESOURCE_LOG(warn)
+              << "[assign_and_initialize_device] Device "
+              << connected_device_serial_number
+              << " is in recovery/DFU mode. Skipping streaming initialization. "
+              << "Only firmware updates are supported for this device.";
+          is_recovery_mode_ = true;
+          recovery_device_ptr_ =
+              dev_ptr; // Store the device pointer for firmware updates
+          physical_camera_assigned_ = true;
+          return true;
+        }
+
+        // Normal device initialization with streaming support
         VIAM_RESOURCE_LOG(info)
             << "[assign_and_initialize_device] calling createDevice for: "
             << connected_device_serial_number;
@@ -866,6 +1217,8 @@ private:
                                   latest_frameset_, MAX_FRAME_AGE_MS,
                                   config_copy, this->logger_);
         physical_camera_assigned_ = true;
+        is_recovery_mode_ = false;
+        is_recovery_mode_ = false;
         return true;
       } catch (const std::exception &e) {
         VIAM_RESOURCE_LOG(error) << "[assign_and_initialize_device] Failed to "
