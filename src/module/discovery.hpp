@@ -95,7 +95,7 @@ public:
           viam::sdk::ResourceConfig config(
               "camera", std::move(name.str()), "viam", attributes,
               "rdk:component:camera", realsense::Realsense<ContextT>::model,
-              viam::sdk::LinkConfig{}, viam::sdk::log_level::info);
+              viam::sdk::log_level::info);
           configs.push_back(config);
         } catch (const std::exception &e) {
           VIAM_SDK_LOG(error)
